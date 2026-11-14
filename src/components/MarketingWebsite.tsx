@@ -1157,7 +1157,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.39 • Latest Release
+                    v7.40 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1386,7 +1386,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.39)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.40)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -2335,7 +2335,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 {
                   step: 'Row 2 • Active Matchup & Synchronized Swap Timers',
                   badge: 'Swap: 12s | Opp: 2s + Single 80ms Haptic Pulse',
-                  desc: 'Tracks both players’ 50-second switch clocks independently. When the opponent’s switch clock drops below 5 seconds, your phone triggers a single 80ms haptic vibration pulse so you never get caught off-guard by a sudden snipe.'
+                  desc: 'Tracks both players’ 45-second switch clocks independently. When the opponent’s switch clock drops below 5 seconds, your phone triggers a single 80ms haptic vibration pulse so you never get caught off-guard by a sudden snipe.'
                 },
                 {
                   step: 'Row 3 • 3×3 Asymmetric 9-Shield Matchup Matrix',

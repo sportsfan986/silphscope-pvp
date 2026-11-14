@@ -287,7 +287,7 @@ export function DocumentationModals({
                     <span>🎯 Overlay HUD &amp; Battle Flow Guide (v3.31)</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    How to interact with the floating overlay, read 3x3 damage % &amp; shield dots, track 50s swap clocks, and log battles
+                    How to interact with the floating overlay, read 3x3 damage % &amp; shield dots, track 45s swap clocks, and log battles
                   </p>
                 </div>
                 <button
@@ -318,7 +318,7 @@ export function DocumentationModals({
                       <strong>Manual Opponent Override (&apos;Opponents (Tap to Edit)&apos;):</strong> Tap the <strong>Opponents (Tap to Edit)</strong> header bar inside the overlay if OCR misreads a name or form to manually override any of the 3 opponent slots (with Shadow &amp; Regional/Form support).
                     </li>
                     <li>
-                      <strong>Start Battle (⚔️ Start Battle):</strong> Tap when a GBL match begins. This clears the previous opponent lineup, resets both 50s swap clocks, resets shields (2v2) and Pokéballs (3v3), anchors the timeline clock (<code>t=0s</code>), and switches the button to <strong>🛑 Stop Battle</strong>.
+                      <strong>Start Battle (⚔️ Start Battle):</strong> Tap when a GBL match begins. This clears the previous opponent lineup, resets both 45s swap clocks, resets shields (2v2) and Pokéballs (3v3), anchors the timeline clock (<code>t=0s</code>), and switches the button to <strong>🛑 Stop Battle</strong>.
                     </li>
                     <li>
                       <strong>Stop &amp; Log (🛑 Stop Battle):</strong> Tap when the match finishes. Verify or tap the Lead Matchup chip (<strong>Fav / Neu / Neg</strong>) and tap <strong>🏆 Win</strong> or <strong>💀 Loss</strong> (or <strong>✕ Skip</strong>).
@@ -375,14 +375,14 @@ export function DocumentationModals({
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/30 space-y-1.5">
                   <h4 className="font-bold text-sm text-purple-400">
-                    4. Dual 50s Swap Timers, Faint Preservation &amp; Statusbar Toasts
+                    4. Dual 45s Swap Timers, Faint Preservation &amp; Statusbar Toasts
                   </h4>
                   <ul className="list-disc list-inside space-y-1">
                     <li>
-                      <strong>Independent 50s Swap Clocks (&apos;You&apos; &amp; &apos;Opp&apos;):</strong> Tracks both your switch timer and the opponent&apos;s switch timer (<strong className="text-rose-400">Red 50s–16s</strong> locked, <strong className="text-amber-300">Amber 15s–1s</strong> window opening soon, <strong className="text-emerald-400">Green RDY</strong> switch available).
+                      <strong>Independent 45s Swap Clocks (&apos;You&apos; &amp; &apos;Opp&apos;):</strong> Tracks both your switch timer and the opponent&apos;s switch timer (<strong className="text-rose-400">Red 45s–16s</strong> locked, <strong className="text-amber-300">Amber 15s–1s</strong> window opening soon, <strong className="text-emerald-400">Green RDY</strong> switch available).
                     </li>
                     <li>
-                      <strong>Smart Faint Swap-In Preservation:</strong> Detects Pokéball drops (<code>3→2→1</code>) when a Pokémon faints so a replacement entering after a KO preserves the running swap timer instead of falsely resetting to 50s.
+                      <strong>Smart Faint Swap-In Preservation:</strong> Detects Pokéball drops (<code>3→2→1</code>) when a Pokémon faints so a replacement entering after a KO preserves the running swap timer instead of falsely resetting to 45s.
                     </li>
                     <li>
                       <strong>Shield (2→1→0) &amp; Faint Column Dimming:</strong> Tracks remaining shields and automatically dims fainted opponent columns in the 3x3 matrix.

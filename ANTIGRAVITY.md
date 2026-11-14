@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.39` (`versionCode = 1739`)  
+> **Current Version**: `v7.40` (`versionCode = 1740`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -126,7 +126,7 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
 - **Pillar 4 (Incoming Attack Survival Math)**: Computes whether active Pokémon can safely tank unshielded and reach its own move before fainting (`TANK -> MOVE IN 2F` vs `SHIELD -> DIES 1F SHORT`).
 
 ### 3.5. Synchronized Haptics & Vibration Engine
-- **Opponent Swap Clock Alert**: When the opponent's 50s switch clock drops below the warning threshold (default: $< 5\text{s}$), triggers a distinct **single 80ms vibration pulse**.
+- **Opponent Swap Clock Alert**: When the opponent's 45s switch clock drops below the warning threshold (default: $< 5\text{s}$), triggers a distinct **single 80ms vibration pulse**.
 - **Opponent Move Imminent Alert**: When the opponent is within 1 fast move of reaching a charged attack, triggers a distinct **double 80ms vibration pulse** (`80ms on, 60ms off, 80ms on`).
 - **Synchronization**: The haptic trigger evaluates in the exact same tick cycle as the visual HUD blinking badges (`BLINK_1_FAST`).
 - **Customization**: Dedicated Haptics section in Settings allows independent toggles and slider threshold adjustments for both alerts.

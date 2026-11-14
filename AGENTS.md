@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.39` (`versionCode = 1739`)  
+> **Current Version**: `v7.40` (`versionCode = 1740`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -126,7 +126,7 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
 - **Pillar 4 (Incoming Attack Survival Math)**: Computes whether active Pokémon can safely tank unshielded and reach its own move before fainting (`TANK -> MOVE IN 2F` vs `SHIELD -> DIES 1F SHORT`).
 
 ### 3.5. Synchronized Haptics & Vibration Engine
-- **Opponent Swap Clock Alert**: When the opponent's 50s switch clock drops below the warning threshold (default: $< 5\text{s}$), triggers a distinct **single 80ms vibration pulse**.
+- **Opponent Swap Clock Alert**: When the opponent's 45s switch clock drops below the warning threshold (default: $< 5\text{s}$), triggers a distinct **single 80ms vibration pulse**.
 - **Opponent Move Imminent Alert**: When the opponent is within 1 fast move of reaching a charged attack, triggers a distinct **double 80ms vibration pulse** (`80ms on, 60ms off, 80ms on`).
 - **Synchronization**: The haptic trigger evaluates in the exact same tick cycle as the visual HUD blinking badges (`BLINK_1_FAST`).
 - **Customization**: Dedicated Haptics section in Settings allows independent toggles and slider threshold adjustments for both alerts.
@@ -385,10 +385,10 @@ When working on this repository inside Antigravity:
    - **3-Hour Local Background Sync (`SilphScope-Telemetry-Sync`)**: A native Windows Scheduled Task runs `node scripts/ingest-telemetry.mjs --sync-only --prune-remote` every 3 hours using local Node 22 + `ffmpeg.exe` (0 AI tokens, with zero KV list operations by querying Cloudflare R2 directly). It downloads new batches and DVR `.mp4` videos into `.aistudio/telemetry_cache/`, deletes them from Cloudflare once safely saved locally, enforces a **1.0 GB local storage cap** (keeping ~70–80 full `.mp4` videos on disk for regression testing), and pre-renders `digest.json`, `4x6` (24-frame) tiled contact sheets, and individual keyframes into `.aistudio/telemetry_cache/preprocessed/<battleId>/`.
    - **On-Demand & 5:00 AM Nightly Sync**: Users can sync on demand at any time via `npm run telemetry:sync` or `scripts/sync-telemetry-now.cmd`, and full ingestion runs automatically as part of the 5:00 AM daily audit script (`scripts/run-nightly-telemetry.cmd`).
    - **Tunable Preprocessing Config**: Edit [`scripts/telemetry-preprocess-config.json`](./scripts/telemetry-preprocess-config.json) and run `npm run telemetry:reprocess` to adjust screenshot rules (Battle Start, Charged Move In/Out transitions, Large HP Changes & Animation windows, Swaps, Energy Shifts, Battle End).
-   - **On-Demand Reporting & Nightly Dynamic Model Cost Tiering**: Only generate or analyze telemetry reports when requested by the user (`npm run telemetry:report`) or via the 5:00 AM nightly orchestrator (`scripts/trigger-daily-telemetry-plan.mjs` + `scripts/nightly-telemetry-audit.mjs`):
+   - **On-Demand Reporting & Nightly Dynamic Model Cost Tiering**: Only generate or analyze telemetry reports when requested by the user (`npm run telemetry:report`) or via the 5:00 AM nightly orchestrator (`scripts/trigger-daily-telemetry-plan.mjs` + `scripts/nightly-telemetry-audit.mjs`), which creates a **fresh dated Antigravity chat each day** (`📊 [YYYY-MM-DD] Daily Telemetry Audit & Plan — SilphScope PvP`) running on **`Orchestrator (Carbon)` (`gemini-pro-orchestrator`)**:
      - **Tier 0 (`0 AI Tokens` — Local Node.js + `ffmpeg` + `detectFloatingHpBarPctV708`)**: Executes 100% of telemetry ingestion, 24h/7d trainer summaries, version regression matrices, 7-day retroactive fix verification, paid-player full-frame pixel re-scans, the 5:00–5:52 AM late-arrival watch, and the 6:00 AM Telegram summary locally with 0 AI tokens.
      - **Tier 1 (`flash` / `flash_lite` — All OCR / Video Frame Inspection & Routine Briefings)**: Whenever visual OCR, contact-sheet inspection, or keyframe verification is needed, **always delegate via `invoke_subagent(TypeName: "research", Model: "flash")`** (never inspect video frames/images directly on a `pro` model).
-     - **Tier 2 (`Carbon Medium` / `pro` — High-Severity Action Plans Only)**: Reserve `Carbon Medium` (or `pro`) strictly for unresolved `P1_PAID_MANUAL`, `P2_FREE_MANUAL`, or `P3_PAID_AUTO` `HIGH`-severity architectural action plans.
+     - **Tier 2 (`Orchestrator (Carbon)` / `Carbon Medium` — Interactive Daily Plan & High-Severity Root Cause)**: Opens the new daily dated chat on `gemini-pro-orchestrator` (with standalone CLI fallback to `gemini-4-carbon-medium`), reads cached `morning_briefing.md` + `nightly_audit_digest.json`, diagnoses unresolved `P1`/`P2`/`P3` items, and generates the interactive `morning_telemetry_action_plan_YYYY-MM-DD.md` before asking clarifying questions.
 
 ### 5.3. Version Bumping & Default Release Checklist
 When publishing a new release:

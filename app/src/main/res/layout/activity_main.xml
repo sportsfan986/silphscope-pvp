@@ -3514,6 +3514,51 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
+            <!-- v7.40: Vision & OCR Performance Profile Toggle (Default: High-Perf 15Hz / 150ms Burst; Optional Battery Saver) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ Vision &amp; OCR Performance Profile"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_vision_battery_saver_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: High-Perf 15Hz HP + 150ms Burst OCR (Fastest swap, shield &amp; 3-2-1 lead detection; tap for Battery Saver 10Hz)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_vision_battery_saver"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="High-Perf 15Hz"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
             <!-- v4.08: Opponent Alternate Fast Move Detection Toggle (Default: Enabled) -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -5733,7 +5778,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tap any tab above (⚔️ Teams, 📜 Battle Log, or ⚙️ Settings) to return. Below is the complete guide to the floating PvP overlay, 3v3 shield matrix, battle damage grids, 50s swap timers, move pacing, and Battle Log analytics."
+                android:text="Tap any tab above (⚔️ Teams, 📜 Battle Log, or ⚙️ Settings) to return. Below is the complete guide to the floating PvP overlay, 3v3 shield matrix, battle damage grids, 45s swap timers, move pacing, and Battle Log analytics."
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginBottom="10dp" />
@@ -5774,7 +5819,7 @@
                     android:lineSpacingExtra="2dp"
                     android:textColor="#e2e8f0"
                     android:textSize="11sp"
-                    android:text="• Step 1 — Select or Switch Your Team in the Main App: On the ⚔️ Teams tab, tap 'Select' on any team preset to make it active (or tap '+ New Team' to build a Great, Ultra, Master, or Mega Master League trio with auto-filled PvPoke recommended moves and IV/CP scaling). To switch to a different 3-Pokémon Team Preset, return to the ⚔️ Teams tab in the main app and tap 'Select' on the new team.\n• Step 2 — Launch the Overlay: Tap 'Start Battle Overlay' at the top of the app. Grant 'Display over other apps' and 'Screen Capture' (used strictly in-memory for live ML Kit OCR — zero screenshots are ever written to disk).\n• Step 3 — Reposition, Compact HUD &amp; Log-Only Stealth Mode (Top-Left Emblem): Drag the header to position the overlay anywhere on screen. Tap the top-left emblem once to strictly alternate between Full HUD ↔ Compact HUD. Hold the emblem for 2.0 seconds to activate or deactivate Competitive Log-Only Stealth Mode (100% invisible HUD &amp; silenced haptics with headless OCR, DVR &amp; auto-logging for official tournament play).\n• Step 4 — Start Battle ('⚔️ Start Battle'): When a GBL match begins, tap '⚔️ Start Battle' in the overlay toolbar (or let hands-free countdown auto-start begin automatically). This clears the previous opponent lineup, resets both 50s swap timers to 0s, resets shields (2v2) and Pokéballs (3v3), anchors the battle timeline clock (t=0s), starts OCR scanning, and switches the button to '🛑 Stop Battle'.\n• Step 5 — In-Battle Toolbar Controls ('Shadow', 'Form', &amp; Your 3 Active Pokémon Chips):\n  - 'Shadow: OFF / ON': Tap in the overlay toolbar to toggle the Shadow modifier (+20% ATK / -16.7% DEF) for the active opponent if OCR missed the purple aura.\n  - 'Form: [Form]': Automatically enables when the scanned opponent species has multiple regional/alternate forms (e.g. Alolan, Galarian, Origin, Crowned) — tap to cycle forms.\n  - Your 3 Active Pokémon Chips: On the right side of the overlay toolbar, 3 compact buttons show your 3 Pokémon on the active team. OCR automatically detects which of your 3 Pokémon is on the field, or you can tap any of the 3 chips to manually set your active on-field Pokémon.\n• Step 6 — Post-Battle Summary &amp; Go to Battle Log: When the match ends, SilphScope auto-logs the battle (or tap '🛑 Stop Battle' to log Win/Loss manually). Tap '📊 Battle Log' in the post-battle summary bar anytime to stop the overlay and jump directly to your Battle Logs." />
+                    android:text="• Step 1 — Select or Switch Your Team in the Main App: On the ⚔️ Teams tab, tap 'Select' on any team preset to make it active (or tap '+ New Team' to build a Great, Ultra, Master, or Mega Master League trio with auto-filled PvPoke recommended moves and IV/CP scaling). To switch to a different 3-Pokémon Team Preset, return to the ⚔️ Teams tab in the main app and tap 'Select' on the new team.\n• Step 2 — Launch the Overlay: Tap 'Start Battle Overlay' at the top of the app. Grant 'Display over other apps' and 'Screen Capture' (used strictly in-memory for live ML Kit OCR — zero screenshots are ever written to disk).\n• Step 3 — Reposition, Compact HUD &amp; Log-Only Stealth Mode (Top-Left Emblem): Drag the header to position the overlay anywhere on screen. Tap the top-left emblem once to strictly alternate between Full HUD ↔ Compact HUD. Hold the emblem for 2.0 seconds to activate or deactivate Competitive Log-Only Stealth Mode (100% invisible HUD &amp; silenced haptics with headless OCR, DVR &amp; auto-logging for official tournament play).\n• Step 4 — Start Battle ('⚔️ Start Battle'): When a GBL match begins, tap '⚔️ Start Battle' in the overlay toolbar (or let hands-free countdown auto-start begin automatically). This clears the previous opponent lineup, resets both 45s swap timers to 0s, resets shields (2v2) and Pokéballs (3v3), anchors the battle timeline clock (t=0s), starts OCR scanning, and switches the button to '🛑 Stop Battle'.\n• Step 5 — In-Battle Toolbar Controls ('Shadow', 'Form', &amp; Your 3 Active Pokémon Chips):\n  - 'Shadow: OFF / ON': Tap in the overlay toolbar to toggle the Shadow modifier (+20% ATK / -16.7% DEF) for the active opponent if OCR missed the purple aura.\n  - 'Form: [Form]': Automatically enables when the scanned opponent species has multiple regional/alternate forms (e.g. Alolan, Galarian, Origin, Crowned) — tap to cycle forms.\n  - Your 3 Active Pokémon Chips: On the right side of the overlay toolbar, 3 compact buttons show your 3 Pokémon on the active team. OCR automatically detects which of your 3 Pokémon is on the field, or you can tap any of the 3 chips to manually set your active on-field Pokémon.\n• Step 6 — Post-Battle Summary &amp; Go to Battle Log: When the match ends, SilphScope auto-logs the battle (or tap '🛑 Stop Battle' to log Win/Loss manually). Tap '📊 Battle Log' in the post-battle summary bar anytime to stop the overlay and jump directly to your Battle Logs." />
             </LinearLayout>
 
             <!-- 2. The 3v3 Shield Matrix -->
@@ -5843,7 +5888,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="4. Dual 50s Swap Clocks, Faint Preservation &amp; Top Statusbar Toasts"
+                    android:text="4. Dual 45s Swap Clocks, Faint Preservation &amp; Top Statusbar Toasts"
                     android:textColor="#c084fc"
                     android:textSize="13sp"
                     android:textStyle="bold" />
@@ -5855,7 +5900,7 @@
                     android:lineSpacingExtra="2dp"
                     android:textColor="#e2e8f0"
                     android:textSize="11sp"
-                    android:text="• Dual Independent 50s Swap Timers: Tracks 'Opp Swap: Xs' (top-right header) and your 'Swap: Xs' (My Attacks header) automatically whenever either player switches Pokémon:\n  - White (50s–10s): Switch is locked on cooldown.\n  - Yellow (9s–1s): Under 10 seconds remaining — switch window is opening soon! Prepare to throw energy or time a catch.\n  - Ready (0s): Your 'Swap: 0s' turns Bright Green when your switch is available; 'Opp Swap: 0s' turns Alert Red to warn you that the opponent's switch is ready.\n• Smart Faint Swap-In Clock Preservation: When a Pokémon faints and a replacement enters, SilphScope detects the Pokéball drop (3→2→1) and preserves the existing swap timer instead of falsely resetting it to 50s.\n• Automatic Pokéball (3→2→1) &amp; Shield (2→1→0) Tracking: Samples the top HUD lobes to track remaining Pokémon and shields for both players and automatically dims fainted columns in the damage grids.\n• Top Statusbar / Clock Strip Battle Toasts: Real-time alerts for Swaps, Faint Swaps, and Shields Used appear in the top statusbar/clock area of the phone so they never block your charged move buttons (can be toggled in ⚙️ Settings)." />
+                    android:text="• Dual Independent 45s Swap Timers: Tracks 'Opp Swap: Xs' (top-right header) and your 'Swap: Xs' (My Attacks header) automatically whenever either player switches Pokémon:\n  - White (45s–10s): Switch is locked on cooldown.\n  - Yellow (9s–1s): Under 10 seconds remaining — switch window is opening soon! Prepare to throw energy or time a catch.\n  - Ready (0s): Your 'Swap: 0s' turns Bright Green when your switch is available; 'Opp Swap: 0s' turns Alert Red to warn you that the opponent's switch is ready.\n• Smart Faint Swap-In Clock Preservation: When a Pokémon faints and a replacement enters, SilphScope detects the Pokéball drop (3→2→1) and preserves the existing swap timer instead of falsely resetting it to 45s.\n• Automatic Pokéball (3→2→1) &amp; Shield (2→1→0) Tracking: Samples the top HUD lobes to track remaining Pokémon and shields for both players and automatically dims fainted columns in the damage grids.\n• Top Statusbar / Clock Strip Battle Toasts: Real-time alerts for Swaps, Faint Swaps, and Shields Used appear in the top statusbar/clock area of the phone so they never block your charged move buttons (can be toggled in ⚙️ Settings)." />
             </LinearLayout>
 
             <!-- 5. Move Counting, Turn Pacing, Sneak Prevention & 4-Move Mode -->

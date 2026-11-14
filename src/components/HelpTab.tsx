@@ -19,7 +19,7 @@ export function HelpTab({ setActiveTab, setShowOverlayQuickHelpModal, setShowHel
                   <span>📖 Complete Help, HUD Instructions, Tips &amp; Tactics Guide (v3.20)</span>
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Everything you need to master the floating PvP overlay, 3x3 matchup &amp; shield matrix, bottom 3-column damage grid, 50s swap clocks, move pacing, Battle Log analytics, and Tasker automation.
+                  Everything you need to master the floating PvP overlay, 3x3 matchup &amp; shield matrix, bottom 3-column damage grid, 45s swap clocks, move pacing, Battle Log analytics, and Tasker automation.
                 </p>
               </div>
               <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold shrink-0">
@@ -54,7 +54,7 @@ export function HelpTab({ setActiveTab, setShowOverlayQuickHelpModal, setShowHel
                 <div>
                   <div className="text-xs font-extrabold text-sky-300">🎯 Open Overlay Flow &amp; HUD Popup Guide</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    Quick reference for Shield Matrix, Bottom Damage Grid, 50s Swap Clocks &amp; Battle Flow
+                    Quick reference for Shield Matrix, Bottom Damage Grid, 45s Swap Clocks &amp; Battle Flow
                   </div>
                 </div>
                 <span className="text-sky-400 font-bold text-xs">Open →</span>
@@ -97,7 +97,7 @@ export function HelpTab({ setActiveTab, setShowOverlayQuickHelpModal, setShowHel
                   <strong className="text-white">Step 4 — Manual Opponent Override (&apos;Opponents (Tap to Edit)&apos;):</strong> If OCR misreads an opponent&apos;s name or form, tap the <strong>Opponents (Tap to Edit)</strong> header bar inside the overlay to open the Opponent Team Editor and manually override Opponent 1 (Lead), Opponent 2 (Swap), or Opponent 3 (Closer) with Shadow and Regional/Alternate form support.
                 </li>
                 <li>
-                  <strong className="text-white">Step 5 — Start Battle (⚔️ Start Battle):</strong> When a GBL match begins, tap <strong>⚔️ Start Battle</strong> on the overlay. This clears the previous opponent lineup, resets both 50s swap timers, resets shields (2v2) and Pokéballs (3v3), anchors the battle timeline clock (<code>t = 0s</code>), and turns the button into <strong>🛑 Stop Battle</strong>.
+                  <strong className="text-white">Step 5 — Start Battle (⚔️ Start Battle):</strong> When a GBL match begins, tap <strong>⚔️ Start Battle</strong> on the overlay. This clears the previous opponent lineup, resets both 45s swap timers, resets shields (2v2) and Pokéballs (3v3), anchors the battle timeline clock (<code>t = 0s</code>), and turns the button into <strong>🛑 Stop Battle</strong>.
                 </li>
                 <li>
                   <strong className="text-white">Step 6 — Stop &amp; Log (🛑 Stop Battle):</strong> When the match ends, tap <strong>🛑 Stop Battle</strong>. OCR pauses and the quick-log prompt appears: verify or tap the Lead Matchup chip (<strong>Fav / Neu / Neg</strong>) and tap <strong>🏆 Win</strong> or <strong>💀 Loss</strong> (or <strong>✕ Skip</strong>).
@@ -169,19 +169,19 @@ export function HelpTab({ setActiveTab, setShowOverlayQuickHelpModal, setShowHel
             {/* Section 4: Swap Clocks, Faint Preservation, Shield/Faint Tracking & Statusbar Toasts */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-2.5 text-xs text-slate-300 leading-relaxed">
               <h3 className="text-sm font-bold text-purple-400">
-                4. Dual 50s Swap Clocks, Faint Swap Preservation &amp; Top Statusbar Toasts
+                4. Dual 45s Swap Clocks, Faint Swap Preservation &amp; Top Statusbar Toasts
               </h3>
               <ul className="list-disc list-inside space-y-1.5">
                 <li>
-                  <strong className="text-white">Dual Independent 50s Swap Timers (&apos;You&apos; &amp; &apos;Opp&apos;):</strong> Automatically starts a 50-second countdown whenever you or the opponent switches Pokémon:
+                  <strong className="text-white">Dual Independent 45s Swap Timers (&apos;You&apos; &amp; &apos;Opp&apos;):</strong> Automatically starts a 45-second countdown whenever you or the opponent switches Pokémon:
                   <span className="block ml-4 mt-1 text-slate-300">
-                    • <strong className="text-rose-400">Red (50s–16s):</strong> Switch locked on cooldown.<br />
+                    • <strong className="text-rose-400">Red (45s–16s):</strong> Switch locked on cooldown.<br />
                     • <strong className="text-amber-300">Orange/Amber (15s–1s):</strong> Switch window opening soon — prepare to throw energy or time a catch.<br />
                     • <strong className="text-emerald-400">Green (RDY):</strong> Switch available immediately.
                   </span>
                 </li>
                 <li>
-                  <strong className="text-white">Smart Faint Swap-In Clock Preservation:</strong> When a Pokémon faints and a replacement enters, SilphScope detects the Pokéball drop (<code>3 → 2 → 1</code>) and preserves the existing running swap timer instead of falsely resetting it to 50s.
+                  <strong className="text-white">Smart Faint Swap-In Clock Preservation:</strong> When a Pokémon faints and a replacement enters, SilphScope detects the Pokéball drop (<code>3 → 2 → 1</code>) and preserves the existing running swap timer instead of falsely resetting it to 45s.
                 </li>
                 <li>
                   <strong className="text-white">Automatic Pokéball (3→2→1) &amp; Shield (2→1→0) Tracking:</strong> Samples the top HUD lobes to track remaining Pokémon and shields for both players. When an opponent Pokémon faints, its column in the 3x3 matrix automatically dims so you can focus on surviving threats.

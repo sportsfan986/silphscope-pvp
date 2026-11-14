@@ -3468,7 +3468,7 @@ export default function App() {
 
     // State Machine:
     // Turn 1 lead spawn (wasWaiting) starts at 0s Ready and initializes Clock Anchor t_0 = 0.00s.
-    // Subsequent True Tactical Swap (!wasWaiting && species changed && prior slot not fainted) starts at Midpoint(lastOldFrameMs, firstNewFrameMs) + 50s.
+    // Subsequent True Tactical Swap (!wasWaiting && species changed && prior slot not fainted) starts at Midpoint(lastOldFrameMs, firstNewFrameMs) + 45s.
     if (wasWaiting) {
       setBattleClockAnchorMs(nowFrameMs);
       setBattleTimelineEvents([]);
@@ -3499,7 +3499,7 @@ export default function App() {
       setOppSwitchValidityLatched(!markProvisionalFrame1);
 
       if (!isFaintSwitch) {
-        const nextEndMs = midpointStartMs + 50000;
+        const nextEndMs = midpointStartMs + 45000;
         const nextOppRemSec = Math.max(0, Math.ceil((nextEndMs - nowFrameMs) / 1000));
         setOppSwapEndTimeMs(nextEndMs);
         setLastOppSwitchWasFaint(false);
@@ -3653,7 +3653,7 @@ export default function App() {
       const relT = getRelativeBattleSeconds();
       if (!isPrevFainted) {
         const midpointStartMs = getMidpointSwapStartTimeMs(lastConfirmedPlayerFrameTimeMs, nowFrameMs);
-        const nextEndMs = midpointStartMs + 50000;
+        const nextEndMs = midpointStartMs + 45000;
         const nextPlayerRemSec = Math.max(0, Math.ceil((nextEndMs - nowFrameMs) / 1000));
         setPlayerSwapEndTimeMs(nextEndMs);
         setLastPlayerSwitchWasFaint(false);
@@ -3732,7 +3732,7 @@ export default function App() {
     const prevUserMon = activePreset?.pokemon[activeUserSlotIndex]?.name || 'Lead';
     const nextUserMon = activePreset?.pokemon[nextSlot]?.name || 'Swap';
     const midpointStartMs = getMidpointSwapStartTimeMs(lastConfirmedPlayerFrameTimeMs, nowFrameMs);
-    const nextEndMs = midpointStartMs + 50000;
+    const nextEndMs = midpointStartMs + 45000;
     const followedRec = activeTacticalRec?.recommendedSwapSlotIndex === nextSlot;
 
     setPlayerFaintedSlots((prev) => {
@@ -3759,7 +3759,7 @@ export default function App() {
           recommendedGoal: activeTacticalRec?.goalText || null,
           decisionPhase: activeTacticalRec?.phaseBadge || 'MID_GAME',
           recommendedTargetPokemon: activeTacticalRec?.recommendedSwapPokemon || null,
-          playerSwapRemainingSec: 50,
+          playerSwapRemainingSec: 45,
           oppSwapRemainingSec,
           userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
           oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
@@ -3777,14 +3777,14 @@ export default function App() {
     setIsPostFaintPromptActive(false);
     setIsPlayerTurnOne(false);
     setActiveUserSlotIndex(nextSlot);
-    setStartBattleToast(`Player Tactical Swap -> ${nextUserMon} (Midpoint 50s timer)`);
+    setStartBattleToast(`Player Tactical Swap -> ${nextUserMon} (Midpoint 45s timer)`);
     setTimeout(() => setStartBattleToast(null), 1800);
   };
 
   const handleSimulateOpponentSwap = (provisionalFrame1Only: boolean = false) => {
     const nowFrameMs = Date.now();
     const midpointStartMs = getMidpointSwapStartTimeMs(lastConfirmedOppFrameTimeMs, nowFrameMs);
-    const nextEndMs = midpointStartMs + 50000;
+    const nextEndMs = midpointStartMs + 45000;
     if (scannedOpponents.length > 1) {
       const len = scannedOpponents.length;
       const liveNext = [1, 2]
@@ -3825,7 +3825,7 @@ export default function App() {
             decisionPhase: activeTacticalRec?.phaseBadge || 'OPP_SWAP',
             recommendedTargetPokemon: activeTacticalRec?.recommendedSwapPokemon || null,
             playerSwapRemainingSec,
-            oppSwapRemainingSec: 50,
+            oppSwapRemainingSec: 45,
             userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
             oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
             lastPlayerSwitchWasFaint,
@@ -3845,7 +3845,7 @@ export default function App() {
     setStartBattleToast(
       provisionalFrame1Only
         ? `Frame 1 Provisional Swap Detected ([1F] Midpoint Clock Started)`
-        : `Opponent Tactical Swap (50s Midpoint Timer Reset)`
+        : `Opponent Tactical Swap (45s Midpoint Timer Reset)`
     );
     setTimeout(() => setStartBattleToast(null), 1800);
   };
@@ -6206,7 +6206,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.39 • Android Native Overlay
+                  v7.40 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7289,7 +7289,7 @@ export default function App() {
                               type="button"
                               onClick={handleSimulatePlayerSwap}
                               className="px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-200 border border-sky-400/30"
-                              title="Simulate True Swap for Player (resets to 50s, preserves current slot HP%)"
+                              title="Simulate True Swap for Player (resets to 45s, preserves current slot HP%)"
                             >
                               Swap P
                             </button>
@@ -7334,7 +7334,7 @@ export default function App() {
                               type="button"
                               onClick={() => handleSimulateOpponentSwap(false)}
                               className="px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-200 border border-sky-400/30"
-                              title="Simulate True Swap for Opponent (resets to 50s, preserves current slot HP%)"
+                              title="Simulate True Swap for Opponent (resets to 45s, preserves current slot HP%)"
                             >
                               Swap Opp
                             </button>
@@ -7734,7 +7734,7 @@ export default function App() {
                                     title={
                                       !oppSwitchValidityLatched
                                         ? 'Frame 1 Provisional Swap Detected — Awaiting Frame 2 OCR Validity Latch'
-                                        : 'Opponent Swap Countdown (50s midpoint countdown, resets on Manual Swap)'
+                                        : 'Opponent Swap Countdown (45s midpoint countdown, resets on Manual Swap)'
                                     }
                                   >
                                     Swap: {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
@@ -8038,7 +8038,7 @@ export default function App() {
                                         ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
                                         : 'text-white bg-black/45 border-white/40'
                                     }`}
-                                    title="Player Swap Countdown (50s midpoint countdown, resets on Manual Swap)"
+                                    title="Player Swap Countdown (45s midpoint countdown, resets on Manual Swap)"
                                   >
                                     Swap: {playerSwapRemainingSec}s{!playerSwitchValidityLatched ? ' [1F]' : ''}
                                   </span>
@@ -17869,7 +17869,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.39 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.40 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

@@ -1,4 +1,16 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.39`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.40`)
+
+---
+
+## v7.40 (2026-11-14) — 45s Switch Clock, 15Hz High-Perf Burst Vision, Instant Shield OCR, Cutscene Swap-Catch & Back-to-Back Charge HP Sync
+*Live Android APK & Web Simulator release (`v7.40`, `versionCode = 1740`) upgrading live battle engine responsiveness and fixing all 5 root-cause areas diagnosed in the `2026-11-14` Daily Telemetry Audit.*
+
+### Highlights
+- **45s GBL Switch Cooldown Everywhere (`GBL_SWITCH_COOLDOWN_MS = 45_000L`)**: Updated all Android swap timers, Web Simulator countdowns, guide tooltips, and haptic clock copy from 50s to GO Battle League's current 45s switch cooldown, plus unlocked **Cutscene Swap-Catches** via confirmed `"Go, <Species>!"` / `"sent out"` banners or 2-frame debounced nameplate matches and preserved outgoing HP on swap-catch throws.
+- **High-Perf 15Hz Vision + 150ms Burst OCR (`⚡ Vision & OCR Performance Profile`)**: Upgraded default vision cadence to `66ms` (`15 Hz`) pixel sampling with automatic `150ms` OCR bursts across charge cutscenes, `3-2-1` countdowns, waiting-for-lead, swaps, `>=12%` HP jumps, Pokéball transitions, and unlatched switches (`500ms` steady state), with an optional cloud-synced **Battery Saver** toggle in ⚙️ Settings (`100ms` / `10 Hz` + `250ms`/`300ms`/`750ms` OCR).
+- **3-2-1 Countdown Early Lead Lock & Turn-0 Swap Preservation**: Locks the opening lead during `3-2-1` as soon as nameplate text + explicit `CP` appear, and tightens opening-lead self-correction (`<= 1.2s`, no Go-banner confirmation, matching CP, `<2` confirm frames) so Turn-0 switches are never erased.
+- **Instant Mid-Cutscene `"BLOCKED!"` Shield Decrement & Switch-Fade Guard**: Decrements shield counts immediately on the exact OCR frame `"BLOCKED!"` renders (idempotent across post-charge finalization, skipping unbusted Mimikyu Disguise) and suppresses spurious pixel shield drops while HP bars fade during switch animations.
+- **Back-to-Back Charge HP Commit, Match-Ending KO Sync & Atomic Backline Prediction**: Commits 2-frame Row-Y-validated player HP drains during rapid opponent->player charge chains, finalizes pending closer KOs at auto-end (`0% HP`), and synchronously updates backline predictions (`lastRecommendedGoal`) as each opponent species is revealed (including in Log-Only Stealth Mode).
 
 ---
 

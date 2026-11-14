@@ -117,6 +117,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textEnergyUpdateToastsDesc: TextView
     private lateinit var btnCycleChargeCirclePriority: Button
     private lateinit var textChargeCirclePriorityDesc: TextView
+    private lateinit var btnToggleVisionBatterySaver: Button
+    private lateinit var textVisionBatterySaverDesc: TextView
     private lateinit var btnToggleAltFastMoveDetect: Button
     private lateinit var textAltFastMoveDetectDesc: TextView
     private lateinit var btnCycleFastDetectOffset: Button
@@ -1240,6 +1242,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
         if (::btnCycleChargeCirclePriority.isInitialized) updateChargeCirclePriorityUi()
+        if (::btnToggleVisionBatterySaver.isInitialized) updateVisionBatterySaverUi()
         if (::btnToggleAltFastMoveDetect.isInitialized) updateAltFastMoveDetectUi()
         if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
         if (::btnCycleAltFastStrictness.isInitialized) updateAltFastStrictnessUi()
@@ -1330,6 +1333,8 @@ class MainActivity : AppCompatActivity() {
         textEnergyUpdateToastsDesc = findViewById(R.id.text_energy_update_toasts_desc)
         btnCycleChargeCirclePriority = findViewById(R.id.btn_cycle_charge_circle_priority)
         textChargeCirclePriorityDesc = findViewById(R.id.text_charge_circle_priority_desc)
+        btnToggleVisionBatterySaver = findViewById(R.id.btn_toggle_vision_battery_saver)
+        textVisionBatterySaverDesc = findViewById(R.id.text_vision_battery_saver_desc)
         btnToggleAltFastMoveDetect = findViewById(R.id.btn_toggle_alt_fast_move_detect)
         textAltFastMoveDetectDesc = findViewById(R.id.text_alt_fast_move_detect_desc)
         btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
@@ -1676,6 +1681,7 @@ class MainActivity : AppCompatActivity() {
         updateHpTrackingUi()
         updateEnergyTrackingUi()
         updateChargeCirclePriorityUi()
+        updateVisionBatterySaverUi()
         updateAltFastMoveDetectUi()
         updateFastDetectOffsetUi()
         updateAltFastStrictnessUi()
@@ -2383,6 +2389,32 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE, nextMode)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleVisionBatterySaver.setOnClickListener {
+            val currentSaver = prefs.getBoolean(
+                OverlayService.PREFS_KEY_VISION_BATTERY_SAVER,
+                OverlayService.DEFAULT_VISION_BATTERY_SAVER
+            )
+            val nextSaver = !currentSaver
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_VISION_BATTERY_SAVER, nextSaver).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_vision_battery_saver",
+                triggerImmediateUpload = true
+            )
+            updateVisionBatterySaverUi()
+            updateAiTelemetryStatusUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_VISION_BATTERY_SAVER, nextSaver)
                 }
                 startService(updateIntent)
             }
@@ -6811,7 +6843,7 @@ class MainActivity : AppCompatActivity() {
                 "• Launch & Reposition: Tap 'Start Battle Overlay' to open the floating HUD. Drag the header bar to reposition it anywhere on screen.\n" +
                 "• Minimize & Pause OCR ('⚔️' Icon): Tap the '⚔️' icon in the top-left of the overlay between sets or while catching Pokémon to collapse the HUD into a tiny floating bubble and pause screen scanning.\n" +
                 "• Manual Opponent Override ('Opponents (Tap to Edit)'): Tap the 'Opponents (Tap to Edit)' header bar inside the overlay if OCR misreads a name or form to manually override any of the 3 opponent slots (with Shadow & Regional/Form support).\n" +
-                "• Start Battle ('⚔️ Start Battle'): Tap when a GBL match begins. This clears the previous opponent lineup, resets both 50s swap timers, resets shields (2v2) and Pokéballs (3v3), anchors the timeline clock (t=0s), and turns into '🛑 Stop Battle'.\n" +
+                "• Start Battle ('⚔️ Start Battle'): Tap when a GBL match begins. This clears the previous opponent lineup, resets both 45s swap timers, resets shields (2v2) and Pokéballs (3v3), anchors the timeline clock (t=0s), and turns into '🛑 Stop Battle'.\n" +
                 "• Stop & Log ('🛑 Stop Battle'): Tap when the match finishes. Verify or tap the Lead Matchup chip ('Fav / Neu / Neg') and tap '🏆 Win' or '💀 Loss' (or '✕ Skip')."
         )
 
@@ -6841,14 +6873,14 @@ class MainActivity : AppCompatActivity() {
         )
 
         addGuideSection(
-            title = "4. Dual 50s Swap Timers, Faint Preservation & Statusbar Toasts",
+            title = "4. Dual 45s Swap Timers, Faint Preservation & Statusbar Toasts",
             accentColor = 0xFFC084FC.toInt(),
             bodyText =
-                "• Independent 50s Swap Clocks ('You' & 'Opp'): Tracks both your switch timer and the opponent's switch timer automatically:\n" +
-                "  - Red (50s–16s): Switch locked on cooldown.\n" +
+                "• Independent 45s Swap Clocks ('You' & 'Opp'): Tracks both your switch timer and the opponent's switch timer automatically:\n" +
+                "  - Red (45s–16s): Switch locked on cooldown.\n" +
                 "  - Orange/Amber (15s–1s): Switch window opening soon — prepare to throw energy or time a catch.\n" +
                 "  - Green (RDY): Switch available immediately.\n" +
-                "• Smart Faint Swap-In Preservation: Detects Pokéball drops (3→2→1) when a Pokémon faints so a replacement entering after a KO preserves the running swap timer instead of falsely resetting to 50s.\n" +
+                "• Smart Faint Swap-In Preservation: Detects Pokéball drops (3→2→1) when a Pokémon faints so a replacement entering after a KO preserves the running swap timer instead of falsely resetting to 45s.\n" +
                 "• Shield (2→1→0) & Faint Column Dimming: Tracks remaining shields and automatically dims fainted opponent columns in the 3x3 matrix.\n" +
                 "• Top Statusbar / Clock Strip Toasts: Displays non-intrusive alerts for Swaps, Faint Swaps, and Shields Used at the top statusbar so your charged move buttons are never blocked."
         )
@@ -9513,6 +9545,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateVisionBatterySaverUi() {
+        if (!::btnToggleVisionBatterySaver.isInitialized) return
+        val batterySaver = prefs.getBoolean(
+            OverlayService.PREFS_KEY_VISION_BATTERY_SAVER,
+            OverlayService.DEFAULT_VISION_BATTERY_SAVER
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (!batterySaver) {
+            btnToggleVisionBatterySaver.text = "High-Perf 15Hz"
+            btnToggleVisionBatterySaver.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleVisionBatterySaver.setTextColor(0xFFFFFFFF.toInt())
+            textVisionBatterySaverDesc.text = "Default: High-Perf 15Hz HP + 150ms Burst / 500ms Steady OCR (Fastest swap, shield & 3-2-1 lead lock)"
+        } else {
+            btnToggleVisionBatterySaver.text = "Battery Saver"
+            btnToggleVisionBatterySaver.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleVisionBatterySaver.setTextColor(theme.primaryTextColor)
+            textVisionBatterySaverDesc.text = "Active: Battery Saver 10Hz HP + 250ms/750ms OCR (Lower CPU usage on older/thermal-throttled phones)"
+        }
+    }
+
     private fun updateAltFastMoveDetectUi() {
         if (!::btnToggleAltFastMoveDetect.isInitialized) return
         val enabled = prefs.getBoolean(
@@ -9838,6 +9890,10 @@ class MainActivity : AppCompatActivity() {
             putExtra(
                 OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,
                 prefs.getString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
+            )
+            putExtra(
+                OverlayService.EXTRA_VISION_BATTERY_SAVER,
+                prefs.getBoolean(OverlayService.PREFS_KEY_VISION_BATTERY_SAVER, OverlayService.DEFAULT_VISION_BATTERY_SAVER)
             )
             putExtra(
                 OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,

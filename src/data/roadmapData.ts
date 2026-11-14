@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.40',
+    codename: '45s Switch Clock, 15Hz High-Perf Burst Vision, Instant Shield OCR, Cutscene Swap-Catch & Back-to-Back Charge HP Sync',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Upgrades GBL live combat telemetry across Android and Web Simulator with the 45s switch cooldown, default High-Perf 15Hz vision + 150ms burst OCR (with optional Battery Saver toggle), early 3-2-1 lead locking & Turn-0 swap preservation, immediate mid-cutscene BLOCKED! shield decrements, cutscene swap-catch tracking, back-to-back charge HP commits, and synchronous backline prediction updates.',
+    icon: '⚡',
+    accentColor: '#38BDF8',
+    highlights: [
+      '45s GBL switch cooldown across all Android HUD/midpoint clocks, Web Simulator timers, docs, and haptics + 2-frame cutscene swap-catch unlock',
+      'Default High-Perf 15Hz (66ms) vision loop & 150ms OCR burst (cutscenes, 3-2-1 intro, swaps, >=12% HP jumps, Pokeball transitions) with cloud-synced Battery Saver toggle',
+      'Early 3-2-1 lead lock on nameplate + explicit CP and tightened opening self-correction preserving genuine Turn-0 swaps',
+      'Immediate mid-cutscene BLOCKED! shield decrement (deduplicated with finalization & Mimikyu Disguise safe), switch-fade shield guard, match-ending KO HP sync, and atomic backline prediction updates'
+    ]
+  },
+  {
     version: 'v7.39',
     codename: '7-Scenario Asymmetric Shield Flips, Fast Move BP/Bulkpoint Lists & Matchup Tier Outliers',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Refines the IV Lab Multi-IV Matrix breakdown across Android and Web Simulator by replacing generic non-flipping BR noise with 4 focused categories: Fast Move Breakpoints & Bulkpoints split by Pokémon, 7-scenario realistic asymmetric shield-tree Win/Loss flips, sensitivity-tunable Matchup Tier Outliers, and CMP tie flips.',
     icon: '🎯',
