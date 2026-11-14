@@ -6577,9 +6577,12 @@ class OverlayService : LifecycleService() {
             hasActiveOrRecentShieldCountdown ||
             areBottomCirclesHiddenInCombat ||
             (lastChargedAttackLoggedMs > 0L && (nowMs - lastChargedAttackLoggedMs) <= 2200L)
-        val curUserSlotIdx = currentPreset?.pokemon?.indexOfFirst {
-            FormResolver.extractBaseSpecies(it.name).equals(FormResolver.extractBaseSpecies(activeUserPokemonName), ignoreCase = true)
-        }?.takeIf { it in 0..2 } ?: 0
+        val curUserBase = FormResolver.extractBaseSpecies(activeUserPokemonName.orEmpty())
+        val curUserSlotIdx = if (curUserBase.isNotEmpty()) {
+            currentPreset?.pokemon?.indexOfFirst {
+                FormResolver.extractBaseSpecies(it.name).equals(curUserBase, ignoreCase = true)
+            }?.takeIf { it in 0..2 } ?: 0
+        } else 0
         val curOppSlotIdx = detectedOpponents.indexOfFirst {
             FormResolver.extractBaseSpecies(it).equals(activeOpponentSpecies, ignoreCase = true)
         }.takeIf { it in 0..2 } ?: 0
