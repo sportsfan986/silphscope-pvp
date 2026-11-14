@@ -149,7 +149,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 4-Page Navigation Switcher Bar (Teams | Battle Log | Settings | Meta) -->
+    <!-- 5-Page Navigation Switcher Bar (Teams | Battle Log | Settings | Meta | IVs) -->
     <LinearLayout
         android:id="@+id/layout_nav_bar"
         android:layout_width="match_parent"
@@ -163,13 +163,14 @@
             android:id="@+id/btn_nav_teams"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_weight="1"
+            android:layout_weight="0.95"
             android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
+            android:paddingHorizontal="3dp"
             android:text="⚔️ Teams"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold"
             android:singleLine="true"
+            android:ellipsize="end"
             android:backgroundTint="#0284c7"
             android:textColor="#ffffff"
             android:layout_marginEnd="3dp" />
@@ -178,13 +179,14 @@
             android:id="@+id/btn_nav_battle_log"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_weight="1.08"
+            android:layout_weight="1.05"
             android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
-            android:text="📜 Battle Log"
-            android:textSize="10.5sp"
+            android:paddingHorizontal="3dp"
+            android:text="📜 Battles"
+            android:textSize="10sp"
             android:textStyle="bold"
             android:singleLine="true"
+            android:ellipsize="end"
             android:backgroundTint="#1e293b"
             android:textColor="#94a3b8"
             android:layout_marginEnd="3dp" />
@@ -193,13 +195,14 @@
             android:id="@+id/btn_nav_settings"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_weight="1.04"
+            android:layout_weight="1.05"
             android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
+            android:paddingHorizontal="3dp"
             android:text="⚙️ Settings"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold"
             android:singleLine="true"
+            android:ellipsize="end"
             android:backgroundTint="#1e293b"
             android:textColor="#94a3b8"
             android:layout_marginEnd="3dp" />
@@ -208,13 +211,30 @@
             android:id="@+id/btn_nav_meta"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_weight="0.95"
+            android:layout_weight="0.90"
             android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
+            android:paddingHorizontal="3dp"
             android:text="📊 Meta"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold"
             android:singleLine="true"
+            android:ellipsize="end"
+            android:backgroundTint="#1e293b"
+            android:textColor="#94a3b8"
+            android:layout_marginEnd="3dp" />
+
+        <Button
+            android:id="@+id/btn_nav_ivs"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="0.85"
+            android:minWidth="0dp"
+            android:paddingHorizontal="3dp"
+            android:text="⚖️ IVs"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:backgroundTint="#1e293b"
             android:textColor="#94a3b8" />
     </LinearLayout>
@@ -5598,6 +5618,90 @@
                         android:orientation="vertical" />
                 </LinearLayout>
             </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- ===================================================================
+         PAGE 4B: IV LAB (MULTI-IV MATRIX EVALUATOR + BUILT POKÉMON ROSTER) (v7.38)
+         =================================================================== -->
+    <LinearLayout
+        android:id="@+id/page_iv_lab"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/tv_iv_lab_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:text="⚖️ IV Lab &amp; Built Roster"
+                android:textSize="14.5sp"
+                android:textStyle="bold"
+                android:textColor="#e2e8f0" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#0f172a"
+            android:padding="4dp"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btn_iv_sub_matrix"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="6dp"
+                android:text="⚖️ Multi-IV Matrix"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:backgroundTint="#0284c7"
+                android:textColor="#ffffff"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btn_iv_sub_built"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="6dp"
+                android:text="📦 Built Roster"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:backgroundTint="#1e293b"
+                android:textColor="#94a3b8" />
+        </LinearLayout>
+
+        <ScrollView
+            android:id="@+id/scroll_iv_lab"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/container_iv_lab_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="16dp" />
         </ScrollView>
     </LinearLayout>
 

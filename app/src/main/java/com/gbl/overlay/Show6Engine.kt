@@ -1101,7 +1101,9 @@ internal fun OverlayService.Companion.evaluateShow6Pick3MatchupStatic(
                 fastMove = input?.fastMove?.takeIf { it.isNotBlank() } ?: scaled?.defaultFastMove ?: "Mud Shot",
                 chargedMove1 = input?.chargedMove1?.takeIf { it.isNotBlank() } ?: scaled?.chargedMove1 ?: "Earthquake",
                 chargedMove2 = input?.chargedMove2?.takeIf { it.isNotBlank() } ?: scaled?.chargedMove2 ?: "Stone Edge",
-                ivs = input?.ivs ?: defIvs
+                ivs = input?.ivs ?: defIvs,
+                isBestBuddy = input?.isBestBuddy,
+                builtPokemonId = input?.builtPokemonId
             )
         )
     }

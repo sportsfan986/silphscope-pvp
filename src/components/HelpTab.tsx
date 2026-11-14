@@ -2,7 +2,7 @@ import React from 'react';
 import { Info } from 'lucide-react';
 
 export interface HelpTabProps {
-  setActiveTab: (tab: 'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'math_validator') => void;
+  setActiveTab: (tab: 'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'iv_lab' | 'help' | 'math_validator') => void;
   setShowOverlayQuickHelpModal: (show: boolean) => void;
   setShowHelpMetricGuideModal: (show: boolean) => void;
   setHelpMetricGuideTopic: React.Dispatch<React.SetStateAction<'wae' | 'bmf' | 'badges'>>;

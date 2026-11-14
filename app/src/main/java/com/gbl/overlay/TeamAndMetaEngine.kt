@@ -271,7 +271,7 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
 internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(preset: OverlayService.TeamPreset?) {
     if (preset == null || preset.pokemon.isEmpty()) return
     val sig = "${preset.league}|" + preset.pokemon.joinToString(";") {
-        "${it.name}|${it.fastMove}|${it.chargedMove1}|${it.chargedMove2}|${it.cp}|${it.ivs}|${(it.plusMoveLevel ?: 4).coerceIn(0, 4)}"
+        "${it.name}|${it.fastMove}|${it.chargedMove1}|${it.chargedMove2}|${it.cp}|${it.ivs}|${it.isBestBuddy == true}|${(it.plusMoveLevel ?: 4).coerceIn(0, 4)}"
     }
     if (sig == lastPrecomputedTeamSignature && PRECOMPUTED_TOP200_9X9_CACHE.isNotEmpty()) return
 

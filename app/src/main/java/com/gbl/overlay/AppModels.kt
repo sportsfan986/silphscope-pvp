@@ -13,7 +13,32 @@ data class PokemonSlot(
     val chargedMove1: String = "",
     val chargedMove2: String = "",
     val ivs: String? = null,
-    val plusMoveLevel: Int? = 4
+    val plusMoveLevel: Int? = 4,
+    val isBestBuddy: Boolean? = null,
+    val builtPokemonId: String? = null
+)
+
+data class BuiltPokemonEntry(
+    val id: String = "",
+    val speciesName: String = "",
+    val isShadow: Boolean = false,
+    val atkIv: Int = 0,
+    val defIv: Int = 15,
+    val staIv: Int = 15,
+    val ivs: String = "0/15/15",
+    val league: String = "GREAT LEAGUE",
+    val cpCap: Int = 1500,
+    val cp: Int = 1500,
+    val level: Double = 25.0,
+    val isBestBuddy: Boolean = false,
+    val fastMove: String = "",
+    val chargedMove1: String = "",
+    val chargedMove2: String = "",
+    val plusMoveLevel: Int? = 4,
+    val label: String? = null,
+    val statProductRank: Int? = null,
+    val statProductPct: Double? = null,
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
 data class TeamPreset(

@@ -80,6 +80,31 @@ export interface TeamMember {
   chargedMove2: string;
   ivs?: string;
   plusMoveLevel?: number;
+  isBestBuddy?: boolean;
+  builtPokemonId?: string;
+}
+
+export interface BuiltPokemonEntry {
+  id: string;
+  speciesName: string; // Clean species display name without "Shadow " prefix
+  isShadow: boolean;
+  atkIv: number;
+  defIv: number;
+  staIv: number;
+  ivs: string; // "atk/def/sta"
+  league: string;
+  cpCap: number; // 500 | 1500 | 2500 | 10000
+  cp: number;
+  level: number; // 1.0..51.0 (0.5 steps)
+  isBestBuddy: boolean;
+  fastMove: string;
+  chargedMove1: string;
+  chargedMove2: string;
+  plusMoveLevel?: number;
+  label?: string;
+  statProductRank?: number;
+  statProductPct?: number;
+  updatedAt: number;
 }
 
 export type CoreLeagueType =
@@ -4165,20 +4190,239 @@ export const CPM_TABLE: Record<number, number> = {
   51: 0.84529999
 };
 
-export function solveLeagueLevelCpm(uAtk: number, uDef: number, uHp: number, leagueCap: number): { cpm: number; cp: number } {
+export function solveLeagueLevelCpm(
+  uAtk: number,
+  uDef: number,
+  uHp: number,
+  leagueCap: number,
+  maxLevel: number = 50
+): { level: number; cpm: number; cp: number } {
+  let bestLevel = 1;
   let bestCpm = 0.094;
   let bestCp = 10;
-  for (let lvl = 1; lvl <= 50; lvl += 0.5) {
+  const clampedMax = Math.max(1, Math.min(51, maxLevel));
+  for (let lvl = 1; lvl <= clampedMax; lvl += 0.5) {
     const cpm = CPM_TABLE[lvl] ?? 0.7903;
     const cp = Math.max(10, Math.floor((uAtk * Math.sqrt(uDef * uHp) * cpm * cpm) / 10));
     if (cp <= leagueCap) {
+      bestLevel = lvl;
       bestCpm = cpm;
       bestCp = cp;
     } else {
       break;
     }
   }
-  return { cpm: bestCpm, cp: bestCp };
+  return { level: bestLevel, cpm: bestCpm, cp: bestCp };
+}
+
+export type IvPresetMode = "RANK_1" | "PVPOKE_DEFAULT" | "HUNDO" | "MAX_ATK";
+
+export interface IvSpreadEvalDetails {
+  atkIv: number;
+  defIv: number;
+  staIv: number;
+  ivs: string;
+  cp: number;
+  level: number;
+  cpm: number;
+  effAtk: number;
+  effDef: number;
+  effHp: number;
+  statProduct: number;
+  rank: number;
+  pctOfRank1: number;
+}
+
+interface CachedSpreadEntry {
+  atkIv: number;
+  defIv: number;
+  staIv: number;
+  cp: number;
+  level: number;
+  cpm: number;
+  effAtk: number;
+  effDef: number;
+  effHp: number;
+  statProduct: number;
+  rank: number;
+  pctOfRank1: number;
+}
+
+interface CachedSpeciesRankTable {
+  byIndex: CachedSpreadEntry[]; // index = atk*256 + def*16 + sta
+  rank1: CachedSpreadEntry;
+  maxAtk: CachedSpreadEntry;
+  hundo: CachedSpreadEntry;
+}
+
+const IV_RANK_TABLE_CACHE = new Map<string, CachedSpeciesRankTable>();
+
+function resolveRawSpeciesEntryForIv(speciesNameOrStats: string | PokemonStats): PokemonStats | undefined {
+  if (typeof speciesNameOrStats !== "string") {
+    if (speciesNameOrStats.isRawBaseStats) return speciesNameOrStats;
+    return findPokemonByName(speciesNameOrStats.name) || speciesNameOrStats;
+  }
+  return findPokemonByName(speciesNameOrStats);
+}
+
+function getOrBuildIvRankTable(
+  pokemon: PokemonStats,
+  league: string,
+  isBestBuddy: boolean
+): CachedSpeciesRankTable {
+  const cap = getLeagueCpCap(league);
+  const leagueCap = cap === 500 ? 500 : cap === 1500 ? 1500 : cap === 2500 ? 2500 : 10000;
+  const maxLvl = isBestBuddy ? 51 : 50;
+  const cacheKey = `${pokemon.speciesId.toLowerCase()}|${pokemon.baseStats.atk}|${pokemon.baseStats.def}|${pokemon.baseStats.hp}|${leagueCap}|${maxLvl}`;
+  const hit = IV_RANK_TABLE_CACHE.get(cacheKey);
+  if (hit) {
+    // Refresh LRU order
+    IV_RANK_TABLE_CACHE.delete(cacheKey);
+    IV_RANK_TABLE_CACHE.set(cacheKey, hit);
+    return hit;
+  }
+
+  const baseAtk = pokemon.baseStats.atk;
+  const baseDef = pokemon.baseStats.def;
+  const baseHp = pokemon.baseStats.hp;
+  const byIndex = new Array<CachedSpreadEntry>(4096);
+  const sorted = new Array<CachedSpreadEntry>(4096);
+
+  let idx = 0;
+  for (let a = 0; a <= 15; a++) {
+    const uAtk = Math.max(20, baseAtk + a);
+    for (let d = 0; d <= 15; d++) {
+      const uDef = Math.max(20, baseDef + d);
+      for (let s = 0; s <= 15; s++) {
+        const uHp = Math.max(20, baseHp + s);
+        const solved = solveLeagueLevelCpm(uAtk, uDef, uHp, leagueCap, maxLvl);
+        const effAtk = uAtk * solved.cpm;
+        const effDef = uDef * solved.cpm;
+        const effHp = Math.max(10, Math.floor(uHp * solved.cpm));
+        const statProduct = (effAtk * effDef * effHp) / 1000;
+        const entry: CachedSpreadEntry = {
+          atkIv: a,
+          defIv: d,
+          staIv: s,
+          cp: solved.cp,
+          level: solved.level,
+          cpm: solved.cpm,
+          effAtk: Number(effAtk.toFixed(2)),
+          effDef: Number(effDef.toFixed(2)),
+          effHp,
+          statProduct,
+          rank: 1,
+          pctOfRank1: 100
+        };
+        byIndex[idx] = entry;
+        sorted[idx] = entry;
+        idx++;
+      }
+    }
+  }
+
+  sorted.sort((x, y) => {
+    if (Math.abs(y.statProduct - x.statProduct) > 1e-9) return y.statProduct - x.statProduct;
+    if (y.cp !== x.cp) return y.cp - x.cp;
+    if (y.effHp !== x.effHp) return y.effHp - x.effHp;
+    return y.atkIv - x.atkIv;
+  });
+
+  const bestSp = Math.max(1e-6, sorted[0].statProduct);
+  for (let r = 0; r < sorted.length; r++) {
+    sorted[r].rank = r + 1;
+    sorted[r].pctOfRank1 = Number(((sorted[r].statProduct / bestSp) * 100).toFixed(2));
+  }
+
+  let maxAtk = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i];
+    if (
+      cur.effAtk > maxAtk.effAtk + 1e-6 ||
+      (Math.abs(cur.effAtk - maxAtk.effAtk) <= 1e-6 && cur.statProduct > maxAtk.statProduct)
+    ) {
+      maxAtk = cur;
+    }
+  }
+
+  const hundo = byIndex[15 * 256 + 15 * 16 + 15];
+  const table: CachedSpeciesRankTable = {
+    byIndex,
+    rank1: sorted[0],
+    maxAtk,
+    hundo
+  };
+
+  if (IV_RANK_TABLE_CACHE.size >= 120) {
+    const oldestKey = IV_RANK_TABLE_CACHE.keys().next().value;
+    if (oldestKey !== undefined) IV_RANK_TABLE_CACHE.delete(oldestKey);
+  }
+  IV_RANK_TABLE_CACHE.set(cacheKey, table);
+  return table;
+}
+
+export function evaluateIvSpreadDetails(
+  speciesNameOrStats: string | PokemonStats,
+  atkIv: number,
+  defIv: number,
+  staIv: number,
+  league: string = "GREAT LEAGUE",
+  isBestBuddy: boolean = false
+): IvSpreadEvalDetails | null {
+  const pokemon = resolveRawSpeciesEntryForIv(speciesNameOrStats);
+  if (!pokemon) return null;
+  const a = Math.max(0, Math.min(15, Math.round(atkIv)));
+  const d = Math.max(0, Math.min(15, Math.round(defIv)));
+  const s = Math.max(0, Math.min(15, Math.round(staIv)));
+  const table = getOrBuildIvRankTable(pokemon, league, isBestBuddy);
+  const e = table.byIndex[a * 256 + d * 16 + s];
+  if (!e) return null;
+  return {
+    atkIv: e.atkIv,
+    defIv: e.defIv,
+    staIv: e.staIv,
+    ivs: `${e.atkIv}/${e.defIv}/${e.staIv}`,
+    cp: e.cp,
+    level: e.level,
+    cpm: e.cpm,
+    effAtk: e.effAtk,
+    effDef: e.effDef,
+    effHp: e.effHp,
+    statProduct: Number(e.statProduct.toFixed(2)),
+    rank: e.rank,
+    pctOfRank1: e.pctOfRank1
+  };
+}
+
+export function getPresetIvSpread(
+  speciesNameOrStats: string | PokemonStats,
+  league: string = "GREAT LEAGUE",
+  preset: IvPresetMode = "RANK_1",
+  isBestBuddy: boolean = false
+): IvSpreadEvalDetails | null {
+  const pokemon = resolveRawSpeciesEntryForIv(speciesNameOrStats);
+  if (!pokemon) return null;
+  if (preset === "PVPOKE_DEFAULT") {
+    const [a, d, s] = parseIvTriplet(undefined, league, pokemon);
+    return evaluateIvSpreadDetails(pokemon, a, d, s, league, isBestBuddy);
+  }
+  const table = getOrBuildIvRankTable(pokemon, league, isBestBuddy);
+  const chosen = preset === "HUNDO" ? table.hundo : preset === "MAX_ATK" ? table.maxAtk : table.rank1;
+  return {
+    atkIv: chosen.atkIv,
+    defIv: chosen.defIv,
+    staIv: chosen.staIv,
+    ivs: `${chosen.atkIv}/${chosen.defIv}/${chosen.staIv}`,
+    cp: chosen.cp,
+    level: chosen.level,
+    cpm: chosen.cpm,
+    effAtk: chosen.effAtk,
+    effDef: chosen.effDef,
+    effHp: chosen.effHp,
+    statProduct: Number(chosen.statProduct.toFixed(2)),
+    rank: chosen.rank,
+    pctOfRank1: chosen.pctOfRank1
+  };
 }
 
 /**
@@ -4229,13 +4473,14 @@ export function computeEffectiveStatsForLeague(
   league: string = "MASTER LEAGUE",
   customCp?: number,
   customIvs?: string,
-  isShadow?: boolean
-): PokemonStats & { resolvedCp: number } {
+  isShadow?: boolean,
+  isBestBuddy?: boolean
+): PokemonStats & { resolvedCp: number; resolvedLevel?: number } {
   const cap = getLeagueCpCap(league);
   const isLittle = cap === 500;
   const isGreat = cap === 1500;
   const isUltra = cap === 2500;
-  const leagueCap = isLittle ? 500 : isGreat ? 1500 : isUltra ? 2500 : 6000;
+  const leagueCap = isLittle ? 500 : isGreat ? 1500 : isUltra ? 2500 : 10000;
   const actualIvs = parseIvTriplet(customIvs, league, pokemon);
   const withLeagueMoves = applyRankingMovesToPokemonStats(pokemon, league, isShadow);
 
@@ -4243,23 +4488,51 @@ export function computeEffectiveStatsForLeague(
     const uAtk = Math.max(20, pokemon.baseStats.atk + actualIvs[0]);
     const uDef = Math.max(20, pokemon.baseStats.def + actualIvs[1]);
     const uHp = Math.max(20, pokemon.baseStats.hp + actualIvs[2]);
-    let targetCp: number;
-    let cpm: number;
-    if (customCp && customCp >= 100 && customCp <= leagueCap + 100) {
-      targetCp = customCp;
-      cpm = Math.max(
-        0.094,
-        Math.min(0.8453, Math.sqrt((targetCp * 10) / (uAtk * Math.sqrt(uDef * uHp))))
-      );
-    } else {
-      const solved = solveLeagueLevelCpm(uAtk, uDef, uHp, leagueCap);
-      targetCp = solved.cp;
-      cpm = solved.cpm;
+    const maxLvl = isBestBuddy ? 51 : 50;
+    const solved = solveLeagueLevelCpm(uAtk, uDef, uHp, leagueCap, maxLvl);
+    let targetCp = solved.cp;
+    let cpm = solved.cpm;
+    let resolvedLevel = solved.level;
+
+    if (customCp && customCp >= 100 && customCp <= leagueCap + 250 && customCp !== solved.cp) {
+      // Prefer exact discrete half-level CPM matching customCp when possible (avoids float sqrt drift)
+      let exactLvlHit: number | null = null;
+      for (let lvl = maxLvl; lvl >= 1; lvl -= 0.5) {
+        const lvlCpm = CPM_TABLE[lvl] ?? 0.7903;
+        const lvlCp = Math.max(10, Math.floor((uAtk * Math.sqrt(uDef * uHp) * lvlCpm * lvlCpm) / 10));
+        if (lvlCp === customCp) {
+          exactLvlHit = lvl;
+          break;
+        }
+      }
+      if (exactLvlHit === null && !isBestBuddy && customCp <= leagueCap) {
+        for (const lvl of [51, 50.5]) {
+          const lvlCpm = CPM_TABLE[lvl] ?? 0.8453;
+          const lvlCp = Math.max(10, Math.floor((uAtk * Math.sqrt(uDef * uHp) * lvlCpm * lvlCpm) / 10));
+          if (lvlCp === customCp) {
+            exactLvlHit = lvl;
+            break;
+          }
+        }
+      }
+      if (exactLvlHit !== null) {
+        resolvedLevel = exactLvlHit;
+        cpm = CPM_TABLE[exactLvlHit] ?? solved.cpm;
+        targetCp = customCp;
+      } else if (!customIvs || customIvs.trim().length === 0) {
+        targetCp = customCp;
+        cpm = Math.max(
+          0.094,
+          Math.min(0.8453, Math.sqrt((targetCp * 10) / (uAtk * Math.sqrt(uDef * uHp))))
+        );
+      }
     }
+
     return {
       ...withLeagueMoves,
       isRawBaseStats: false,
       resolvedCp: targetCp,
+      resolvedLevel,
       baseStats: {
         atk: Number((uAtk * cpm).toFixed(2)),
         def: Number((uDef * cpm).toFixed(2)),
@@ -6365,10 +6638,12 @@ export function getPokemonAutocompleteSuggestions(
 export function getRecommendedMovesForPokemon(
   rawName: string,
   league: string = "GREAT LEAGUE",
-  customIvs?: string
+  customIvs?: string,
+  isBestBuddy?: boolean
 ): {
   name: string;
   cp: number;
+  level?: number;
   fastMove: string;
   chargedMove1: string;
   chargedMove2: string;
@@ -6442,8 +6717,8 @@ export function getRecommendedMovesForPokemon(
   if (!partial) return null;
 
   const normLeague = normalizeLeagueName(league);
-  const scaled = computeEffectiveStatsForLeague(partial, normLeague, undefined, customIvs);
-  const ivTuple = parseIvTriplet(customIvs, normLeague);
+  const scaled = computeEffectiveStatsForLeague(partial, normLeague, undefined, customIvs, undefined, isBestBuddy);
+  const ivTuple = parseIvTriplet(customIvs, normLeague, partial);
 
   const leagueMap = LIVE_RANKINGS_MAP[normLeague] || LIVE_RANKINGS_MAP[league.toUpperCase()];
   const isShadowInput = trimmed.toLowerCase().startsWith("shadow ");
@@ -6499,6 +6774,7 @@ export function getRecommendedMovesForPokemon(
   return {
     name: finalDisplayName,
     cp: scaled.resolvedCp,
+    level: scaled.resolvedLevel,
     fastMove: resolvedFast,
     chargedMove1: resolvedC1,
     chargedMove2: resolvedC2,

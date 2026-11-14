@@ -192,9 +192,16 @@ export function calculateOpponentMoveTimingRows(
     Object.values(POKEMON_DATABASE).find((p) => p.name.toLowerCase() === cleanUserName.toLowerCase()) ||
     Object.values(POKEMON_DATABASE)[0];
   const activeMember = teamMembers?.find((m) => m.name.toLowerCase() === userLeadName.toLowerCase());
-  const userStats = computeEffectiveStatsForLeague(rawUserStats, league, activeMember?.cp, activeMember?.ivs);
-
   const isUserShadow = userLeadName.toLowerCase().startsWith("shadow ");
+  const userStats = computeEffectiveStatsForLeague(
+    rawUserStats,
+    league,
+    activeMember?.cp,
+    activeMember?.ivs,
+    isUserShadow,
+    activeMember?.isBestBuddy
+  );
+
   const resolvedUserFast = resolveFastMove(userStats, userFastMoveNameOverride);
   const userFastTurns = userFastTurnsOverride || resolvedUserFast.turns || 2;
   const oppFastMove = resolveFastMove(oppStats);
@@ -352,8 +359,15 @@ export function calculateOpponentMoveTimingRows(
         Object.values(POKEMON_DATABASE).find((p) => p.name.toLowerCase() === cleanB.toLowerCase()) ||
         Object.values(POKEMON_DATABASE)[0];
       const benchMember = teamMembers?.find((m) => m.name.toLowerCase() === bName.toLowerCase());
-      const bStats = computeEffectiveStatsForLeague(rawBStats, league, benchMember?.cp, benchMember?.ivs);
       const isBShadow = bName.toLowerCase().startsWith("shadow ");
+      const bStats = computeEffectiveStatsForLeague(
+        rawBStats,
+        league,
+        benchMember?.cp,
+        benchMember?.ivs,
+        isBShadow,
+        benchMember?.isBestBuddy
+      );
       const bDmg = calculateChargedDamage(oppStats, bStats, cm, isOppShadow, isBShadow);
       const tier: "resist" | "neutral" | "weak" =
         bDmg.percentage <= 35 ? "resist" : bDmg.percentage >= 65 || bDmg.mult >= 1.5 ? "weak" : "neutral";
@@ -439,14 +453,15 @@ export function calculateMyMoveTimingRows(
     POKEMON_DATABASE[cleanUserName] ||
     Object.values(POKEMON_DATABASE).find((p) => p.name.toLowerCase() === cleanUserName.toLowerCase()) ||
     Object.values(POKEMON_DATABASE)[0];
+  const isUserShadow = userLeadName.toLowerCase().startsWith("shadow ");
   const userStats = computeEffectiveStatsForLeague(
     rawUserStats,
     league,
     activeUserMember?.cp,
-    activeUserMember?.ivs
+    activeUserMember?.ivs,
+    isUserShadow,
+    activeUserMember?.isBestBuddy
   );
-
-  const isUserShadow = userLeadName.toLowerCase().startsWith("shadow ");
   const resolvedUserFast = resolveFastMove(userStats, userFastMoveNameOverride);
   const userFastTurns = userFastTurnsOverride || resolvedUserFast.turns || 2;
   const userFastEnergy = resolvedUserFast.energyGain || userFastTurns * 4;
@@ -1010,6 +1025,7 @@ export function resolveCombatPokemonForEngine(
   const rawName = typeof input === "string" ? input : input.name;
   const customCp = typeof input === "object" ? input.cp : undefined;
   const customIvs = typeof input === "object" ? input.ivs : undefined;
+  const isBestBuddy = typeof input === "object" ? Boolean(input.isBestBuddy) : false;
   const isShadow =
     /^Shadow\s+/i.test(rawName || "") ||
     (rawName || "").toLowerCase().includes("(shadow)");
@@ -1026,7 +1042,8 @@ export function resolveCombatPokemonForEngine(
     league,
     customCp,
     customIvs,
-    isShadow
+    isShadow,
+    isBestBuddy
   );
 
   const customFastName = typeof input === "object" ? input.fastMove : undefined;
@@ -1068,7 +1085,8 @@ export const POSITION_WEIGHTED_BR_CACHE = new Map<string, PositionWeightedMatchu
 export function buildCombatantCacheKey(input: TeamMember | string): string {
   if (typeof input === "string") return input.trim().toLowerCase();
   const plusLvl = Math.max(0, Math.min(4, input.plusMoveLevel ?? 4));
-  return `${(input.name || "").trim().toLowerCase()}|${input.cp || ""}|${input.ivs || ""}|${input.fastMove || ""}|${input.chargedMove1 || ""}|${input.chargedMove2 || ""}|+${plusLvl}`;
+  const bbFlag = input.isBestBuddy ? "|bb" : "";
+  return `${(input.name || "").trim().toLowerCase()}|${input.cp || ""}|${input.ivs || ""}|${input.fastMove || ""}|${input.chargedMove1 || ""}|${input.chargedMove2 || ""}|+${plusLvl}${bbFlag}`;
 }
 
 /**

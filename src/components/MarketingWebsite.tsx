@@ -6,7 +6,7 @@ export type MarketingSubpage = 'vault' | 'home' | 'live' | 'guide' | 'compare';
 export interface MarketingWebsiteProps {
   activeSubpage: MarketingSubpage;
   onSelectSubpage: (page: MarketingSubpage) => void;
-  onLaunchWebApp: (initialTab?: 'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'math_validator') => void;
+  onLaunchWebApp: (initialTab?: 'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'iv_lab' | 'help' | 'math_validator') => void;
   onOpenMembershipModal: () => void;
   webScreenName: string;
   onChangeWebScreenName: (name: string) => void;
@@ -1157,7 +1157,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.37 • Latest Release
+                    v7.38 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1386,7 +1386,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.37)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.38)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>

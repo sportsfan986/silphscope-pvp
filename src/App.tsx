@@ -27,7 +27,8 @@ import {
   BarChart2,
   Calculator,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Scale
 } from 'lucide-react';
 import {
   POKEMON_DATABASE,
@@ -159,7 +160,11 @@ import {
   isExpiredLimitedMeta,
   isOldCupForMode,
   syncLimitedMetaRankings,
-  fetchPvPokeLimitedMetasFromGitHub
+  fetchPvPokeLimitedMetasFromGitHub,
+  BuiltPokemonEntry,
+  findMatchingBuiltPokemon,
+  teamMemberToBuiltPokemon,
+  getAvailableMovePoolForPokemon
 } from './data/gblData';
 import {
   BattleQualityMetadata,
@@ -186,6 +191,8 @@ import {
   renderThemeOverlayIcon
 } from './components/AppThemeAndModels';
 import { MetaTab } from './components/MetaTab';
+import { IvLabTab } from './components/IvLabTab';
+import { IvTripletInput } from './components/IvTripletInput';
 import { HelpTab } from './components/HelpTab';
 import { MathValidatorTab } from './components/MathValidatorTab';
 import { TrashBinModals } from './components/TrashBinModals';
@@ -242,8 +249,72 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Navigation tabs (reordered: Teams, Battle Logs, Settings, Meta, Help, Math Validator)
-  const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'math_validator'>('simulator');
+  // Navigation tabs (reordered: Teams, Battle Logs, Settings, Meta, IV Lab, Help, Math Validator)
+  const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'iv_lab' | 'help' | 'math_validator'>('simulator');
+
+  // Roadmap #7: Built Pokemon Personal IV Roster (persisted in localStorage + synced via Cloudflare D1 Vault)
+  const [builtPokemonRoster, setBuiltPokemonRoster] = useState<BuiltPokemonEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem('gbl_built_pokemon_roster_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [deletedBuiltPokemonIds, setDeletedBuiltPokemonIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('gbl_deleted_built_pokemon_ids_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [builtSaveFlashSlot, setBuiltSaveFlashSlot] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_built_pokemon_roster_v1', JSON.stringify(builtPokemonRoster));
+    } catch {}
+  }, [builtPokemonRoster]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_deleted_built_pokemon_ids_v1', JSON.stringify(deletedBuiltPokemonIds));
+    } catch {}
+  }, [deletedBuiltPokemonIds]);
+
+  const upsertBuiltPokemonEntry = (entry: BuiltPokemonEntry, flashKey?: string) => {
+    const cleanEntry: BuiltPokemonEntry = {
+      ...entry,
+      updatedAt: Math.max(Number(entry.updatedAt) || 0, Date.now())
+    };
+    setBuiltPokemonRoster((prev) => {
+      const idx = prev.findIndex((p) => p.id === cleanEntry.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = cleanEntry;
+        return next;
+      }
+      return [cleanEntry, ...prev];
+    });
+    setDeletedBuiltPokemonIds((prev) => prev.filter((id) => id !== cleanEntry.id));
+    if (flashKey) {
+      setBuiltSaveFlashSlot(flashKey);
+      setTimeout(() => {
+        setBuiltSaveFlashSlot((prev) => (prev === flashKey ? null : prev));
+      }, 1800);
+    }
+  };
+
+  const deleteBuiltPokemonEntry = (id: string) => {
+    if (!id) return;
+    setBuiltPokemonRoster((prev) => prev.filter((p) => p.id !== id));
+    setDeletedBuiltPokemonIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  };
   const [validatorLeague, setValidatorLeague] = useState<LeagueType>('GREAT LEAGUE');
   const [validatorSubTab, setValidatorSubTab] = useState<'matrix_cards' | 'form_changes' | 'aegislash_audit' | 'cross_validation'>('matrix_cards');
   const [selectedCardSpecies, setSelectedCardSpecies] = useState<string>('Melmetal');
@@ -3240,6 +3311,8 @@ export default function App() {
   const [p1C1, setP1C1] = useState('Earthquake');
   const [p1C2, setP1C2] = useState('Stone Edge');
   const [p1PlusLevel, setP1PlusLevel] = useState<number>(4);
+  const [p1BestBuddy, setP1BestBuddy] = useState<boolean>(false);
+  const [p1BuiltId, setP1BuiltId] = useState<string | undefined>(undefined);
 
   const [p2Name, setP2Name] = useState('Feraligatr');
   const [p2Cp, setP2Cp] = useState(1498);
@@ -3248,6 +3321,8 @@ export default function App() {
   const [p2C1, setP2C1] = useState('Hydro Cannon');
   const [p2C2, setP2C2] = useState('Ice Beam');
   const [p2PlusLevel, setP2PlusLevel] = useState<number>(4);
+  const [p2BestBuddy, setP2BestBuddy] = useState<boolean>(false);
+  const [p2BuiltId, setP2BuiltId] = useState<string | undefined>(undefined);
 
   const [p3Name, setP3Name] = useState('Mandibuzz');
   const [p3Cp, setP3Cp] = useState(1496);
@@ -3256,6 +3331,8 @@ export default function App() {
   const [p3C1, setP3C1] = useState('Dark Pulse');
   const [p3C2, setP3C2] = useState('Aerial Ace');
   const [p3PlusLevel, setP3PlusLevel] = useState<number>(4);
+  const [p3BestBuddy, setP3BestBuddy] = useState<boolean>(false);
+  const [p3BuiltId, setP3BuiltId] = useState<string | undefined>(undefined);
 
   // Clipboard Copy State
   const [copiedFile, setCopiedFile] = useState(false);
@@ -4102,7 +4179,8 @@ export default function App() {
       activePreset?.league || activeOpponentLeague,
       mySlot?.cp,
       mySlot?.ivs,
-      myShad
+      myShad,
+      mySlot?.isBestBuddy
     );
     const candidateMoves: Array<{ name: string; damagePct: number }> = (activeOpponent?.chargedMoves || []).map((cm) => {
       const dmg = calculateChargedDamage(activeOpponent, myEffStats, cm, isOpponentShadow, myShad);
@@ -4688,9 +4766,10 @@ export default function App() {
       activePreset?.league || activeOpponentLeague,
       activeUserSlot?.cp,
       activeUserSlot?.ivs,
-      isUserShadow
+      isUserShadow,
+      activeUserSlot?.isBestBuddy
     );
-  }, [rawUserActivePokemon, activePreset?.league, activeOpponentLeague, activeUserSlot?.cp, activeUserSlot?.ivs, isUserShadow, pvPokeSyncStatus]);
+  }, [rawUserActivePokemon, activePreset?.league, activeOpponentLeague, activeUserSlot?.cp, activeUserSlot?.ivs, activeUserSlot?.isBestBuddy, isUserShadow, pvPokeSyncStatus]);
 
   const availableForms = useMemo(() => {
     return getAvailableFormsForPokemon(activeOpponent.name);
@@ -4907,6 +4986,8 @@ export default function App() {
     setP1C1(top3[0].chargedMove1);
     setP1C2(top3[0].chargedMove2);
     setP1PlusLevel(top3[0].plusMoveLevel ?? 4);
+    setP1BestBuddy(false);
+    setP1BuiltId(undefined);
 
     setP2Name(top3[1].name);
     setP2Cp(top3[1].cp);
@@ -4915,6 +4996,8 @@ export default function App() {
     setP2C1(top3[1].chargedMove1);
     setP2C2(top3[1].chargedMove2);
     setP2PlusLevel(top3[1].plusMoveLevel ?? 4);
+    setP2BestBuddy(false);
+    setP2BuiltId(undefined);
 
     setP3Name(top3[2].name);
     setP3Cp(top3[2].cp);
@@ -4923,6 +5006,65 @@ export default function App() {
     setP3C1(top3[2].chargedMove1);
     setP3C2(top3[2].chargedMove2);
     setP3PlusLevel(top3[2].plusMoveLevel ?? 4);
+    setP3BestBuddy(false);
+    setP3BuiltId(undefined);
+  };
+
+  const applyBuiltSpecimenToModalSlot = (slotIdx: 1 | 2 | 3, entry: BuiltPokemonEntry) => {
+    const display = entry.isShadow ? `Shadow ${entry.speciesName}` : entry.speciesName;
+    if (slotIdx === 1) {
+      setP1Name(display);
+      setP1Cp(entry.cp);
+      setP1Ivs(entry.ivs);
+      setP1Fast(entry.fastMove);
+      setP1C1(entry.chargedMove1);
+      setP1C2(entry.chargedMove2);
+      setP1PlusLevel(entry.plusMoveLevel ?? 4);
+      setP1BestBuddy(Boolean(entry.isBestBuddy));
+      setP1BuiltId(entry.id);
+    } else if (slotIdx === 2) {
+      setP2Name(display);
+      setP2Cp(entry.cp);
+      setP2Ivs(entry.ivs);
+      setP2Fast(entry.fastMove);
+      setP2C1(entry.chargedMove1);
+      setP2C2(entry.chargedMove2);
+      setP2PlusLevel(entry.plusMoveLevel ?? 4);
+      setP2BestBuddy(Boolean(entry.isBestBuddy));
+      setP2BuiltId(entry.id);
+    } else {
+      setP3Name(display);
+      setP3Cp(entry.cp);
+      setP3Ivs(entry.ivs);
+      setP3Fast(entry.fastMove);
+      setP3C1(entry.chargedMove1);
+      setP3C2(entry.chargedMove2);
+      setP3PlusLevel(entry.plusMoveLevel ?? 4);
+      setP3BestBuddy(Boolean(entry.isBestBuddy));
+      setP3BuiltId(entry.id);
+    }
+  };
+
+  const handleSaveModalSlotToBuilt = (slotIdx: 1 | 2 | 3) => {
+    const members = buildModalMembersArray();
+    const target = members[slotIdx - 1];
+    if (!target || !target.name.trim()) return;
+    const entry = teamMemberToBuiltPokemon(target, newPresetLeague);
+    if (!entry) return;
+    upsertBuiltPokemonEntry(entry, `modal-s${slotIdx}`);
+    if (slotIdx === 1) {
+      setP1Ivs(entry.ivs);
+      setP1Cp(entry.cp);
+      setP1BuiltId(entry.id);
+    } else if (slotIdx === 2) {
+      setP2Ivs(entry.ivs);
+      setP2Cp(entry.cp);
+      setP2BuiltId(entry.id);
+    } else {
+      setP3Ivs(entry.ivs);
+      setP3Cp(entry.cp);
+      setP3BuiltId(entry.id);
+    }
   };
 
   const handleAutoFillSlotMoves = (
@@ -4931,7 +5073,8 @@ export default function App() {
     league: LeagueType,
     customIvs?: string
   ) => {
-    const rec = getRecommendedMovesForPokemon(rawName, league, customIvs);
+    const isBb = slotIdx === 1 ? p1BestBuddy : slotIdx === 2 ? p2BestBuddy : p3BestBuddy;
+    const rec = getRecommendedMovesForPokemon(rawName, league, customIvs, isBb);
     if (!rec) return;
     if (slotIdx === 1) {
       if (!p1Fast.trim()) setP1Fast(rec.fastMove);
@@ -4952,8 +5095,17 @@ export default function App() {
   };
 
   const handleSelectAutocompletePokemon = (slotIdx: 1 | 2 | 3, opt: PokemonAutocompleteOption) => {
+    const builtMatches = findMatchingBuiltPokemon(builtPokemonRoster, opt.name, newPresetLeague);
+    if (builtMatches.length === 1) {
+      applyBuiltSpecimenToModalSlot(slotIdx, builtMatches[0]);
+      setActiveAutocompleteSlot(null);
+      setAutocompleteHighlightIdx(0);
+      return;
+    }
+
     const customIvs = slotIdx === 1 ? p1Ivs : slotIdx === 2 ? p2Ivs : p3Ivs;
-    const rec = getRecommendedMovesForPokemon(opt.name, newPresetLeague, customIvs);
+    const isBb = slotIdx === 1 ? p1BestBuddy : slotIdx === 2 ? p2BestBuddy : p3BestBuddy;
+    const rec = getRecommendedMovesForPokemon(opt.name, newPresetLeague, customIvs, isBb);
     const fast = rec?.fastMove || opt.fastMove;
     const c1 = rec?.chargedMove1 || opt.chargedMove1;
     const c2 = rec?.chargedMove2 || opt.chargedMove2;
@@ -4965,18 +5117,21 @@ export default function App() {
       setP1C1(c1);
       setP1C2(c2);
       setP1Cp(cp);
+      setP1BuiltId(undefined);
     } else if (slotIdx === 2) {
       setP2Name(opt.name);
       setP2Fast(fast);
       setP2C1(c1);
       setP2C2(c2);
       setP2Cp(cp);
+      setP2BuiltId(undefined);
     } else {
       setP3Name(opt.name);
       setP3Fast(fast);
       setP3C1(c1);
       setP3C2(c2);
       setP3Cp(cp);
+      setP3BuiltId(undefined);
     }
     setActiveAutocompleteSlot(null);
     setAutocompleteHighlightIdx(0);
@@ -5039,6 +5194,8 @@ export default function App() {
       setP1C1(s1.chargedMove1);
       setP1C2(s1.chargedMove2);
       setP1PlusLevel(s1.plusMoveLevel ?? 4);
+      setP1BestBuddy(Boolean(s1.isBestBuddy));
+      setP1BuiltId(s1.builtPokemonId);
     }
     if (s2) {
       setP2Name(s2.name);
@@ -5048,6 +5205,8 @@ export default function App() {
       setP2C1(s2.chargedMove1);
       setP2C2(s2.chargedMove2);
       setP2PlusLevel(s2.plusMoveLevel ?? 4);
+      setP2BestBuddy(Boolean(s2.isBestBuddy));
+      setP2BuiltId(s2.builtPokemonId);
     }
     if (s3) {
       setP3Name(s3.name);
@@ -5057,6 +5216,8 @@ export default function App() {
       setP3C1(s3.chargedMove1);
       setP3C2(s3.chargedMove2);
       setP3PlusLevel(s3.plusMoveLevel ?? 4);
+      setP3BestBuddy(Boolean(s3.isBestBuddy));
+      setP3BuiltId(s3.builtPokemonId);
     }
     setModalCloneTargetLeague(preset.league);
     setIsNewPresetOpen(true);
@@ -5073,11 +5234,13 @@ export default function App() {
       rawC2: string,
       rawIvs: string,
       plusMoveLevel: number,
+      isBestBuddy: boolean,
+      builtPokemonId: string | undefined,
       fallback: TeamMember
     ): TeamMember => {
       const finalName = rawName.trim() || fallback.name;
       const cleanIvs = rawIvs.trim() || undefined;
-      const rec = getRecommendedMovesForPokemon(finalName, newPresetLeague, cleanIvs);
+      const rec = getRecommendedMovesForPokemon(finalName, newPresetLeague, cleanIvs, isBestBuddy);
       return {
         id,
         name: finalName,
@@ -5086,13 +5249,15 @@ export default function App() {
         chargedMove1: rawC1.trim() || rec?.chargedMove1 || fallback.chargedMove1,
         chargedMove2: rawC2.trim() || rec?.chargedMove2 || fallback.chargedMove2,
         ivs: cleanIvs,
-        plusMoveLevel: Math.max(0, Math.min(4, plusMoveLevel ?? 4))
+        plusMoveLevel: Math.max(0, Math.min(4, plusMoveLevel ?? 4)),
+        isBestBuddy: isBestBuddy || undefined,
+        builtPokemonId
       };
     };
     return [
-      resolveSlot('p1', p1Name, p1Cp, p1Fast, p1C1, p1C2, p1Ivs, p1PlusLevel, top3[0]),
-      resolveSlot('p2', p2Name, p2Cp, p2Fast, p2C1, p2C2, p2Ivs, p2PlusLevel, top3[1]),
-      resolveSlot('p3', p3Name, p3Cp, p3Fast, p3C1, p3C2, p3Ivs, p3PlusLevel, top3[2])
+      resolveSlot('p1', p1Name, p1Cp, p1Fast, p1C1, p1C2, p1Ivs, p1PlusLevel, p1BestBuddy, p1BuiltId, top3[0]),
+      resolveSlot('p2', p2Name, p2Cp, p2Fast, p2C1, p2C2, p2Ivs, p2PlusLevel, p2BestBuddy, p2BuiltId, top3[1]),
+      resolveSlot('p3', p3Name, p3Cp, p3Fast, p3C1, p3C2, p3Ivs, p3PlusLevel, p3BestBuddy, p3BuiltId, top3[2])
     ];
   };
 
@@ -5106,6 +5271,8 @@ export default function App() {
       setP1C1(m1.chargedMove1);
       setP1C2(m1.chargedMove2);
       setP1PlusLevel(m1.plusMoveLevel ?? 4);
+      setP1BestBuddy(Boolean(m1.isBestBuddy));
+      setP1BuiltId(m1.builtPokemonId);
     }
     if (m2) {
       setP2Name(m2.name);
@@ -5115,6 +5282,8 @@ export default function App() {
       setP2C1(m2.chargedMove1);
       setP2C2(m2.chargedMove2);
       setP2PlusLevel(m2.plusMoveLevel ?? 4);
+      setP2BestBuddy(Boolean(m2.isBestBuddy));
+      setP2BuiltId(m2.builtPokemonId);
     }
     if (m3) {
       setP3Name(m3.name);
@@ -5124,6 +5293,8 @@ export default function App() {
       setP3C1(m3.chargedMove1);
       setP3C2(m3.chargedMove2);
       setP3PlusLevel(m3.plusMoveLevel ?? 4);
+      setP3BestBuddy(Boolean(m3.isBestBuddy));
+      setP3BuiltId(m3.builtPokemonId);
     }
   };
 
@@ -5165,9 +5336,9 @@ export default function App() {
   }, [
     siteView,
     isNewPresetOpen,
-    p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2, p1PlusLevel,
-    p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2, p2PlusLevel,
-    p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2, p3PlusLevel,
+    p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2, p1PlusLevel, p1BestBuddy,
+    p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2, p2PlusLevel, p2BestBuddy,
+    p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2, p3PlusLevel, p3BestBuddy,
     newPresetLeague,
     manualArchetypeOverride,
     battleLogs,
@@ -6035,7 +6206,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.37 • Android Native Overlay
+                  v7.38 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -6169,6 +6340,17 @@ export default function App() {
               >
                 <BarChart2 className="w-3.5 h-3.5" />
                 <span>📊 Meta</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('iv_lab')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+                  activeTab === 'iv_lab'
+                    ? 'bg-cyan-500 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Scale className="w-3.5 h-3.5" />
+                <span>⚖️ IV Lab</span>
               </button>
               <button
                 onClick={() => setActiveTab('math_validator')}
@@ -11899,17 +12081,28 @@ export default function App() {
                           value={p1Cp || ''}
                           onChange={(e) => setP1Cp(parseInt(e.target.value) || 0)}
                           placeholder="CP (Auto)"
-                          className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                        />
-                        <input
-                          type="text"
-                          value={p1Ivs}
-                          onChange={(e) => setP1Ivs(e.target.value)}
-                          placeholder="IVs (opt)"
-                          title="Optional Atk/Def/HP IVs (e.g. 0/15/15). Defaults to PvPoke IVs if blank."
-                          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                          className="col-span-2 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                         />
                       </div>
+                      <IvTripletInput
+                        compact
+                        speciesName={p1Name}
+                        league={newPresetLeague}
+                        ivs={p1Ivs}
+                        isBestBuddy={p1BestBuddy}
+                        showBestBuddyToggle
+                        showPresets
+                        matchingBuilt={findMatchingBuiltPokemon(builtPokemonRoster, p1Name, newPresetLeague)}
+                        onPickBuilt={(entry) => applyBuiltSpecimenToModalSlot(1, entry)}
+                        savedHighlight={builtSaveFlashSlot === 'modal-s1'}
+                        onSaveToBuilt={() => handleSaveModalSlotToBuilt(1)}
+                        onChange={(next) => {
+                          setP1Ivs(next.ivs);
+                          setP1Cp(next.cp);
+                          setP1BestBuddy(next.isBestBuddy);
+                          setP1BuiltId(undefined);
+                        }}
+                      />
                       <div className="grid grid-cols-3 gap-2">
                         <input
                           type="text"
@@ -12186,17 +12379,28 @@ export default function App() {
                           value={p2Cp || ''}
                           onChange={(e) => setP2Cp(parseInt(e.target.value) || 0)}
                           placeholder="CP (Auto)"
-                          className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                        />
-                        <input
-                          type="text"
-                          value={p2Ivs}
-                          onChange={(e) => setP2Ivs(e.target.value)}
-                          placeholder="IVs (opt)"
-                          title="Optional Atk/Def/HP IVs (e.g. 0/15/15). Defaults to PvPoke IVs if blank."
-                          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                          className="col-span-2 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                         />
                       </div>
+                      <IvTripletInput
+                        compact
+                        speciesName={p2Name}
+                        league={newPresetLeague}
+                        ivs={p2Ivs}
+                        isBestBuddy={p2BestBuddy}
+                        showBestBuddyToggle
+                        showPresets
+                        matchingBuilt={findMatchingBuiltPokemon(builtPokemonRoster, p2Name, newPresetLeague)}
+                        onPickBuilt={(entry) => applyBuiltSpecimenToModalSlot(2, entry)}
+                        savedHighlight={builtSaveFlashSlot === 'modal-s2'}
+                        onSaveToBuilt={() => handleSaveModalSlotToBuilt(2)}
+                        onChange={(next) => {
+                          setP2Ivs(next.ivs);
+                          setP2Cp(next.cp);
+                          setP2BestBuddy(next.isBestBuddy);
+                          setP2BuiltId(undefined);
+                        }}
+                      />
                       <div className="grid grid-cols-3 gap-2">
                         <input
                           type="text"
@@ -12473,17 +12677,28 @@ export default function App() {
                           value={p3Cp || ''}
                           onChange={(e) => setP3Cp(parseInt(e.target.value) || 0)}
                           placeholder="CP (Auto)"
-                          className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                        />
-                        <input
-                          type="text"
-                          value={p3Ivs}
-                          onChange={(e) => setP3Ivs(e.target.value)}
-                          placeholder="IVs (opt)"
-                          title="Optional Atk/Def/HP IVs (e.g. 0/15/15). Defaults to PvPoke IVs if blank."
-                          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                          className="col-span-2 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                         />
                       </div>
+                      <IvTripletInput
+                        compact
+                        speciesName={p3Name}
+                        league={newPresetLeague}
+                        ivs={p3Ivs}
+                        isBestBuddy={p3BestBuddy}
+                        showBestBuddyToggle
+                        showPresets
+                        matchingBuilt={findMatchingBuiltPokemon(builtPokemonRoster, p3Name, newPresetLeague)}
+                        onPickBuilt={(entry) => applyBuiltSpecimenToModalSlot(3, entry)}
+                        savedHighlight={builtSaveFlashSlot === 'modal-s3'}
+                        onSaveToBuilt={() => handleSaveModalSlotToBuilt(3)}
+                        onChange={(next) => {
+                          setP3Ivs(next.ivs);
+                          setP3Cp(next.cp);
+                          setP3BestBuddy(next.isBestBuddy);
+                          setP3BuiltId(undefined);
+                        }}
+                      />
                       <div className="grid grid-cols-3 gap-2">
                         <input
                           type="text"
@@ -14298,12 +14513,16 @@ export default function App() {
                         isSameCursorUser && alreadyMigrated
                           ? Number(localStorage.getItem('gbl_d1_last_pushed_ms_v1') || '0') || 0
                           : 0;
-                      const tombSig = Array.from(mergedTombstones).sort().join(',');
+                      const tombSig = [
+                        Array.from(mergedTombstones).sort().join(','),
+                        Array.from(new Set(deletedBuiltPokemonIds)).sort().join(',')
+                      ].join('|');
                       const prevTombSig = isSameCursorUser
                         ? localStorage.getItem('gbl_d1_last_pushed_tombstones_sig_v1') || ''
                         : '';
                       const tombstonesChanged =
-                        !alreadyMigrated || (tombSig !== prevTombSig && mergedTombstones.size > 0);
+                        !alreadyMigrated ||
+                        (tombSig !== prevTombSig && (mergedTombstones.size > 0 || deletedBuiltPokemonIds.length > 0));
 
                       const pushStartedAtMs = Date.now();
                       const teamSigKey = `gbl_d1_last_pushed_teams_sig_v1_${appCombatMode}`;
@@ -14327,9 +14546,48 @@ export default function App() {
                             fastMove: m.fastMove || '',
                             chargedMove1: m.chargedMove1 || '',
                             chargedMove2: m.chargedMove2 || '',
-                            ivs: m.ivs || ''
+                            ivs: m.ivs || '',
+                            isBestBuddy: Boolean(m.isBestBuddy),
+                            builtPokemonId: m.builtPokemonId || ''
                           }))
                         });
+
+                      const mergedBuiltDelSet = new Set<string>(deletedBuiltPokemonIds);
+                      try {
+                        const rawDelBuilt = JSON.parse(localStorage.getItem('gbl_deleted_built_pokemon_ids_v1') || '[]');
+                        if (Array.isArray(rawDelBuilt)) {
+                          rawDelBuilt.forEach((id) => {
+                            if (typeof id === 'string' && id) mergedBuiltDelSet.add(id);
+                          });
+                        }
+                      } catch {}
+
+                      const mergedBuiltMap = new Map<string, BuiltPokemonEntry>();
+                      try {
+                        const rawStoredBuilt = JSON.parse(localStorage.getItem('gbl_built_pokemon_roster_v1') || '[]');
+                        if (Array.isArray(rawStoredBuilt)) {
+                          rawStoredBuilt.forEach((b: BuiltPokemonEntry) => {
+                            if (b?.id && !mergedBuiltDelSet.has(b.id)) mergedBuiltMap.set(b.id, b);
+                          });
+                        }
+                      } catch {}
+                      builtPokemonRoster.forEach((b) => {
+                        if (!b?.id || mergedBuiltDelSet.has(b.id)) return;
+                        const prev = mergedBuiltMap.get(b.id);
+                        if (!prev || (Number(b.updatedAt) || 0) >= (Number(prev.updatedAt) || 0)) {
+                          mergedBuiltMap.set(b.id, b);
+                        }
+                      });
+                      const mergedBuiltList = Array.from(mergedBuiltMap.values());
+
+                      const builtToPush = (!alreadyMigrated || lastPushedMs === 0
+                        ? mergedBuiltList
+                        : mergedBuiltList.filter((b) => (Number(b.updatedAt) || 0) > lastPushedMs)
+                      ).map((b) => ({
+                        ...b,
+                        updatedAt: Math.max(Number(b.updatedAt) || 0, pushStartedAtMs)
+                      }));
+                      const delBuiltToPush = tombstonesChanged ? Array.from(mergedBuiltDelSet) : [];
 
                       const logsToPush = !alreadyMigrated || lastPushedMs === 0
                         ? mergedLogs
@@ -14368,7 +14626,9 @@ export default function App() {
                           isInitialMigration: !alreadyMigrated,
                           battleLogs: logsToPush,
                           teamPresets: teamsToPush,
-                          deletedLogIds: delLogsToPush
+                          builtPokemon: builtToPush,
+                          deletedLogIds: delLogsToPush,
+                          deletedBuiltPokemonIds: delBuiltToPush
                         })
                       });
 
@@ -14400,16 +14660,28 @@ export default function App() {
                       const remoteDeletedTeams: string[] = Array.isArray(syncJson.deletedTeamIds)
                         ? syncJson.deletedTeamIds
                         : [];
+                      const remoteUpsertedBuilt: BuiltPokemonEntry[] = Array.isArray(syncJson.builtPokemon)
+                        ? syncJson.builtPokemon
+                        : [];
+                      const remoteDeletedBuilt: string[] = Array.isArray(syncJson.deletedBuiltPokemonIds)
+                        ? syncJson.deletedBuiltPokemonIds
+                        : [];
 
                       let pulledLogsDeltaCount = 0;
                       let pulledTeamsDeltaCount = 0;
+                      let pulledBuiltDeltaCount = 0;
                       const logsMutated =
                         !alreadyMigrated || remoteUpsertedLogs.length > 0 || remoteDeletedLogs.length > 0;
                       const teamsMutated =
                         !alreadyMigrated || remoteUpsertedTeams.length > 0 || remoteDeletedTeams.length > 0;
+                      const builtMutated =
+                        !alreadyMigrated || remoteUpsertedBuilt.length > 0 || remoteDeletedBuilt.length > 0;
 
                       remoteDeletedLogs.forEach((id: string) => mergedTombstones.add(id));
                       const deletedTeamSet = new Set<string>(remoteDeletedTeams);
+                      remoteDeletedBuilt.forEach((id: string) => {
+                        if (id) mergedBuiltDelSet.add(id);
+                      });
 
                       let finalLogs = mergedLogs;
                       if (logsMutated) {
@@ -14451,9 +14723,38 @@ export default function App() {
                         setPresets(finalPresets);
                       }
 
+                      let finalBuiltRoster = mergedBuiltList;
+                      if (builtMutated || builtToPush.length > 0) {
+                        const finalBuiltMap = new Map<string, BuiltPokemonEntry>();
+                        mergedBuiltList.forEach((b) => {
+                          if (b?.id && !mergedBuiltDelSet.has(b.id)) finalBuiltMap.set(b.id, b);
+                        });
+                        remoteUpsertedBuilt.forEach((rb: BuiltPokemonEntry) => {
+                          if (!rb?.id) return;
+                          if (mergedBuiltDelSet.has(rb.id) && !(Number(rb.updatedAt) > pushStartedAtMs)) return;
+                          mergedBuiltDelSet.delete(rb.id);
+                          const prev = finalBuiltMap.get(rb.id);
+                          if (!prev || (Number(rb.updatedAt) || 0) > (Number(prev.updatedAt) || 0)) {
+                            finalBuiltMap.set(rb.id, rb);
+                            pulledBuiltDeltaCount++;
+                          }
+                        });
+                        finalBuiltRoster = Array.from(finalBuiltMap.values()).sort(
+                          (a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0)
+                        );
+                        setBuiltPokemonRoster(finalBuiltRoster);
+                        try {
+                          localStorage.setItem('gbl_built_pokemon_roster_v1', JSON.stringify(finalBuiltRoster));
+                        } catch {}
+                      }
+
                       const tombArr = Array.from(mergedTombstones);
+                      const builtTombArr = Array.from(mergedBuiltDelSet);
                       if (logsMutated || tombstonesChanged) {
                         setDeletedLogIds(tombArr);
+                      }
+                      if (builtMutated || tombstonesChanged) {
+                        setDeletedBuiltPokemonIds(builtTombArr);
                       }
 
                       const hasPwNow = Boolean(syncJson.hasPassword);
@@ -14461,6 +14762,9 @@ export default function App() {
                       try {
                         if (logsMutated || tombstonesChanged) {
                           localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
+                        }
+                        if (builtMutated || tombstonesChanged) {
+                          localStorage.setItem('gbl_deleted_built_pokemon_ids_v1', JSON.stringify(builtTombArr));
                         }
                         const nextTeamSigs: Record<string, string> = {};
                         finalPresets.forEach((p) => {
@@ -14472,7 +14776,7 @@ export default function App() {
                         localStorage.setItem('gbl_d1_last_pushed_ms_v1', String(pushStartedAtMs));
                         localStorage.setItem(
                           'gbl_d1_last_pushed_tombstones_sig_v1',
-                          tombArr.slice().sort().join(',')
+                          [tombArr.slice().sort().join(','), builtTombArr.slice().sort().join(',')].join('|')
                         );
                         localStorage.removeItem('gbl_sync_github_token');
                         localStorage.removeItem('gbl_sync_github_gist_id');
@@ -14482,7 +14786,7 @@ export default function App() {
                         }
                       } catch {}
 
-                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles (+${pulledLogsDeltaCount} pulled, ${logsToPush.length} pushed), ${finalPresets.length} teams (+${pulledTeamsDeltaCount} pulled)${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}`;
+                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles (+${pulledLogsDeltaCount} pulled, ${logsToPush.length} pushed), ${finalPresets.length} teams (+${pulledTeamsDeltaCount} pulled), ${finalBuiltRoster.length} built (+${pulledBuiltDeltaCount} pulled)${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}`;
                       setLastCloudSyncStatus(`Delta Synced ${ts}`);
                       try {
                         localStorage.setItem('gbl_last_cloud_sync_ts', `Delta Synced ${ts}`);
@@ -16906,6 +17210,24 @@ export default function App() {
         )}
 
         {/* =========================================================================
+            TAB 5 (v7.38): ⚖️ IV LAB TAB (MULTI-IV MATRIX + BUILT POKÉMON ROSTER)
+           ========================================================================= */}
+        {activeTab === 'iv_lab' && (
+          <IvLabTab
+            appCombatMode={appCombatMode}
+            enabledGblLeagues={enabledGblLeagues}
+            enabledShow6Leagues={enabledShow6Leagues}
+            battleLogs={battleLogs}
+            activeSeasonBounds={activeSeasonBounds}
+            webMembershipTier={webMembershipTier}
+            onOpenMembershipModal={() => setShowMembershipModal(true)}
+            builtPokemonRoster={builtPokemonRoster}
+            onSaveBuiltPokemon={(entry) => upsertBuiltPokemonEntry(entry)}
+            onDeleteBuiltPokemon={deleteBuiltPokemonEntry}
+          />
+        )}
+
+        {/* =========================================================================
             HELP PAGE (OPENED WHEN THE ❓ HELP BUTTON IN STATUS BAR IS PRESSED)
            ========================================================================= */}
         {activeTab === 'help' && (
@@ -17119,15 +17441,20 @@ export default function App() {
                   const autoSugs = isAutoFocused
                     ? getPokemonAutocompleteSuggestions(member.name, editingShow6RosterModal.roster.league, 8)
                     : [];
-                  const spEntry =
-                    POKEMON_DATABASE[member.name] ||
-                    POKEMON_DATABASE[member.name.replace(/^Shadow\s+/i, '').trim()];
-                  const fastPool: string[] = spEntry
-                    ? [spEntry.defaultFastMove.name]
-                    : [member.fastMove];
-                  const chargedPool: string[] = spEntry
-                    ? spEntry.chargedMoves.map((cm) => cm.name)
-                    : [member.chargedMove1, member.chargedMove2];
+                  const movePool = getAvailableMovePoolForPokemon(
+                    member.name,
+                    editingShow6RosterModal.roster.league
+                  );
+                  const fastPool: string[] = movePool.fastMoves.map((fm) => fm.name);
+                  const chargedPool: string[] = movePool.chargedMoves.map((cm) => cm.name);
+                  const matchingBuilt =
+                    editingShow6RosterModal.target === 'MY'
+                      ? findMatchingBuiltPokemon(
+                          builtPokemonRoster,
+                          member.name,
+                          editingShow6RosterModal.roster.league
+                        )
+                      : [];
 
                   const updateSlotMember = (patch: Partial<TeamMember>, recalculate = false) => {
                     const nextPokemon = [...editingShow6RosterModal.roster.pokemon];
@@ -17191,20 +17518,46 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(e) => {
                                   e.preventDefault();
-                                  const rec = getRecommendedMovesForPokemon(
-                                    opt.name,
-                                    editingShow6RosterModal.roster.league
-                                  );
-                                  updateSlotMember(
-                                    {
-                                      name: opt.name,
-                                      cp: rec?.cp || opt.cp,
-                                      fastMove: rec?.fastMove || member.fastMove,
-                                      chargedMove1: rec?.chargedMove1 || member.chargedMove1,
-                                      chargedMove2: rec?.chargedMove2 || member.chargedMove2
-                                    },
-                                    true
-                                  );
+                                  const builtMatches =
+                                    editingShow6RosterModal.target === 'MY'
+                                      ? findMatchingBuiltPokemon(
+                                          builtPokemonRoster,
+                                          opt.name,
+                                          editingShow6RosterModal.roster.league
+                                        )
+                                      : [];
+                                  if (builtMatches.length === 1) {
+                                    const b0 = builtMatches[0];
+                                    updateSlotMember(
+                                      {
+                                        name: b0.isShadow ? `Shadow ${b0.speciesName}` : b0.speciesName,
+                                        cp: b0.cp,
+                                        ivs: b0.ivs,
+                                        isBestBuddy: b0.isBestBuddy,
+                                        builtPokemonId: b0.id,
+                                        fastMove: b0.fastMove || member.fastMove,
+                                        chargedMove1: b0.chargedMove1 || member.chargedMove1,
+                                        chargedMove2: b0.chargedMove2 || member.chargedMove2
+                                      },
+                                      true
+                                    );
+                                  } else {
+                                    const rec = getRecommendedMovesForPokemon(
+                                      opt.name,
+                                      editingShow6RosterModal.roster.league
+                                    );
+                                    updateSlotMember(
+                                      {
+                                        name: opt.name,
+                                        cp: rec?.cp || opt.cp,
+                                        builtPokemonId: undefined,
+                                        fastMove: rec?.fastMove || member.fastMove,
+                                        chargedMove1: rec?.chargedMove1 || member.chargedMove1,
+                                        chargedMove2: rec?.chargedMove2 || member.chargedMove2
+                                      },
+                                      true
+                                    );
+                                  }
                                   setShow6EditorSlotAutocompleteIdx(null);
                                 }}
                                 className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between"
@@ -17215,6 +17568,67 @@ export default function App() {
                             ))}
                           </div>
                         )}
+                      </div>
+
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <IvTripletInput
+                          compact
+                          speciesName={member.name}
+                          league={editingShow6RosterModal.roster.league}
+                          ivs={member.ivs}
+                          isBestBuddy={Boolean(member.isBestBuddy)}
+                          showBestBuddyToggle
+                          showPresets
+                          matchingBuilt={matchingBuilt}
+                          onPickBuilt={(entry) =>
+                            updateSlotMember(
+                              {
+                                name: entry.isShadow ? `Shadow ${entry.speciesName}` : entry.speciesName,
+                                ivs: entry.ivs,
+                                cp: entry.cp,
+                                isBestBuddy: entry.isBestBuddy,
+                                builtPokemonId: entry.id,
+                                fastMove: entry.fastMove || member.fastMove,
+                                chargedMove1: entry.chargedMove1 || member.chargedMove1,
+                                chargedMove2: entry.chargedMove2 || member.chargedMove2
+                              },
+                              true
+                            )
+                          }
+                          savedHighlight={builtSaveFlashSlot === `s6-${sIdx}`}
+                          onSaveToBuilt={
+                            editingShow6RosterModal.target === 'MY'
+                              ? () => {
+                                  const entry = teamMemberToBuiltPokemon(
+                                    member,
+                                    editingShow6RosterModal.roster.league
+                                  );
+                                  if (entry) {
+                                    upsertBuiltPokemonEntry(entry, `s6-${sIdx}`);
+                                    updateSlotMember(
+                                      {
+                                        ivs: entry.ivs,
+                                        cp: entry.cp,
+                                        builtPokemonId: entry.id
+                                      },
+                                      true
+                                    );
+                                  }
+                                }
+                              : undefined
+                          }
+                          onChange={(next) =>
+                            updateSlotMember(
+                              {
+                                ivs: next.ivs,
+                                cp: next.cp,
+                                isBestBuddy: next.isBestBuddy,
+                                builtPokemonId: undefined
+                              },
+                              true
+                            )
+                          }
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 gap-1.5 text-[11px]">
@@ -17455,7 +17869,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.37 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.38 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

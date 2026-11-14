@@ -534,29 +534,22 @@
                         android:id="@+id/edit_p1_cp"
                         android:layout_width="0dp"
                         android:layout_height="36dp"
-                        android:layout_weight="0.85"
+                        android:layout_weight="0.9"
                         android:background="#0f172a"
                         android:paddingHorizontal="6dp"
-                        android:layout_marginEnd="4dp"
                         android:textColor="#f8fafc"
                         android:textColorHint="#94a3b8"
                         android:textSize="11.5sp"
                         android:hint="CP (auto)"
                         android:inputType="number" />
-
-                    <EditText
-                        android:id="@+id/edit_p1_ivs"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1.05"
-                        android:background="#0f172a"
-                        android:paddingHorizontal="6dp"
-                        android:textColor="#f8fafc"
-                        android:textColorHint="#94a3b8"
-                        android:textSize="11.5sp"
-                        android:hint="IVs (0/15/15)"
-                        android:inputType="text" />
                 </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_p1_iv_triplet"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="6dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -877,29 +870,22 @@
                         android:id="@+id/edit_p2_cp"
                         android:layout_width="0dp"
                         android:layout_height="36dp"
-                        android:layout_weight="0.85"
+                        android:layout_weight="0.9"
                         android:background="#0f172a"
                         android:paddingHorizontal="6dp"
-                        android:layout_marginEnd="4dp"
                         android:textColor="#f8fafc"
                         android:textColorHint="#94a3b8"
                         android:textSize="11.5sp"
                         android:hint="CP (auto)"
                         android:inputType="number" />
-
-                    <EditText
-                        android:id="@+id/edit_p2_ivs"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1.05"
-                        android:background="#0f172a"
-                        android:paddingHorizontal="6dp"
-                        android:textColor="#f8fafc"
-                        android:textColorHint="#94a3b8"
-                        android:textSize="11.5sp"
-                        android:hint="IVs (0/15/15)"
-                        android:inputType="text" />
                 </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_p2_iv_triplet"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="6dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -1219,29 +1205,22 @@
                         android:id="@+id/edit_p3_cp"
                         android:layout_width="0dp"
                         android:layout_height="36dp"
-                        android:layout_weight="0.85"
+                        android:layout_weight="0.9"
                         android:background="#0f172a"
                         android:paddingHorizontal="6dp"
-                        android:layout_marginEnd="4dp"
                         android:textColor="#f8fafc"
                         android:textColorHint="#94a3b8"
                         android:textSize="11.5sp"
                         android:hint="CP (auto)"
                         android:inputType="number" />
-
-                    <EditText
-                        android:id="@+id/edit_p3_ivs"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1.05"
-                        android:background="#0f172a"
-                        android:paddingHorizontal="6dp"
-                        android:textColor="#f8fafc"
-                        android:textColorHint="#94a3b8"
-                        android:textSize="11.5sp"
-                        android:hint="IVs (0/15/15)"
-                        android:inputType="text" />
                 </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_p3_iv_triplet"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="6dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

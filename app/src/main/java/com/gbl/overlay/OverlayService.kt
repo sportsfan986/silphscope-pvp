@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.37"
-        const val APP_VERSION_CODE = 1737
+        const val APP_VERSION = "7.38"
+        const val APP_VERSION_CODE = 1738
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -462,6 +462,8 @@ class OverlayService : LifecycleService() {
         const val AI_LOG_RETENTION_MS = 7L * 24L * 60L * 60L * 1000L
         const val PREFS_KEY_DELETED_LOG_IDS = "gbl_deleted_log_ids_v1"
         const val PREFS_KEY_DELETED_TEAM_IDS = "gbl_deleted_team_ids_v1"
+        const val PREFS_KEY_BUILT_POKEMON_ROSTER = "gbl_built_pokemon_roster_v1"
+        const val PREFS_KEY_DELETED_BUILT_POKEMON_IDS = "gbl_deleted_built_pokemon_ids_v1"
         const val PREFS_KEY_DELETED_LOGS_TRASH = "gbl_deleted_battles_trash_v1"
         const val PREFS_KEY_DELETED_TEAMS_TRASH = "gbl_deleted_teams_trash_v1"
         const val PREFS_KEY_GBL_SEASONS_JSON = "gbl_seasons_json_v1"
@@ -1477,6 +1479,8 @@ class OverlayService : LifecycleService() {
             val teamPresets: List<SyncTeamPresetRecord> = emptyList(),
             val deletedLogIds: List<String> = emptyList(),
             val deletedTeamIds: List<String> = emptyList(),
+            val builtPokemon: List<BuiltPokemonEntry>? = null,
+            val deletedBuiltPokemonIds: List<String>? = null,
             val userSettings: Map<String, String> = emptyMap(),
             val settingsUpdatedAt: Long = 0L
         )
@@ -2539,6 +2543,7 @@ class OverlayService : LifecycleService() {
             val name: String = "",
             val league: String = "GREAT LEAGUE",
             val pokemon: List<String> = emptyList(),
+            val slots: List<PokemonSlot>? = null,
             val updatedAt: Long = System.currentTimeMillis()
         )
 
@@ -4433,7 +4438,9 @@ class OverlayService : LifecycleService() {
         val chargedMove1: String,
         val chargedMove2: String,
         val ivs: String? = null,
-        val plusMoveLevel: Int? = 4
+        val plusMoveLevel: Int? = 4,
+        val isBestBuddy: Boolean? = null,
+        val builtPokemonId: String? = null
     )
     data class TeamPreset(
         val id: String,
@@ -13301,7 +13308,7 @@ class OverlayService : LifecycleService() {
             val uCfg = preset?.pokemon?.getOrNull(activeUIdx)
             val uName = uCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
             val uShad = uName.contains("Shadow", ignoreCase = true)
-            val uMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(uName, activeLeague, uShad), activeLeague, uCfg?.cp, uCfg?.ivs)
+            val uMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(uName, activeLeague, uShad), activeLeague, uCfg?.cp, uCfg?.ivs, uCfg?.isBestBuddy == true)
 
             val newCandPairs = newOppMoves.map { mName ->
                 mName to calculateChargedMoveDamagePercent(
@@ -13368,7 +13375,7 @@ class OverlayService : LifecycleService() {
             val newMonName = newSlotCfg.name
             if (ev.activePokemon?.equals(newMonName, ignoreCase = true) == true) return
             val newShad = newMonName.contains("Shadow", ignoreCase = true)
-            val newMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(newMonName, activeLeague, newShad), activeLeague, newSlotCfg.cp, newSlotCfg.ivs)
+            val newMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(newMonName, activeLeague, newShad), activeLeague, newSlotCfg.cp, newSlotCfg.ivs, newSlotCfg.isBestBuddy == true)
             val c1 = newSlotCfg.chargedMove1.takeIf { it.isNotBlank() } ?: newMeta.chargedMove1
             val c2 = newSlotCfg.chargedMove2.takeIf { it.isNotBlank() } ?: newMeta.chargedMove2
             val newMoves = listOfNotNull(c1, c2).filter { it.isNotBlank() }.distinct()
@@ -15086,7 +15093,7 @@ class OverlayService : LifecycleService() {
             val slotMember = preset?.pokemon?.getOrNull(idx)
             val sName = slotMember?.name ?: userMons.getOrNull(idx) ?: return@mapNotNull null
             val sShadow = sName.contains("Shadow", ignoreCase = true)
-            val sMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(sName, league, sShadow), league, slotMember?.cp, slotMember?.ivs)
+            val sMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(sName, league, sShadow), league, slotMember?.cp, slotMember?.ivs, slotMember?.isBestBuddy == true)
             val fMove = slotMember?.fastMove?.takeIf { it.isNotBlank() } ?: sMeta.defaultFastMove
             val fTurns = OverlayService.resolveFastTurnsStatic(fMove, sMeta.fastTurns)
             val fEnergy = OverlayService.resolveFastEnergyStatic(fMove, fTurns)
@@ -19062,7 +19069,7 @@ class OverlayService : LifecycleService() {
 
         fun slotKey(slot: TeamMember?, fallback: String): String {
             if (slot == null) return fallback
-            return "${slot.name}|${slot.fastMove}|${slot.chargedMove1}|${slot.chargedMove2}|${slot.cp}|${slot.ivs}|${slot.plusMoveLevel}"
+            return "${slot.name}|${slot.fastMove}|${slot.chargedMove1}|${slot.chargedMove2}|${slot.cp}|${slot.ivs}|${slot.isBestBuddy == true}|${slot.plusMoveLevel}"
         }
 
         val cacheKey = buildString(224) {

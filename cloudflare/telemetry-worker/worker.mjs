@@ -2154,6 +2154,34 @@ async function authenticateD1SyncCaller(request, env, kv, targetScreenName, body
   };
 }
 
+let builtPokemonTableEnsured = false;
+
+async function ensureBuiltPokemonTable(db) {
+  if (!db || builtPokemonTableEnsured) return;
+  try {
+    await db.batch([
+      db.prepare(
+        `CREATE TABLE IF NOT EXISTS built_pokemon (
+          screen_name TEXT NOT NULL COLLATE NOCASE,
+          pokemon_id TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          server_updated_ms INTEGER NOT NULL,
+          deleted INTEGER NOT NULL DEFAULT 0,
+          payload_json TEXT NOT NULL,
+          PRIMARY KEY (screen_name, pokemon_id)
+        )`
+      ),
+      db.prepare(
+        `CREATE INDEX IF NOT EXISTS idx_built_pokemon_user_sync
+          ON built_pokemon (screen_name, server_updated_ms)`
+      ),
+    ]);
+    builtPokemonTableEnsured = true;
+  } catch (err) {
+    console.warn('ensureBuiltPokemonTable warning:', err?.message || err);
+  }
+}
+
 async function upsertVaultBatchIntoD1(
   db,
   screenName,
@@ -2164,6 +2192,8 @@ async function upsertVaultBatchIntoD1(
     teamPresets = [],
     deletedLogIds = [],
     deletedTeamIds = [],
+    builtPokemon = [],
+    deletedBuiltPokemonIds = [],
     source = 'app_sync',
     migratedFromGithub = false,
   } = {}
@@ -2172,11 +2202,15 @@ async function upsertVaultBatchIntoD1(
   const cleanUser = sanitizeScreenName(screenName);
   if (!cleanUser) throw new Error('Invalid screenName');
 
+  await ensureBuiltPokemonTable(db);
+
   const nowMs = Date.now();
   const incomingLogs = Array.isArray(battleLogs) ? battleLogs : [];
   const incomingTeams = Array.isArray(teamPresets) ? teamPresets : [];
   const incomingDelLogs = Array.isArray(deletedLogIds) ? deletedLogIds : [];
   const incomingDelTeams = Array.isArray(deletedTeamIds) ? deletedTeamIds : [];
+  const incomingBuilt = Array.isArray(builtPokemon) ? builtPokemon : [];
+  const incomingDelBuilt = Array.isArray(deletedBuiltPokemonIds) ? deletedBuiltPokemonIds : [];
   const cleanIncomingSettings =
     settingsMap && typeof settingsMap === 'object' ? sanitizeVaultSettingsForD1(settingsMap) : null;
   const hasSettingsIncoming =
@@ -2188,6 +2222,8 @@ async function upsertVaultBatchIntoD1(
     incomingTeams.length > 0 ||
     incomingDelLogs.length > 0 ||
     incomingDelTeams.length > 0 ||
+    incomingBuilt.length > 0 ||
+    incomingDelBuilt.length > 0 ||
     migratedFromGithub;
 
   if (!hasAnyWrites) {
@@ -2197,8 +2233,10 @@ async function upsertVaultBatchIntoD1(
       serverUpdatedMs: 0,
       logsUpserted: 0,
       teamsUpserted: 0,
+      builtPokemonUpserted: 0,
       pushedLogIds: [],
       pushedTeamIds: [],
+      pushedBuiltPokemonIds: [],
     };
   }
 
@@ -2451,6 +2489,72 @@ async function upsertVaultBatchIntoD1(
     );
   }
 
+  // 3. Upsert built pokemon specimens
+  const delBuiltSet = new Set(
+    incomingDelBuilt.map((id) => String(id || '').trim()).filter((id) => id.length > 0 && id.length <= 128)
+  );
+  const seenBuiltIds = new Set();
+  let builtPokemonUpserted = 0;
+
+  const builtUpsertSql = `
+    INSERT INTO built_pokemon (
+      screen_name, pokemon_id, updated_at, server_updated_ms, deleted, payload_json
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+    ON CONFLICT(screen_name, pokemon_id) DO UPDATE SET
+      updated_at = excluded.updated_at,
+      server_updated_ms = excluded.server_updated_ms,
+      deleted = excluded.deleted,
+      payload_json = CASE WHEN excluded.deleted = 1 AND built_pokemon.payload_json != '' THEN built_pokemon.payload_json ELSE excluded.payload_json END
+    WHERE excluded.updated_at > built_pokemon.updated_at
+       OR excluded.deleted != built_pokemon.deleted
+       OR (excluded.updated_at = built_pokemon.updated_at AND excluded.deleted = 0 AND excluded.payload_json != built_pokemon.payload_json)
+  `;
+
+  for (let i = 0; i < incomingBuilt.length && i < 2000; i++) {
+    const rawBuilt = incomingBuilt[i];
+    if (!rawBuilt || typeof rawBuilt !== 'object') continue;
+    const pokeId = String(rawBuilt.id || '').trim();
+    const speciesName = cleanPokemonSpeciesName(rawBuilt.speciesName || rawBuilt.species || '');
+    if (!pokeId || pokeId.length > 128 || !speciesName || seenBuiltIds.has(pokeId)) continue;
+    seenBuiltIds.add(pokeId);
+
+    const isDel = delBuiltSet.has(pokeId) || Boolean(rawBuilt.deleted) ? 1 : 0;
+    const updMs = Math.max(1, Number(rawBuilt.updatedAt) || nowMs);
+    const payloadStr = JSON.stringify(rawBuilt);
+    if (payloadStr.length > 4096) continue;
+
+    statements.push(
+      db.prepare(builtUpsertSql).bind(
+        cleanUser,
+        pokeId,
+        updMs,
+        nowMs,
+        isDel,
+        payloadStr
+      )
+    );
+    builtPokemonUpserted++;
+  }
+
+  for (const delBid of delBuiltSet) {
+    if (seenBuiltIds.has(delBid)) continue;
+    seenBuiltIds.add(delBid);
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO built_pokemon (
+            screen_name, pokemon_id, updated_at, server_updated_ms, deleted, payload_json
+          ) VALUES (?1, ?2, ?3, ?3, 1, ?4)
+          ON CONFLICT(screen_name, pokemon_id) DO UPDATE SET
+            deleted = 1,
+            updated_at = MAX(built_pokemon.updated_at, excluded.updated_at),
+            server_updated_ms = excluded.server_updated_ms
+          WHERE built_pokemon.deleted = 0`
+        )
+        .bind(cleanUser, delBid, nowMs, JSON.stringify({ id: delBid, deleted: true }))
+    );
+  }
+
   // Execute statements in safe D1 chunks of 60
   const CHUNK_SIZE = 60;
   for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
@@ -2462,13 +2566,15 @@ async function upsertVaultBatchIntoD1(
     .prepare(
       `SELECT
         (SELECT COUNT(*) FROM battle_logs WHERE screen_name = ?1 AND deleted = 0) AS activeLogs,
-        (SELECT COUNT(*) FROM team_presets WHERE screen_name = ?1 AND deleted = 0) AS activeTeams`
+        (SELECT COUNT(*) FROM team_presets WHERE screen_name = ?1 AND deleted = 0) AS activeTeams,
+        (SELECT COUNT(*) FROM built_pokemon WHERE screen_name = ?1 AND deleted = 0) AS activeBuilt`
     )
     .bind(cleanUser)
     .first();
 
   const totalActiveLogs = Number(countsRow?.activeLogs) || 0;
   const totalActiveTeams = Number(countsRow?.activeTeams) || 0;
+  const totalActiveBuiltPokemon = Number(countsRow?.activeBuilt) || 0;
 
   await db
     .prepare(
@@ -2505,10 +2611,13 @@ async function upsertVaultBatchIntoD1(
     serverUpdatedMs: nowMs,
     logsUpserted,
     teamsUpserted,
+    builtPokemonUpserted,
     totalActiveLogs,
     totalActiveTeams,
+    totalActiveBuiltPokemon,
     pushedLogIds: Array.from(seenLogIds),
     pushedTeamIds: Array.from(seenTeamIds),
+    pushedBuiltPokemonIds: Array.from(seenBuiltIds),
     pushedSettings: hasSettingsIncoming,
   };
 }
@@ -2523,10 +2632,12 @@ async function pullVaultDeltasFromD1(
     writeServerUpdatedMs = 0,
     pushedLogIds = [],
     pushedTeamIds = [],
+    pushedBuiltPokemonIds = [],
     pushedSettings = false,
   } = {}
 ) {
   if (!db) throw new Error('SYNC_DB (Cloudflare D1) is not bound.');
+  await ensureBuiltPokemonTable(db);
   const cleanUser = sanitizeScreenName(screenName);
   const sinceMs = Math.max(0, Number(sinceServerMs) || 0);
 
@@ -2549,10 +2660,13 @@ async function pullVaultDeltasFromD1(
       migratedFromGithub: false,
       totalActiveLogs: 0,
       totalActiveTeams: 0,
+      totalActiveBuiltPokemon: 0,
       upsertedLogs: [],
       deletedLogIds: [],
       upsertedTeams: [],
       deletedTeamIds: [],
+      upsertedBuiltPokemon: [],
+      deletedBuiltPokemonIds: [],
     };
   }
 
@@ -2574,10 +2688,13 @@ async function pullVaultDeltasFromD1(
       migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
       totalActiveLogs: Number(stateRow.total_active_logs) || 0,
       totalActiveTeams: Number(stateRow.total_active_teams) || 0,
+      totalActiveBuiltPokemon: null,
       upsertedLogs: [],
       deletedLogIds: [],
       upsertedTeams: [],
       deletedTeamIds: [],
+      upsertedBuiltPokemon: [],
+      deletedBuiltPokemonIds: [],
     };
   }
 
@@ -2627,10 +2744,34 @@ async function pullVaultDeltasFromD1(
     )
     .bind(cleanUser, sinceMs);
 
-  const [logsRes, teamsRes] = await db.batch([logsQuery, teamsQuery]);
+  const builtQuery = db
+    .prepare(
+      `SELECT pokemon_id, deleted, server_updated_ms, payload_json
+       FROM built_pokemon
+       WHERE screen_name = ?1 AND server_updated_ms > ?2
+       ORDER BY updated_at DESC
+       LIMIT 1000`
+    )
+    .bind(cleanUser, sinceMs);
+
+  const builtCountQuery = db
+    .prepare(
+      `SELECT COUNT(*) AS activeBuilt
+       FROM built_pokemon
+       WHERE screen_name = ?1 AND deleted = 0`
+    )
+    .bind(cleanUser);
+
+  const [logsRes, teamsRes, builtRes, builtCountRes] = await db.batch([
+    logsQuery,
+    teamsQuery,
+    builtQuery,
+    builtCountQuery,
+  ]);
 
   const pushedLogSet = new Set(Array.isArray(pushedLogIds) ? pushedLogIds : []);
   const pushedTeamSet = new Set(Array.isArray(pushedTeamIds) ? pushedTeamIds : []);
+  const pushedBuiltSet = new Set(Array.isArray(pushedBuiltPokemonIds) ? pushedBuiltPokemonIds : []);
 
   const upsertedLogs = [];
   const deletedLogIds = [];
@@ -2672,6 +2813,26 @@ async function pullVaultDeltasFromD1(
     }
   }
 
+  const upsertedBuiltPokemon = [];
+  const deletedBuiltPokemonIds = [];
+  for (const r of builtRes?.results || []) {
+    if (
+      sinceMs > 0 &&
+      writeServerUpdatedMs > 0 &&
+      Number(r.server_updated_ms) === writeServerUpdatedMs &&
+      pushedBuiltSet.has(r.pokemon_id)
+    ) {
+      continue;
+    }
+    if (Number(r.deleted) === 1) {
+      deletedBuiltPokemonIds.push(r.pokemon_id);
+    } else if (r.payload_json) {
+      try {
+        upsertedBuiltPokemon.push(JSON.parse(r.payload_json));
+      } catch (_) {}
+    }
+  }
+
   return {
     shortCircuited: false,
     serverSyncMs: serverUpdatedMs,
@@ -2680,10 +2841,13 @@ async function pullVaultDeltasFromD1(
     migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
     totalActiveLogs: Number(stateRow.total_active_logs) || 0,
     totalActiveTeams: Number(stateRow.total_active_teams) || 0,
+    totalActiveBuiltPokemon: Number(builtCountRes?.results?.[0]?.activeBuilt) || 0,
     upsertedLogs,
     deletedLogIds,
     upsertedTeams,
     deletedTeamIds,
+    upsertedBuiltPokemon,
+    deletedBuiltPokemonIds,
   };
 }
 
@@ -10225,9 +10389,11 @@ self.addEventListener('fetch', (e) => {
           prevServerUpdatedMs: 0,
           logsUpserted: 0,
           teamsUpserted: 0,
+          builtPokemonUpserted: 0,
           serverUpdatedMs: 0,
           pushedLogIds: [],
           pushedTeamIds: [],
+          pushedBuiltPokemonIds: [],
           pushedSettings: false,
         };
         if (request.method === 'POST' || request.method === 'PUT') {
@@ -10236,8 +10402,10 @@ self.addEventListener('fetch', (e) => {
             settingsUpdatedAt: Number(body.settingsUpdatedAt) || 0,
             battleLogs: body.battleLogs || [],
             teamPresets: body.teamPresets || [],
+            builtPokemon: body.builtPokemon || [],
             deletedLogIds: body.deletedLogIds || [],
             deletedTeamIds: body.deletedTeamIds || [],
+            deletedBuiltPokemonIds: body.deletedBuiltPokemonIds || [],
             source: body.isInitialMigration ? 'device_migration' : String(body.source || 'app_sync'),
             migratedFromGithub: Boolean(body.migratedFromGithub || body.isInitialMigration),
           });
@@ -10250,6 +10418,7 @@ self.addEventListener('fetch', (e) => {
           writeServerUpdatedMs: writeStats.wroteAnything ? writeStats.serverUpdatedMs || 0 : 0,
           pushedLogIds: writeStats.pushedLogIds || [],
           pushedTeamIds: writeStats.pushedTeamIds || [],
+          pushedBuiltPokemonIds: writeStats.pushedBuiltPokemonIds || [],
           pushedSettings: Boolean(writeStats.pushedSettings),
         });
 
@@ -10280,14 +10449,19 @@ self.addEventListener('fetch', (e) => {
             shortCircuited: Boolean(pulled.shortCircuited && !writeStats.wroteAnything),
             totalActiveLogs: pulled.totalActiveLogs,
             totalActiveTeams: pulled.totalActiveTeams,
+            totalActiveBuiltPokemon:
+              pulled.totalActiveBuiltPokemon ?? writeStats.totalActiveBuiltPokemon ?? null,
             pushedLogsCount: writeStats.logsUpserted || 0,
             pushedTeamsCount: writeStats.teamsUpserted || 0,
+            pushedBuiltPokemonCount: writeStats.builtPokemonUpserted || 0,
             userSettings: pulled.settings,
             settingsUpdatedAt: pulled.settingsUpdatedAt,
             battleLogs: pulled.upsertedLogs,
             deletedLogIds: pulled.deletedLogIds,
             teamPresets: pulled.upsertedTeams,
             deletedTeamIds: pulled.deletedTeamIds,
+            builtPokemon: pulled.upsertedBuiltPokemon,
+            deletedBuiltPokemonIds: pulled.deletedBuiltPokemonIds,
           },
           200,
           request,

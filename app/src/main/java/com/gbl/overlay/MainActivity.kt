@@ -57,11 +57,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNavSettings: Button
     private lateinit var btnNavBattleLog: Button
     private lateinit var btnNavMeta: Button
+    private lateinit var btnNavIvs: Button
     private lateinit var btnOverlayQuickHelp: Button
     private lateinit var pageTeams: android.view.View
     private lateinit var pageSettings: android.view.View
     private lateinit var pageBattleLog: android.view.View
     private lateinit var pageMeta: android.view.View
+    private lateinit var pageIvLab: android.view.View
     private lateinit var pageHelp: android.view.View
     private lateinit var btnToggleOppCountBasis: Button
     private lateinit var textOppCountBasisDesc: TextView
@@ -478,6 +480,8 @@ class MainActivity : AppCompatActivity() {
         setupBattleLogFilters()
         if (currentActivePage == "battle_log") {
             renderBattleLogPage()
+        } else if (currentActivePage == "ivs") {
+            refreshIvLabPageUi()
         }
     }
     private val selectedBattleLogIds = LinkedHashSet<String>()
@@ -780,6 +784,9 @@ class MainActivity : AppCompatActivity() {
         if (::pageMeta.isInitialized) {
             pageMeta.visibility = if (page == "meta") android.view.View.VISIBLE else android.view.View.GONE
         }
+        if (::pageIvLab.isInitialized) {
+            pageIvLab.visibility = if (page == "ivs") android.view.View.VISIBLE else android.view.View.GONE
+        }
         pageHelp.visibility = if (page == "help") android.view.View.VISIBLE else android.view.View.GONE
 
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
@@ -805,6 +812,11 @@ class MainActivity : AppCompatActivity() {
             btnNavMeta.setTextColor(if (page == "meta") activeText else inactiveText)
         }
 
+        if (::btnNavIvs.isInitialized) {
+            btnNavIvs.backgroundTintList = if (page == "ivs") activeBg else inactiveBg
+            btnNavIvs.setTextColor(if (page == "ivs") activeText else inactiveText)
+        }
+
         if (::btnOverlayQuickHelp.isInitialized) {
             btnOverlayQuickHelp.backgroundTintList = if (page == "help") activeBg else helpDefaultBg
             btnOverlayQuickHelp.setTextColor(if (page == "help") activeText else theme.secondaryAccentColor)
@@ -814,6 +826,8 @@ class MainActivity : AppCompatActivity() {
             renderBattleLogPage()
         } else if (page == "meta") {
             refreshMetaTabDashboard()
+        } else if (page == "ivs") {
+            refreshIvLabPageUi()
         }
     }
 
@@ -1256,11 +1270,13 @@ class MainActivity : AppCompatActivity() {
         btnNavSettings = findViewById(R.id.btn_nav_settings)
         btnNavBattleLog = findViewById(R.id.btn_nav_battle_log)
         btnNavMeta = findViewById(R.id.btn_nav_meta)
+        btnNavIvs = findViewById(R.id.btn_nav_ivs)
         btnOverlayQuickHelp = findViewById(R.id.btn_overlay_quick_help)
         pageTeams = findViewById(R.id.page_teams)
         pageSettings = findViewById(R.id.page_settings)
         pageBattleLog = findViewById(R.id.page_battle_log)
         pageMeta = findViewById(R.id.page_meta)
+        pageIvLab = findViewById(R.id.page_iv_lab)
         pageHelp = findViewById(R.id.page_help)
         btnToggleOppCountBasis = findViewById(R.id.btn_toggle_opp_count_basis)
         textOppCountBasisDesc = findViewById(R.id.text_opp_count_basis_desc)
@@ -1639,6 +1655,7 @@ class MainActivity : AppCompatActivity() {
         btnNavBattleLog.setOnClickListener { switchMainPage("battle_log") }
         btnNavSettings.setOnClickListener { switchMainPage("settings") }
         btnNavMeta.setOnClickListener { switchMainPage("meta") }
+        btnNavIvs.setOnClickListener { switchMainPage("ivs") }
 
         btnOverlayQuickHelp.setOnClickListener {
             switchMainPage("help")
@@ -4247,6 +4264,7 @@ class MainActivity : AppCompatActivity() {
                     refreshPresetsUi()
                     setupBattleLogFilters()
                     renderBattleLogPage()
+                    if (currentActivePage == "ivs") refreshIvLabPageUi()
                     updateSyncStatusUi()
                     Toast.makeText(
                         this,
@@ -5053,7 +5071,7 @@ class MainActivity : AppCompatActivity() {
             safeUserMons
         }
         val serviceSlots = matchedPreset?.pokemon?.map {
-            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
+            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel, it.isBestBuddy, it.builtPokemonId)
         }
         val aiLogEvents = loadAiTrainingLogs().find { it.battleId == entry.id }?.timelineEvents
         val safeTimeline = (entry.timelineEvents ?: emptyList()).ifEmpty { aiLogEvents ?: emptyList() }
@@ -6523,7 +6541,11 @@ class MainActivity : AppCompatActivity() {
     ): TeamPreset {
         val seasonLogs = getCurrentSeasonLogsForLeague(preset.league, preloadedLogs)
         val serviceMembers = preset.pokemon.map {
-            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
+            OverlayService.TeamMember(
+                it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel,
+                isBestBuddy = it.isBestBuddy,
+                builtPokemonId = it.builtPokemonId
+            )
         }
         val manualOverride = if (preset.isArchetypeManual && !autoReorder) preset.archetype else null
         val eval = OverlayService.evaluateOrAutoOrderTeamStatic(
@@ -6534,7 +6556,11 @@ class MainActivity : AppCompatActivity() {
             manualArchetypeOverride = manualOverride
         )
         val orderedPokemon = eval.orderedSlots.map {
-            PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
+            PokemonSlot(
+                it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel,
+                isBestBuddy = it.isBestBuddy,
+                builtPokemonId = it.builtPokemonId
+            )
         }
         return preset.copy(
             pokemon = orderedPokemon,
@@ -7813,7 +7839,11 @@ class MainActivity : AppCompatActivity() {
                 val chosenMons = chosenPreset?.pokemon?.map { it.name } ?: existing?.userPokemon ?: emptyList()
                 val chosenResult = resultsArr.getOrElse(spinnerResult.selectedItemPosition) { "WIN" }
                 val serviceSlots = chosenPreset?.pokemon?.map {
-                    OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
+                    OverlayService.TeamMember(
+                        it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel,
+                        isBestBuddy = it.isBestBuddy,
+                        builtPokemonId = it.builtPokemonId
+                    )
                 }
                 val computedQuality = OverlayService.calculateBattleQuality(
                     myTeam = chosenMons,
@@ -7958,7 +7988,11 @@ class MainActivity : AppCompatActivity() {
 
             val teamMembers: List<OverlayService.TeamMember> = if (matchedPreset != null && matchedPreset.pokemon.isNotEmpty()) {
                 matchedPreset.pokemon.map {
-                    OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
+                    OverlayService.TeamMember(
+                        it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel,
+                        isBestBuddy = it.isBestBuddy,
+                        builtPokemonId = it.builtPokemonId
+                    )
                 }
             } else {
                 val fallbackNames = if (safeUserPokemon.size >= 3) safeUserPokemon else getLeagueTop3Defaults(safeLeague).map { it.name }
@@ -10420,13 +10454,22 @@ class MainActivity : AppCompatActivity() {
                         preset.league.contains("MASTER", ignoreCase = true) -> "MASTER LEAGUE"
                         else -> "GREAT LEAGUE"
                     }
+                    val builtRoster = loadBuiltPokemonRoster()
                     val rescaledSlots = preset.pokemon.map { slot ->
-                        val resolved = OverlayService.resolveRecommendedMovesForSpecies(slot.name, targetLg)
-                        val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetLg) else null
-                        slot.copy(
-                            cp = scaled?.defaultCp ?: slot.cp,
-                            ivs = scaled?.defaultIvsGl ?: slot.ivs
-                        )
+                        val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(builtRoster, slot.name, targetLg)
+                        if (builtMatches.size == 1) {
+                            IvMatrixEngine.builtPokemonToSlot(builtMatches[0])
+                        } else {
+                            val resolved = OverlayService.resolveRecommendedMovesForSpecies(slot.name, targetLg)
+                            val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetLg) else null
+                            val defIvs = OverlayService.formatDefaultIvsForLeague(resolved, targetLg)
+                            slot.copy(
+                                cp = scaled?.defaultCp ?: slot.cp,
+                                ivs = defIvs,
+                                isBestBuddy = false,
+                                builtPokemonId = null
+                            )
+                        }
                     }
                     val copied = preset.copy(
                         id = UUID.randomUUID().toString(),
@@ -10458,13 +10501,22 @@ class MainActivity : AppCompatActivity() {
                         .setTitle("Copy '${preset.name}' to Show 6 Mode")
                         .setItems(options) { _, which ->
                             if (which == 0) {
+                                val builtRoster = loadBuiltPokemonRoster()
                                 val rescaledSlots = preset.pokemon.map { slot ->
-                                    val resolved = OverlayService.resolveRecommendedMovesForSpecies(slot.name, targetShow6Lg)
-                                    val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetShow6Lg) else null
-                                    slot.copy(
-                                        cp = scaled?.defaultCp ?: slot.cp,
-                                        ivs = scaled?.defaultIvsGl ?: slot.ivs
-                                    )
+                                    val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(builtRoster, slot.name, targetShow6Lg)
+                                    if (builtMatches.size == 1) {
+                                        IvMatrixEngine.builtPokemonToSlot(builtMatches[0])
+                                    } else {
+                                        val resolved = OverlayService.resolveRecommendedMovesForSpecies(slot.name, targetShow6Lg)
+                                        val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetShow6Lg) else null
+                                        val defIvs = OverlayService.formatDefaultIvsForLeague(resolved, targetShow6Lg)
+                                        slot.copy(
+                                            cp = scaled?.defaultCp ?: slot.cp,
+                                            ivs = defIvs,
+                                            isBestBuddy = false,
+                                            builtPokemonId = null
+                                        )
+                                    }
                                 }
                                 val copied = preset.copy(
                                     id = UUID.randomUUID().toString(),
@@ -11036,35 +11088,103 @@ class MainActivity : AppCompatActivity() {
 
         data class SlotEditorViews(
             val nameEdit: AutoCompleteTextView,
+            val cpEdit: EditText,
             val fastEdit: EditText,
             val c1Edit: EditText,
             val c2Edit: EditText,
+            val ivCtrl: IvTripletController,
             val suggestBox: LinearLayout
         )
 
         val slotViews = ArrayList<SlotEditorViews>(6)
+        val builtRosterSnapshot = loadBuiltPokemonRoster()
 
         fun buildCurrentTeamMembers(): List<OverlayService.TeamMember> {
             val lg = currentLeagueProvider()
             return slotViews.mapIndexed { idx, sv ->
                 val rawName = sv.nameEdit.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.pokemon.getOrElse(idx) { "Azumarill" } }
+                val ivStr = sv.ivCtrl.getIvsString()
+                val isBb = sv.ivCtrl.isBestBuddy
                 val resolved = OverlayService.resolveRecommendedMovesForSpecies(rawName, lg)
-                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
+                val typedCp = sv.cpEdit.text?.toString()?.trim()?.toIntOrNull()
+                val scaled = if (resolved != null) {
+                    OverlayService.computeEffectiveCombatStats(resolved, lg, customCp = typedCp, customIvs = ivStr, isBestBuddy = isBb)
+                } else null
                 OverlayService.TeamMember(
                     name = rawName,
-                    cp = scaled?.defaultCp ?: 1500,
+                    cp = typedCp ?: scaled?.defaultCp ?: 1500,
                     fastMove = sv.fastEdit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.defaultFastMove ?: "Bubble" },
                     chargedMove1 = sv.c1Edit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.chargedMove1 ?: "Ice Beam" },
                     chargedMove2 = sv.c2Edit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.chargedMove2 ?: "Play Rough" },
-                    ivs = scaled?.defaultIvsGl
+                    ivs = ivStr,
+                    plusMoveLevel = 0,
+                    isBestBuddy = isBb,
+                    builtPokemonId = sv.ivCtrl.builtPokemonId
+                )
+            }
+        }
+
+        fun buildCurrentPokemonSlots(targetLg: String = currentLeagueProvider()): List<PokemonSlot> {
+            val resolvedLg = targetLg
+            return slotViews.mapIndexedNotNull { idx, sv ->
+                val rawName = sv.nameEdit.text?.toString()?.trim().orEmpty()
+                if (rawName.isEmpty()) return@mapIndexedNotNull null
+                val ivStr = sv.ivCtrl.getIvsString()
+                val isBb = sv.ivCtrl.isBestBuddy
+                val resolved = OverlayService.resolveRecommendedMovesForSpecies(rawName, resolvedLg)
+                val cpFromBox = sv.cpEdit.text?.toString()?.trim()?.toIntOrNull()
+                val scaled = if (resolved != null) {
+                    OverlayService.computeEffectiveCombatStats(resolved, resolvedLg, customCp = cpFromBox, customIvs = ivStr, isBestBuddy = isBb)
+                } else null
+                PokemonSlot(
+                    name = rawName,
+                    cp = cpFromBox ?: scaled?.defaultCp ?: 1500,
+                    fastMove = sv.fastEdit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.defaultFastMove ?: "Bubble" },
+                    chargedMove1 = sv.c1Edit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.chargedMove1 ?: "Ice Beam" },
+                    chargedMove2 = sv.c2Edit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.chargedMove2 ?: "Play Rough" },
+                    ivs = ivStr,
+                    plusMoveLevel = 0,
+                    isBestBuddy = isBb,
+                    builtPokemonId = sv.ivCtrl.builtPokemonId
                 )
             }
         }
 
         for (i in 0 until 6) {
-            val initName = existingRoster.pokemon.getOrElse(i) { "" }
+            val rawInitName = existingRoster.pokemon.getOrElse(i) { "" }
+            val initSavedSlot = existingRoster.slots?.getOrNull(i)?.takeIf {
+                rawInitName.isEmpty() || it.name.equals(rawInitName, ignoreCase = true)
+            } ?: existingRoster.slots?.firstOrNull { it.name.equals(rawInitName, ignoreCase = true) }
+            val initName = initSavedSlot?.name?.takeIf { it.isNotBlank() } ?: rawInitName
             val resolved = OverlayService.resolveRecommendedMovesForSpecies(initName, existingRoster.league)
-            val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, existingRoster.league) else null
+            val initBuiltMatches = if (!currentIsOpponent && initSavedSlot == null && initName.isNotBlank()) {
+                IvMatrixEngine.findMatchingBuiltPokemon(builtRosterSnapshot, initName, existingRoster.league)
+            } else emptyList()
+            val singleBuilt = if (initBuiltMatches.size == 1) initBuiltMatches[0] else null
+            val initIvs = initSavedSlot?.ivs?.takeIf { it.isNotBlank() }
+                ?: singleBuilt?.ivs?.takeIf { it.isNotBlank() }
+                ?: if (resolved != null) OverlayService.formatDefaultIvsForLeague(resolved, existingRoster.league) else ""
+            val initBb = initSavedSlot?.isBestBuddy ?: singleBuilt?.isBestBuddy ?: false
+            val initBuiltId = initSavedSlot?.builtPokemonId ?: singleBuilt?.id
+            val scaled = if (resolved != null) {
+                OverlayService.computeEffectiveCombatStats(
+                    resolved,
+                    existingRoster.league,
+                    customCp = initSavedSlot?.cp ?: singleBuilt?.cp,
+                    customIvs = initIvs.ifBlank { null },
+                    isBestBuddy = initBb
+                )
+            } else null
+            val initCpVal = initSavedSlot?.cp?.takeIf { it > 0 } ?: singleBuilt?.cp ?: scaled?.defaultCp ?: 1500
+            val initFast = initSavedSlot?.fastMove?.takeIf { it.isNotBlank() }
+                ?: singleBuilt?.fastMove?.takeIf { it.isNotBlank() }
+                ?: scaled?.defaultFastMove ?: ""
+            val initC1 = initSavedSlot?.chargedMove1?.takeIf { it.isNotBlank() }
+                ?: singleBuilt?.chargedMove1?.takeIf { it.isNotBlank() }
+                ?: scaled?.chargedMove1 ?: ""
+            val initC2 = initSavedSlot?.chargedMove2?.takeIf { it.isNotBlank() }
+                ?: singleBuilt?.chargedMove2?.takeIf { it.isNotBlank() }
+                ?: scaled?.chargedMove2 ?: ""
 
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -11111,6 +11231,13 @@ class MainActivity : AppCompatActivity() {
             hdrRow.addView(btnSuggestMoves)
             card.addView(hdrRow)
 
+            val nameCpRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
             val nameEdit = AutoCompleteTextView(this).apply {
                 setText(initName, false)
                 hint = "Pokémon #${i + 1}"
@@ -11123,8 +11250,27 @@ class MainActivity : AppCompatActivity() {
                 setPadding(iPad, iPad, iPad, iPad)
                 setAdapter(PokemonAutocompleteAdapter(currentLeagueProvider))
                 threshold = 1
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = (4 * density).toInt()
+                }
             }
-            card.addView(nameEdit)
+            val cpEdit = EditText(this).apply {
+                setText(if (initName.isNotBlank()) initCpVal.toString() else "")
+                hint = "CP"
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                setTextColor(0xFF38BDF8.toInt())
+                setHintTextColor(0xFF64748B.toInt())
+                setBackgroundColor(0xFF0F172A.toInt())
+                textSize = 11f
+                setSingleLine(true)
+                gravity = android.view.Gravity.CENTER
+                val iPad = (6 * density).toInt()
+                setPadding(iPad, iPad, iPad, iPad)
+                layoutParams = LinearLayout.LayoutParams((68 * density).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+            nameCpRow.addView(nameEdit)
+            nameCpRow.addView(cpEdit)
+            card.addView(nameCpRow)
 
             val movesRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -11136,7 +11282,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val fastEdit = EditText(this).apply {
-                setText(scaled?.defaultFastMove ?: "")
+                setText(initFast)
                 hint = "Fast Move"
                 setTextColor(0xFFCBD5E1.toInt())
                 setHintTextColor(0xFF64748B.toInt())
@@ -11150,7 +11296,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val c1Edit = EditText(this).apply {
-                setText(scaled?.chargedMove1 ?: "")
+                setText(initC1)
                 hint = "Charged 1"
                 setTextColor(0xFFCBD5E1.toInt())
                 setHintTextColor(0xFF64748B.toInt())
@@ -11164,7 +11310,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val c2Edit = EditText(this).apply {
-                setText(scaled?.chargedMove2 ?: "")
+                setText(initC2)
                 hint = "Charged 2"
                 setTextColor(0xFFCBD5E1.toInt())
                 setHintTextColor(0xFF64748B.toInt())
@@ -11180,12 +11326,53 @@ class MainActivity : AppCompatActivity() {
             movesRow.addView(c2Edit)
             card.addView(movesRow)
 
+            val ivCtrl = createIvTripletControlView(
+                speciesNameProvider = { nameEdit.text?.toString()?.trim().orEmpty() },
+                leagueProvider = currentLeagueProvider,
+                initialIvs = initIvs,
+                initialIsBestBuddy = initBb,
+                initialBuiltPokemonId = initBuiltId,
+                linkedCpEdit = cpEdit,
+                movesProvider = {
+                    Triple(
+                        fastEdit.text?.toString()?.trim().orEmpty(),
+                        c1Edit.text?.toString()?.trim().orEmpty(),
+                        c2Edit.text?.toString()?.trim().orEmpty()
+                    )
+                },
+                onMovesPickedFromBuilt = { f, c1, c2, resolvedName, pickedCp ->
+                    if (!resolvedName.isNullOrBlank()) nameEdit.setText(resolvedName, false)
+                    if (pickedCp > 0) cpEdit.setText(pickedCp.toString())
+                    if (f.isNotBlank()) fastEdit.setText(f)
+                    if (c1.isNotBlank()) c1Edit.setText(c1)
+                    if (c2.isNotBlank()) c2Edit.setText(c2)
+                },
+                enableBuiltControls = !currentIsOpponent,
+                showPresetChips = true
+            )
+            card.addView(ivCtrl.rootView)
+
             nameEdit.setOnItemClickListener { parent, _, position, _ ->
                 val chosen = parent.getItemAtPosition(position) as? OverlayService.Companion.PokemonAutocompleteSuggestion ?: return@setOnItemClickListener
                 nameEdit.setText(chosen.name, false)
-                fastEdit.setText(chosen.fastMove)
-                c1Edit.setText(chosen.chargedMove1)
-                c2Edit.setText(chosen.chargedMove2)
+                val lg = currentLeagueProvider()
+                val matches = if (!currentIsOpponent) {
+                    IvMatrixEngine.findMatchingBuiltPokemon(loadBuiltPokemonRoster(), chosen.name, lg)
+                } else emptyList()
+                if (matches.size == 1) {
+                    val b = matches[0]
+                    cpEdit.setText(b.cp.toString())
+                    fastEdit.setText(b.fastMove)
+                    c1Edit.setText(b.chargedMove1)
+                    c2Edit.setText(b.chargedMove2)
+                    ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = true)
+                    Toast.makeText(this@MainActivity, "📦 Auto-filled built ${b.speciesName} (${b.ivs} • CP ${b.cp})", Toast.LENGTH_SHORT).show()
+                } else {
+                    fastEdit.setText(chosen.fastMove)
+                    c1Edit.setText(chosen.chargedMove1)
+                    c2Edit.setText(chosen.chargedMove2)
+                    ivCtrl.applySlotOrDefaults(null, lg)
+                }
             }
 
             val suggestBox = LinearLayout(this).apply {
@@ -11195,7 +11382,7 @@ class MainActivity : AppCompatActivity() {
             }
             card.addView(suggestBox)
 
-            val sv = SlotEditorViews(nameEdit, fastEdit, c1Edit, c2Edit, suggestBox)
+            val sv = SlotEditorViews(nameEdit, cpEdit, fastEdit, c1Edit, c2Edit, ivCtrl, suggestBox)
             slotViews.add(sv)
 
             btnSuggestMon.setOnClickListener {
@@ -11243,9 +11430,22 @@ class MainActivity : AppCompatActivity() {
                                 setTextColor(0xFFFFFFFF.toInt())
                                 setOnClickListener {
                                     nameEdit.setText(u.candidate.name, false)
-                                    fastEdit.setText(u.candidate.fastMove)
-                                    c1Edit.setText(u.candidate.chargedMove1)
-                                    c2Edit.setText(u.candidate.chargedMove2)
+                                    val builtMatchesSwap = if (!currentIsOpponent) {
+                                        IvMatrixEngine.findMatchingBuiltPokemon(loadBuiltPokemonRoster(), u.candidate.name, lg)
+                                    } else emptyList()
+                                    if (builtMatchesSwap.size == 1) {
+                                        val b = builtMatchesSwap[0]
+                                        cpEdit.setText(b.cp.toString())
+                                        fastEdit.setText(b.fastMove)
+                                        c1Edit.setText(b.chargedMove1)
+                                        c2Edit.setText(b.chargedMove2)
+                                        ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = true)
+                                    } else {
+                                        fastEdit.setText(u.candidate.fastMove)
+                                        c1Edit.setText(u.candidate.chargedMove1)
+                                        c2Edit.setText(u.candidate.chargedMove2)
+                                        ivCtrl.applySlotOrDefaults(null, lg)
+                                    }
                                     suggestBox.visibility = android.view.View.GONE
                                 }
                             }
@@ -11382,11 +11582,30 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
                 val targetLg = cloneTargetSpinner.selectedItem?.toString() ?: currentLeagueProvider()
+                val sameCap = OverlayService.getLeagueCpCapStatic(targetLg) == OverlayService.getLeagueCpCapStatic(currentLeagueProvider())
+                val clonedSlots = if (sameCap) buildCurrentPokemonSlots(targetLg) else {
+                    val rosterNow = loadBuiltPokemonRoster()
+                    buildCurrentPokemonSlots(currentLeagueProvider()).map { s ->
+                        val builtM = if (!currentIsOpponent) IvMatrixEngine.findMatchingBuiltPokemon(rosterNow, s.name, targetLg) else emptyList()
+                        if (builtM.size == 1) IvMatrixEngine.builtPokemonToSlot(builtM[0]) else {
+                            val resM = OverlayService.resolveRecommendedMovesForSpecies(s.name, targetLg)
+                            val scM = if (resM != null) OverlayService.computeEffectiveCombatStats(resM, targetLg) else null
+                            s.copy(
+                                cp = scM?.defaultCp ?: s.cp,
+                                ivs = OverlayService.formatDefaultIvsForLeague(resM, targetLg),
+                                isBestBuddy = false,
+                                builtPokemonId = null
+                            )
+                        }
+                    }
+                }
                 val cloned = existingRoster.copy(
                     id = "show6-clone-${UUID.randomUUID()}",
                     name = "${nameInput.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.name }} (Copy)",
                     league = targetLg,
-                    pokemon = mons.take(6).ifEmpty { existingRoster.pokemon }
+                    pokemon = mons.take(6).ifEmpty { existingRoster.pokemon },
+                    slots = clonedSlots.take(6),
+                    updatedAt = System.currentTimeMillis()
                 )
                 if (currentIsOpponent) {
                     val oppList = loadShow6OpponentRostersOf6().toMutableList()
@@ -11420,11 +11639,26 @@ class MainActivity : AppCompatActivity() {
                 }
                 val targetLg = cloneTargetSpinner.selectedItem?.toString() ?: currentLeagueProvider()
                 val nextOpp = !currentIsOpponent
+                val sameCap = OverlayService.getLeagueCpCapStatic(targetLg) == OverlayService.getLeagueCpCapStatic(currentLeagueProvider())
+                val clonedSlots = if (sameCap) buildCurrentPokemonSlots(targetLg) else {
+                    buildCurrentPokemonSlots(currentLeagueProvider()).map { s ->
+                        val resM = OverlayService.resolveRecommendedMovesForSpecies(s.name, targetLg)
+                        val scM = if (resM != null) OverlayService.computeEffectiveCombatStats(resM, targetLg) else null
+                        s.copy(
+                            cp = scM?.defaultCp ?: s.cp,
+                            ivs = OverlayService.formatDefaultIvsForLeague(resM, targetLg),
+                            isBestBuddy = false,
+                            builtPokemonId = null
+                        )
+                    }
+                }
                 val cloned = existingRoster.copy(
                     id = "show6-sideclone-${UUID.randomUUID()}",
                     name = "${nameInput.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.name }} (${if (nextOpp) "Opp" else "My"})",
                     league = targetLg,
-                    pokemon = mons.take(6).ifEmpty { existingRoster.pokemon }
+                    pokemon = mons.take(6).ifEmpty { existingRoster.pokemon },
+                    slots = clonedSlots.take(6),
+                    updatedAt = System.currentTimeMillis()
                 )
                 if (nextOpp) {
                     val oppList = loadShow6OpponentRostersOf6().toMutableList()
@@ -11449,24 +11683,35 @@ class MainActivity : AppCompatActivity() {
             setTextColor(0xFFE0F2FE.toInt())
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             setOnClickListener {
-                val mons = slotViews.map { it.nameEdit.text?.toString()?.trim().orEmpty() }.filter { it.isNotEmpty() }
-                val top3Names = mons.take(3).ifEmpty { existingRoster.pokemon.take(3) }
+                val curSlots = buildCurrentPokemonSlots(currentLeagueProvider())
+                val top3Names = curSlots.map { it.name }.take(3).ifEmpty { existingRoster.pokemon.take(3) }
                 if (OverlayService.hasMultipleMegasStatic(top3Names)) {
                     Toast.makeText(this@MainActivity, "⚠️ Max 1 Mega/Primal Pokémon allowed per team!", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 val selectedTargetLg = cloneTargetSpinner.selectedItem?.toString() ?: "GREAT LEAGUE"
-                val slots = top3Names.map { monName ->
-                    val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, selectedTargetLg)
-                    val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, selectedTargetLg) else null
-                    PokemonSlot(
-                        name = monName,
-                        cp = scaled?.defaultCp ?: 1500,
-                        fastMove = scaled?.defaultFastMove ?: "Tackle",
-                        chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
-                        chargedMove2 = scaled?.chargedMove2 ?: "Return",
-                        ivs = scaled?.defaultIvsGl
-                    )
+                val sameCap = OverlayService.getLeagueCpCapStatic(selectedTargetLg) == OverlayService.getLeagueCpCapStatic(currentLeagueProvider())
+                val rosterNow = loadBuiltPokemonRoster()
+                val slots = if (sameCap && curSlots.size >= 3) {
+                    curSlots.take(3)
+                } else {
+                    top3Names.map { monName ->
+                        val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(rosterNow, monName, selectedTargetLg)
+                        if (builtMatches.size == 1) {
+                            IvMatrixEngine.builtPokemonToSlot(builtMatches[0])
+                        } else {
+                            val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, selectedTargetLg)
+                            val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, selectedTargetLg) else null
+                            PokemonSlot(
+                                name = monName,
+                                cp = scaled?.defaultCp ?: 1500,
+                                fastMove = scaled?.defaultFastMove ?: "Tackle",
+                                chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
+                                chargedMove2 = scaled?.chargedMove2 ?: "Return",
+                                ivs = OverlayService.formatDefaultIvsForLeague(resolved, selectedTargetLg)
+                            )
+                        }
+                    }
                 }
                 val newGblPreset = TeamPreset(
                     id = UUID.randomUUID().toString(),
@@ -11495,7 +11740,9 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            val mons = slotViews.map { it.nameEdit.text?.toString()?.trim().orEmpty() }.filter { it.isNotEmpty() }
+            val lg = currentLeagueProvider()
+            val builtSlots = buildCurrentPokemonSlots(lg)
+            val mons = builtSlots.map { it.name }.filter { it.isNotEmpty() }
             if (mons.size < 6) {
                 Toast.makeText(this, "Please fill all 6 Pokémon slots.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -11504,11 +11751,18 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            val lg = currentLeagueProvider()
+            val cpCap = OverlayService.getLeagueCpCapStatic(lg)
+            val overCap = builtSlots.firstOrNull { cpCap < 10000 && it.cp > cpCap }
+            if (overCap != null) {
+                Toast.makeText(this, "⚠️ ${overCap.name} CP ${overCap.cp} exceeds $lg cap ($cpCap)!", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
             val updated = existingRoster.copy(
                 name = nameInput.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.name },
                 league = lg,
-                pokemon = mons.take(6)
+                pokemon = mons.take(6),
+                slots = builtSlots.take(6),
+                updatedAt = System.currentTimeMillis()
             )
             onSaved(updated, currentIsOpponent)
             dialog.dismiss()
@@ -11900,17 +12154,40 @@ class MainActivity : AppCompatActivity() {
                 else -> "GREAT LEAGUE"
             }
             val top3Names = r.pokemon.take(3)
-            val slots = top3Names.map { monName ->
-                val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, targetGblLg)
-                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetGblLg) else null
-                PokemonSlot(
-                    name = monName,
-                    cp = scaled?.defaultCp ?: 1500,
-                    fastMove = scaled?.defaultFastMove ?: "Tackle",
-                    chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
-                    chargedMove2 = scaled?.chargedMove2 ?: "Return",
-                    ivs = scaled?.defaultIvsGl
-                )
+            val builtRoster = loadBuiltPokemonRoster()
+            val savedSlotMap = r.slots.orEmpty().associateBy {
+                IvMatrixEngine.cleanSpeciesNameWithoutShadow(it.name).first.lowercase() + "|" +
+                    IvMatrixEngine.cleanSpeciesNameWithoutShadow(it.name).second
+            }
+            val slots = top3Names.mapIndexed { idx, monName ->
+                val rawSlot = r.slots?.getOrNull(idx)
+                val (cleanMon, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(monName)
+                val byName = savedSlotMap["${cleanMon.lowercase()}|$isSh"]
+                val chosenSaved = when {
+                    rawSlot != null && rawSlot.name.equals(monName, ignoreCase = true) -> rawSlot
+                    byName != null -> byName
+                    else -> null
+                }
+                if (chosenSaved != null && !chosenSaved.ivs.isNullOrBlank()) {
+                    chosenSaved
+                } else {
+                    val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(builtRoster, monName, targetGblLg)
+                    if (builtMatches.size == 1) {
+                        IvMatrixEngine.builtPokemonToSlot(builtMatches[0])
+                    } else {
+                        val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, targetGblLg)
+                        val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetGblLg) else null
+                        val defIvs = OverlayService.formatDefaultIvsForLeague(resolved, targetGblLg)
+                        PokemonSlot(
+                            name = monName,
+                            cp = scaled?.defaultCp ?: 1500,
+                            fastMove = scaled?.defaultFastMove ?: "Tackle",
+                            chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
+                            chargedMove2 = scaled?.chargedMove2 ?: "Return",
+                            ivs = defIvs
+                        )
+                    }
+                }
             }
             val newGblPreset = TeamPreset(
                 id = UUID.randomUUID().toString(),
@@ -12399,9 +12676,9 @@ class MainActivity : AppCompatActivity() {
                 name = "Show 6 ${rec.archetype} #${rec.rank}: ${rec.lead.name}/${rec.safeSwap.name}/${rec.closer.name}",
                 league = league,
                 pokemon = listOf(
-                    PokemonSlot(rec.lead.name, rec.lead.cp, rec.lead.fastMove, rec.lead.chargedMove1, rec.lead.chargedMove2, rec.lead.ivs),
-                    PokemonSlot(rec.safeSwap.name, rec.safeSwap.cp, rec.safeSwap.fastMove, rec.safeSwap.chargedMove1, rec.safeSwap.chargedMove2, rec.safeSwap.ivs),
-                    PokemonSlot(rec.closer.name, rec.closer.cp, rec.closer.fastMove, rec.closer.chargedMove1, rec.closer.chargedMove2, rec.closer.ivs)
+                    PokemonSlot(rec.lead.name, rec.lead.cp, rec.lead.fastMove, rec.lead.chargedMove1, rec.lead.chargedMove2, rec.lead.ivs, rec.lead.plusMoveLevel, rec.lead.isBestBuddy, rec.lead.builtPokemonId),
+                    PokemonSlot(rec.safeSwap.name, rec.safeSwap.cp, rec.safeSwap.fastMove, rec.safeSwap.chargedMove1, rec.safeSwap.chargedMove2, rec.safeSwap.ivs, rec.safeSwap.plusMoveLevel, rec.safeSwap.isBestBuddy, rec.safeSwap.builtPokemonId),
+                    PokemonSlot(rec.closer.name, rec.closer.cp, rec.closer.fastMove, rec.closer.chargedMove1, rec.closer.chargedMove2, rec.closer.ivs, rec.closer.plusMoveLevel, rec.closer.isBestBuddy, rec.closer.builtPokemonId)
                 ),
                 isSelected = true,
                 archetype = rec.archetype,
@@ -12436,11 +12713,50 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             persistCurrentOpponent6ToPrefs()
+            val builtRoster = loadBuiltPokemonRoster()
+            val myRosters = loadShow6RostersOf6()
+            val selectedRosterId = prefs.getString("gbl_show6_selected_my_roster_id", null)
+            val activeMyRoster = myRosters.firstOrNull { it.id == selectedRosterId } ?: myRosters.firstOrNull()
+            val savedSlotMap = activeMyRoster?.slots.orEmpty().associateBy {
+                val (cName, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(it.name)
+                "${cName.lowercase()}|$isSh"
+            }
+            val my6Members = my6.mapIndexed { idx, rawName ->
+                val rawSlot = activeMyRoster?.slots?.getOrNull(idx)
+                val (cName, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(rawName)
+                val savedByName = savedSlotMap["${cName.lowercase()}|$isSh"]
+                val saved = when {
+                    rawSlot != null && rawSlot.name.equals(rawName, ignoreCase = true) -> rawSlot
+                    savedByName != null -> savedByName
+                    else -> null
+                }
+                val chosenSlot = if (saved != null && !saved.ivs.isNullOrBlank()) {
+                    saved
+                } else {
+                    val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(builtRoster, rawName, lg)
+                    if (builtMatches.size == 1) IvMatrixEngine.builtPokemonToSlot(builtMatches[0]) else null
+                }
+                if (chosenSlot != null) {
+                    OverlayService.TeamMember(
+                        name = chosenSlot.name.ifBlank { rawName },
+                        cp = chosenSlot.cp,
+                        fastMove = chosenSlot.fastMove,
+                        chargedMove1 = chosenSlot.chargedMove1,
+                        chargedMove2 = chosenSlot.chargedMove2,
+                        ivs = chosenSlot.ivs,
+                        plusMoveLevel = chosenSlot.plusMoveLevel,
+                        isBestBuddy = chosenSlot.isBestBuddy,
+                        builtPokemonId = chosenSlot.builtPokemonId
+                    )
+                } else {
+                    OverlayService.TeamMember(rawName, 0, "", "", "", null)
+                }
+            }
             btnRunPick3.isEnabled = false
             btnRunPick3.text = "⏳ Simulating 14,400 Ordered 3v3 Lineups & Best Movesets..."
 
             lifecycleScope.launch(Dispatchers.Default) {
-                val res = OverlayService.evaluateShow6Pick3MatchupStatic(lg, my6, opp6)
+                val res = OverlayService.evaluateShow6Pick3MatchupStatic(lg, my6Members, opp6)
                 withContext(Dispatchers.Main) {
                     btnRunPick3.isEnabled = true
                     btnRunPick3.text = "⚡ Simulate 6v6 Pick-3 (3 ABB • 3 ABC • 3 Duo-Core)"
@@ -12567,17 +12883,24 @@ class MainActivity : AppCompatActivity() {
                                 setTextColor(0xFFFECDD3.toInt())
                                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                             }
+                            val oppBuiltRoster = loadBuiltPokemonRoster()
                             val resolvedTrioSlots = oppTrio.pokemonNames.take(3).map { monName ->
-                                val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, lg)
-                                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
-                                PokemonSlot(
-                                    name = monName,
-                                    cp = scaled?.defaultCp ?: 1500,
-                                    fastMove = scaled?.defaultFastMove ?: "Tackle",
-                                    chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
-                                    chargedMove2 = scaled?.chargedMove2 ?: "Return",
-                                    ivs = scaled?.defaultIvsGl
-                                )
+                                val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(oppBuiltRoster, monName, lg)
+                                if (builtMatches.size == 1) {
+                                    IvMatrixEngine.builtPokemonToSlot(builtMatches[0])
+                                } else {
+                                    val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, lg)
+                                    val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
+                                    val defIvs = OverlayService.formatDefaultIvsForLeague(resolved, lg)
+                                    PokemonSlot(
+                                        name = monName,
+                                        cp = scaled?.defaultCp ?: 1500,
+                                        fastMove = scaled?.defaultFastMove ?: "Tackle",
+                                        chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
+                                        chargedMove2 = scaled?.chargedMove2 ?: "Return",
+                                        ivs = defIvs
+                                    )
+                                }
                             }
                             val cloneOppTrioBtn = Button(this@MainActivity).apply {
                                 text = "📋 Clone Trio"
@@ -13454,21 +13777,21 @@ class MainActivity : AppCompatActivity() {
 
         val editP1 = dialogView.findViewById<AutoCompleteTextView>(R.id.edit_p1_name)
         val editP1Cp = dialogView.findViewById<EditText>(R.id.edit_p1_cp)
-        val editP1Ivs = dialogView.findViewById<EditText>(R.id.edit_p1_ivs)
+        val layoutP1IvTriplet = dialogView.findViewById<LinearLayout>(R.id.layout_p1_iv_triplet)
         val editP1Fast = dialogView.findViewById<EditText>(R.id.edit_p1_fast)
         val editP1C1 = dialogView.findViewById<EditText>(R.id.edit_p1_c1)
         val editP1C2 = dialogView.findViewById<EditText>(R.id.edit_p1_c2)
 
         val editP2 = dialogView.findViewById<AutoCompleteTextView>(R.id.edit_p2_name)
         val editP2Cp = dialogView.findViewById<EditText>(R.id.edit_p2_cp)
-        val editP2Ivs = dialogView.findViewById<EditText>(R.id.edit_p2_ivs)
+        val layoutP2IvTriplet = dialogView.findViewById<LinearLayout>(R.id.layout_p2_iv_triplet)
         val editP2Fast = dialogView.findViewById<EditText>(R.id.edit_p2_fast)
         val editP2C1 = dialogView.findViewById<EditText>(R.id.edit_p2_c1)
         val editP2C2 = dialogView.findViewById<EditText>(R.id.edit_p2_c2)
 
         val editP3 = dialogView.findViewById<AutoCompleteTextView>(R.id.edit_p3_name)
         val editP3Cp = dialogView.findViewById<EditText>(R.id.edit_p3_cp)
-        val editP3Ivs = dialogView.findViewById<EditText>(R.id.edit_p3_ivs)
+        val layoutP3IvTriplet = dialogView.findViewById<LinearLayout>(R.id.layout_p3_iv_triplet)
         val editP3Fast = dialogView.findViewById<EditText>(R.id.edit_p3_fast)
         val editP3C1 = dialogView.findViewById<EditText>(R.id.edit_p3_c1)
         val editP3C2 = dialogView.findViewById<EditText>(R.id.edit_p3_c2)
@@ -13621,10 +13944,71 @@ class MainActivity : AppCompatActivity() {
             btnModeDuo?.setTextColor(if (isDuo) activeText else inactiveText)
         }
 
+        var suppressIvChangeCallback = false
+        var refreshEvaluationHook: (() -> Unit)? = null
+
+        lateinit var ivCtrlP1: IvTripletController
+        lateinit var ivCtrlP2: IvTripletController
+        lateinit var ivCtrlP3: IvTripletController
+
+        fun bindIvTripletIntoSlotContainer(
+            container: LinearLayout?,
+            nameEdit: AutoCompleteTextView,
+            cpEdit: EditText,
+            fastEdit: EditText,
+            c1Edit: EditText,
+            c2Edit: EditText,
+            initialSlot: PokemonSlot?
+        ): IvTripletController {
+            val initLg = existingPreset?.league ?: leagues.first()
+            val ctrl = createIvTripletControlView(
+                speciesNameProvider = { nameEdit.text?.toString()?.trim().orEmpty() },
+                leagueProvider = currentLeagueProvider,
+                initialIvs = initialSlot?.ivs ?: if (initialSlot != null) {
+                    val rec = OverlayService.resolveRecommendedMovesForSpecies(initialSlot.name, initLg)
+                    OverlayService.formatDefaultIvsForLeague(rec, initLg)
+                } else "",
+                initialIsBestBuddy = initialSlot?.isBestBuddy == true,
+                initialBuiltPokemonId = initialSlot?.builtPokemonId,
+                linkedCpEdit = cpEdit,
+                movesProvider = {
+                    Triple(
+                        fastEdit.text?.toString()?.trim().orEmpty(),
+                        c1Edit.text?.toString()?.trim().orEmpty(),
+                        c2Edit.text?.toString()?.trim().orEmpty()
+                    )
+                },
+                onMovesPickedFromBuilt = { f, c1, c2, resolvedName, pickedCp ->
+                    suppressIvChangeCallback = true
+                    if (!resolvedName.isNullOrBlank()) nameEdit.setText(resolvedName, false)
+                    if (pickedCp > 0) cpEdit.setText(pickedCp.toString())
+                    if (f.isNotBlank()) fastEdit.setText(f)
+                    if (c1.isNotBlank()) c1Edit.setText(c1)
+                    if (c2.isNotBlank()) c2Edit.setText(c2)
+                    suppressIvChangeCallback = false
+                    refreshEvaluationHook?.invoke()
+                },
+                enableBuiltControls = true,
+                showPresetChips = true,
+                onChanged = { _, _, _, _, _, _ ->
+                    if (!suppressIvChangeCallback) {
+                        refreshEvaluationHook?.invoke()
+                    }
+                }
+            )
+            container?.removeAllViews()
+            container?.addView(ctrl.rootView)
+            return ctrl
+        }
+
+        ivCtrlP1 = bindIvTripletIntoSlotContainer(layoutP1IvTriplet, editP1, editP1Cp, editP1Fast, editP1C1, editP1C2, existingPreset?.pokemon?.getOrNull(0))
+        ivCtrlP2 = bindIvTripletIntoSlotContainer(layoutP2IvTriplet, editP2, editP2Cp, editP2Fast, editP2C1, editP2C2, existingPreset?.pokemon?.getOrNull(1))
+        ivCtrlP3 = bindIvTripletIntoSlotContainer(layoutP3IvTriplet, editP3, editP3Cp, editP3Fast, editP3C1, editP3C2, existingPreset?.pokemon?.getOrNull(2))
+
         fun buildResolvedSlot(
             nameEdit: EditText,
             cpEdit: EditText,
-            ivsEdit: EditText,
+            ivCtrl: IvTripletController,
             fastEdit: EditText,
             c1Edit: EditText,
             c2Edit: EditText,
@@ -13633,11 +14017,12 @@ class MainActivity : AppCompatActivity() {
             plusMoveLevel: Int = 4
         ): PokemonSlot {
             val finalName = nameEdit.text.toString().trim().ifEmpty { fallbackSlot.name }
-            val enteredIvs = ivsEdit.text.toString().trim().takeIf { it.isNotEmpty() }
+            val enteredIvs = ivCtrl.getIvsString().takeIf { it.isNotBlank() }
+            val isBb = ivCtrl.isBestBuddy
             val recMeta = OverlayService.resolveRecommendedMovesForSpecies(finalName, league)
             val enteredCp = cpEdit.text.toString().trim().toIntOrNull()
             val scaledMeta = recMeta?.let {
-                OverlayService.computeEffectiveCombatStats(it, league, enteredCp, enteredIvs)
+                OverlayService.computeEffectiveCombatStats(it, league, enteredCp, enteredIvs, isBb)
             }
 
             val finalCp = enteredCp ?: scaledMeta?.defaultCp ?: fallbackSlot.cp
@@ -13658,38 +14043,43 @@ class MainActivity : AppCompatActivity() {
                 chargedMove1 = finalC1,
                 chargedMove2 = finalC2,
                 ivs = enteredIvs,
-                plusMoveLevel = plusMoveLevel.coerceIn(0, 4)
+                plusMoveLevel = plusMoveLevel.coerceIn(0, 4),
+                isBestBuddy = isBb,
+                builtPokemonId = ivCtrl.builtPokemonId
             )
         }
 
         fun applySlotsToDialogInputs(slots: List<PokemonSlot>) {
+            val lgNow = currentLeagueProvider()
+            suppressIvChangeCallback = true
             slots.getOrNull(0)?.let {
                 editP1.setText(it.name, false)
                 editP1Cp.setText(it.cp.toString())
-                editP1Ivs.setText(it.ivs ?: "")
                 editP1Fast.setText(it.fastMove)
                 editP1C1.setText(it.chargedMove1)
                 editP1C2.setText(it.chargedMove2)
                 p1PlusLevel = (it.plusMoveLevel ?: 4).coerceIn(0, 4)
+                ivCtrlP1.applySlotOrDefaults(it, lgNow)
             }
             slots.getOrNull(1)?.let {
                 editP2.setText(it.name, false)
                 editP2Cp.setText(it.cp.toString())
-                editP2Ivs.setText(it.ivs ?: "")
                 editP2Fast.setText(it.fastMove)
                 editP2C1.setText(it.chargedMove1)
                 editP2C2.setText(it.chargedMove2)
                 p2PlusLevel = (it.plusMoveLevel ?: 4).coerceIn(0, 4)
+                ivCtrlP2.applySlotOrDefaults(it, lgNow)
             }
             slots.getOrNull(2)?.let {
                 editP3.setText(it.name, false)
                 editP3Cp.setText(it.cp.toString())
-                editP3Ivs.setText(it.ivs ?: "")
                 editP3Fast.setText(it.fastMove)
                 editP3C1.setText(it.chargedMove1)
                 editP3C2.setText(it.chargedMove2)
                 p3PlusLevel = (it.plusMoveLevel ?: 4).coerceIn(0, 4)
+                ivCtrlP3.applySlotOrDefaults(it, lgNow)
             }
+            suppressIvChangeCallback = false
         }
 
         fun updateSlotPlusLevelRowUi(
@@ -13734,15 +14124,15 @@ class MainActivity : AppCompatActivity() {
         fun refreshDialogTeamEvaluation(autoReorder: Boolean): OverlayService.Companion.TeamArchetypeEvaluationResult {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedDialogLogs)
             val eval = OverlayService.evaluateOrAutoOrderTeamStatic(
                 slots = listOf(
-                    OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel),
-                    OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel),
-                    OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel)
+                    OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel, s1.isBestBuddy, s1.builtPokemonId),
+                    OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel, s2.isBestBuddy, s2.builtPokemonId),
+                    OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel, s3.isBestBuddy, s3.builtPokemonId)
                 ),
                 league = lg,
                 seasonLogs = seasonLogs,
@@ -13751,7 +14141,7 @@ class MainActivity : AppCompatActivity() {
             )
             if (autoReorder) {
                 val orderedSlots = eval.orderedSlots.map {
-                    PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
+                    PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel, it.isBestBuddy, it.builtPokemonId)
                 }
                 applySlotsToDialogInputs(orderedSlots)
             }
@@ -13852,10 +14242,12 @@ class MainActivity : AppCompatActivity() {
             return eval
         }
 
+        refreshEvaluationHook = { refreshDialogTeamEvaluation(autoReorder = false) }
+
         fun bindSlotAutocomplete(
             nameAuto: AutoCompleteTextView,
             cpEdit: EditText,
-            ivsEdit: EditText,
+            ivCtrl: IvTripletController,
             fastEdit: EditText,
             c1Edit: EditText,
             c2Edit: EditText
@@ -13865,44 +14257,51 @@ class MainActivity : AppCompatActivity() {
             nameAuto.threshold = 1
             nameAuto.setOnItemClickListener { parent, _, position, _ ->
                 val chosen = parent.getItemAtPosition(position) as? OverlayService.Companion.PokemonAutocompleteSuggestion ?: return@setOnItemClickListener
+                val curLg = currentLeagueProvider()
+                suppressIvChangeCallback = true
                 nameAuto.setText(chosen.name, false)
-                val customIvs = ivsEdit.text.toString().trim().takeIf { it.isNotEmpty() }
-                val rec = OverlayService.resolveRecommendedMovesForSpecies(chosen.name, currentLeagueProvider())
-                if (rec != null) {
-                    val scaled = OverlayService.computeEffectiveCombatStats(rec, currentLeagueProvider(), null, customIvs)
-                    fastEdit.setText(scaled.defaultFastMove)
-                    c1Edit.setText(scaled.chargedMove1)
-                    c2Edit.setText(scaled.chargedMove2)
-                    cpEdit.setText(scaled.defaultCp.toString())
+                val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(loadBuiltPokemonRoster(), chosen.name, curLg)
+                if (builtMatches.size == 1) {
+                    val b = builtMatches[0]
+                    cpEdit.setText(b.cp.toString())
+                    fastEdit.setText(b.fastMove)
+                    c1Edit.setText(b.chargedMove1)
+                    c2Edit.setText(b.chargedMove2)
+                    ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = false)
+                    Toast.makeText(this@MainActivity, "📦 Auto-filled built ${b.speciesName} (${b.ivs} • CP ${b.cp})", Toast.LENGTH_SHORT).show()
                 } else {
-                    fastEdit.setText(chosen.fastMove)
-                    c1Edit.setText(chosen.chargedMove1)
-                    c2Edit.setText(chosen.chargedMove2)
-                    cpEdit.setText(chosen.cp.toString())
+                    val rec = OverlayService.resolveRecommendedMovesForSpecies(chosen.name, curLg)
+                    if (rec != null) {
+                        fastEdit.setText(rec.defaultFastMove)
+                        c1Edit.setText(rec.chargedMove1)
+                        c2Edit.setText(rec.chargedMove2)
+                    } else {
+                        fastEdit.setText(chosen.fastMove)
+                        c1Edit.setText(chosen.chargedMove1)
+                        c2Edit.setText(chosen.chargedMove2)
+                    }
+                    ivCtrl.applySlotOrDefaults(null, curLg)
                 }
+                suppressIvChangeCallback = false
                 refreshDialogTeamEvaluation(autoReorder = false)
             }
         }
 
-        bindSlotAutocomplete(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2)
-        bindSlotAutocomplete(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2)
-        bindSlotAutocomplete(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2)
+        bindSlotAutocomplete(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2)
+        bindSlotAutocomplete(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2)
+        bindSlotAutocomplete(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2)
 
         fun updateLeagueTemplateHints(selectedLeague: String) {
             val top3 = getLeagueTop3Defaults(selectedLeague)
             editP1.hint = "Name (e.g. ${top3[0].name})"
             editP2.hint = "Name (e.g. ${top3[1].name})"
             editP3.hint = "Name (e.g. ${top3[2].name})"
-            val ivHint = if (selectedLeague.contains("MASTER", ignoreCase = true)) "IVs (def 15/15/15)" else "IVs (PvPoke def)"
-            editP1Ivs.hint = ivHint
-            editP2Ivs.hint = ivHint
-            editP3Ivs.hint = ivHint
         }
 
         fun autoFillMovesForSlot(
             nameEdit: EditText,
             cpEdit: EditText,
-            ivsEdit: EditText,
+            ivCtrl: IvTripletController,
             fastEdit: EditText,
             c1Edit: EditText,
             c2Edit: EditText,
@@ -13912,8 +14311,26 @@ class MainActivity : AppCompatActivity() {
             if (enteredName.isEmpty()) return
             val selectedLeague = currentLeagueProvider()
             val rec = OverlayService.resolveRecommendedMovesForSpecies(enteredName, selectedLeague) ?: return
-            val customIvs = ivsEdit.text.toString().trim().takeIf { it.isNotEmpty() }
-            val scaled = OverlayService.computeEffectiveCombatStats(rec, selectedLeague, null, customIvs)
+
+            suppressIvChangeCallback = true
+            val wasEmpty = fastEdit.text.toString().trim().isEmpty() && cpEdit.text.toString().trim().isEmpty()
+            if (wasEmpty && ivCtrl.builtPokemonId == null) {
+                val matches = IvMatrixEngine.findMatchingBuiltPokemon(loadBuiltPokemonRoster(), enteredName, selectedLeague)
+                if (matches.size == 1) {
+                    val b = matches[0]
+                    cpEdit.setText(b.cp.toString())
+                    fastEdit.setText(b.fastMove)
+                    c1Edit.setText(b.chargedMove1)
+                    c2Edit.setText(b.chargedMove2)
+                    ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = false)
+                    suppressIvChangeCallback = false
+                    refreshDialogTeamEvaluation(autoReorder = false)
+                    return
+                }
+            }
+
+            val customIvs = ivCtrl.getIvsString().takeIf { it.isNotBlank() }
+            val scaled = OverlayService.computeEffectiveCombatStats(rec, selectedLeague, null, customIvs, ivCtrl.isBestBuddy)
 
             if (forceOverwrite) {
                 nameEdit.setText(rec.name)
@@ -13928,25 +14345,29 @@ class MainActivity : AppCompatActivity() {
                 c2Edit.setText(scaled.chargedMove2)
             }
             if (forceOverwrite || cpEdit.text.toString().trim().isEmpty()) {
-                cpEdit.setText(scaled.defaultCp.toString())
+                ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = false)
+                if (cpEdit.text.toString().trim().isEmpty()) {
+                    cpEdit.setText(scaled.defaultCp.toString())
+                }
             }
+            suppressIvChangeCallback = false
             refreshDialogTeamEvaluation(autoReorder = false)
         }
 
         editP1.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) autoFillMovesForSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, false)
+            if (!hasFocus) autoFillMovesForSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, false)
         }
         editP2.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) autoFillMovesForSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, false)
+            if (!hasFocus) autoFillMovesForSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, false)
         }
         editP3.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) autoFillMovesForSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, false)
+            if (!hasFocus) autoFillMovesForSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, false)
         }
 
         listOf(
-            editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2,
-            editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2,
-            editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2
+            editP1Cp, editP1Fast, editP1C1, editP1C2,
+            editP2Cp, editP2Fast, editP2C1, editP2C2,
+            editP3Cp, editP3Fast, editP3C1, editP3C2
         ).forEach { field ->
             field.setOnFocusChangeListener { _, hasFocus ->
                 if (!hasFocus) refreshDialogTeamEvaluation(autoReorder = false)
@@ -13954,13 +14375,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnP1AutoFillMoves?.setOnClickListener {
-            autoFillMovesForSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, forceOverwrite = true)
+            autoFillMovesForSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, forceOverwrite = true)
         }
         btnP2AutoFillMoves?.setOnClickListener {
-            autoFillMovesForSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, forceOverwrite = true)
+            autoFillMovesForSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, forceOverwrite = true)
         }
         btnP3AutoFillMoves?.setOnClickListener {
-            autoFillMovesForSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, forceOverwrite = true)
+            autoFillMovesForSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, forceOverwrite = true)
         }
 
         if (existingPreset != null) {
@@ -13969,57 +14390,55 @@ class MainActivity : AppCompatActivity() {
                 .takeIf { it >= 0 } ?: 0
             spinnerLeague.setSelection(leagueIdx)
             updateLeagueTemplateHints(leagues[leagueIdx])
-
-            existingPreset.pokemon.getOrNull(0)?.let {
-                editP1.setText(it.name, false)
-                editP1Cp.setText(it.cp.toString())
-                editP1Ivs.setText(it.ivs ?: "")
-                editP1Fast.setText(it.fastMove)
-                editP1C1.setText(it.chargedMove1)
-                editP1C2.setText(it.chargedMove2)
-            }
-            existingPreset.pokemon.getOrNull(1)?.let {
-                editP2.setText(it.name, false)
-                editP2Cp.setText(it.cp.toString())
-                editP2Ivs.setText(it.ivs ?: "")
-                editP2Fast.setText(it.fastMove)
-                editP2C1.setText(it.chargedMove1)
-                editP2C2.setText(it.chargedMove2)
-            }
-            existingPreset.pokemon.getOrNull(2)?.let {
-                editP3.setText(it.name, false)
-                editP3Cp.setText(it.cp.toString())
-                editP3Ivs.setText(it.ivs ?: "")
-                editP3Fast.setText(it.fastMove)
-                editP3C1.setText(it.chargedMove1)
-                editP3C2.setText(it.chargedMove2)
-            }
+            applySlotsToDialogInputs(existingPreset.pokemon)
         } else {
-            updateLeagueTemplateHints("GREAT LEAGUE")
+            val initLg = leagues.firstOrNull() ?: "GREAT LEAGUE"
+            updateLeagueTemplateHints(initLg)
+            suppressIvChangeCallback = true
+            ivCtrlP1.refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
+            ivCtrlP2.refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
+            ivCtrlP3.refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
+            suppressIvChangeCallback = false
         }
 
-        var lastSelectedEditorLeague = existingPreset?.league ?: "GREAT LEAGUE"
+        var lastSelectedEditorLeague = existingPreset?.league ?: leagues.firstOrNull() ?: "GREAT LEAGUE"
         spinnerLeague.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 val lg = leagues.getOrElse(position) { "GREAT LEAGUE" }
                 updateLeagueTemplateHints(lg)
                 if (!lg.equals(lastSelectedEditorLeague, ignoreCase = true)) {
                     lastSelectedEditorLeague = lg
+                    suppressIvChangeCallback = true
+                    val builtRosterNow = loadBuiltPokemonRoster()
                     listOf(
-                        Triple(editP1, editP1Cp, editP1Ivs),
-                        Triple(editP2, editP2Cp, editP2Ivs),
-                        Triple(editP3, editP3Cp, editP3Ivs)
-                    ).forEach { (nameEd, cpEd, ivEd) ->
+                        listOf(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2),
+                        listOf(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2),
+                        listOf(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2)
+                    ).forEach { viewsList ->
+                        val nameEd = viewsList[0] as AutoCompleteTextView
+                        val cpEd = viewsList[1] as EditText
+                        val ivCtrl = viewsList[2] as IvTripletController
+                        val fastEd = viewsList[3] as EditText
+                        val c1Ed = viewsList[4] as EditText
+                        val c2Ed = viewsList[5] as EditText
                         val monName = nameEd.text?.toString()?.trim().orEmpty()
                         if (monName.isNotEmpty()) {
-                            val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, lg)
-                            val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
-                            if (scaled != null) {
-                                cpEd.setText(scaled.defaultCp.toString())
-                                ivEd.setText(scaled.defaultIvsGl ?: "")
+                            val builtM = IvMatrixEngine.findMatchingBuiltPokemon(builtRosterNow, monName, lg)
+                            if (builtM.size == 1) {
+                                val b = builtM[0]
+                                cpEd.setText(b.cp.toString())
+                                if (b.fastMove.isNotBlank()) fastEd.setText(b.fastMove)
+                                if (b.chargedMove1.isNotBlank()) c1Ed.setText(b.chargedMove1)
+                                if (b.chargedMove2.isNotBlank()) c2Ed.setText(b.chargedMove2)
+                                ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = false)
+                            } else {
+                                ivCtrl.applySlotOrDefaults(null, lg)
                             }
+                        } else {
+                            ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
                         }
                     }
+                    suppressIvChangeCallback = false
                 }
                 refreshDialogTeamEvaluation(autoReorder = false)
             }
@@ -14081,9 +14500,9 @@ class MainActivity : AppCompatActivity() {
         btnSwapSlot12?.setOnClickListener {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             applySlotsToDialogInputs(listOf(s2, s1, s3))
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
@@ -14094,9 +14513,9 @@ class MainActivity : AppCompatActivity() {
         btnSwapSlot23?.setOnClickListener {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             applySlotsToDialogInputs(listOf(s1, s3, s2))
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
@@ -14107,9 +14526,9 @@ class MainActivity : AppCompatActivity() {
         btnSwapSlot13?.setOnClickListener {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             applySlotsToDialogInputs(listOf(s3, s2, s1))
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
@@ -14121,9 +14540,9 @@ class MainActivity : AppCompatActivity() {
         fun runTop100RoleUpgradesSimulation(showBannerOnComplete: Boolean) {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedDialogLogs)
             val manualArch = dialogManualArchetypeOverride
 
@@ -14134,9 +14553,9 @@ class MainActivity : AppCompatActivity() {
             roleUpgradeJob = lifecycleScope.launch(Dispatchers.Default) {
                 val recResult = OverlayService.recommendTop3UpgradesPerRoleStatic(
                     slots = listOf(
-                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel),
-                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel),
-                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel)
+                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel, s1.isBestBuddy, s1.builtPokemonId),
+                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel, s2.isBestBuddy, s2.builtPokemonId),
+                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel, s3.isBestBuddy, s3.builtPokemonId)
                     ),
                     league = lg,
                     seasonLogs = seasonLogs,
@@ -14177,20 +14596,25 @@ class MainActivity : AppCompatActivity() {
                                 val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
                                 btn?.text = "${idx + 1}. ${cand.name} (${cand.fastMove} / ${cand.chargedMove1} + ${cand.chargedMove2}$plusTag)  •  Core ${upg.newMachineAggBr} ($machDeltaStr) • $roleMetricName ${upg.newRoleBr} ($roleDeltaStr)"
                                 btn?.setOnClickListener {
-                                    val newSlot = PokemonSlot(
-                                        name = cand.name,
-                                        cp = cand.cp,
-                                        fastMove = cand.fastMove,
-                                        chargedMove1 = cand.chargedMove1,
-                                        chargedMove2 = cand.chargedMove2,
-                                        ivs = cand.ivs,
-                                        plusMoveLevel = 4
-                                    )
                                     val curLg = currentLeagueProvider()
+                                    val builtMatchesUpg = IvMatrixEngine.findMatchingBuiltPokemon(loadBuiltPokemonRoster(), cand.name, curLg)
+                                    val newSlot = if (builtMatchesUpg.size == 1) {
+                                        IvMatrixEngine.builtPokemonToSlot(builtMatchesUpg[0]).copy(plusMoveLevel = 4)
+                                    } else {
+                                        PokemonSlot(
+                                            name = cand.name,
+                                            cp = cand.cp,
+                                            fastMove = cand.fastMove,
+                                            chargedMove1 = cand.chargedMove1,
+                                            chargedMove2 = cand.chargedMove2,
+                                            ivs = cand.ivs,
+                                            plusMoveLevel = 4
+                                        )
+                                    }
                                     val curDefs = getLeagueTop3Defaults(curLg)
-                                    val cur1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, curLg, curDefs[0], p1PlusLevel)
-                                    val cur2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, curLg, curDefs[1], p2PlusLevel)
-                                    val cur3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, curLg, curDefs[2], p3PlusLevel)
+                                    val cur1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, curLg, curDefs[0], p1PlusLevel)
+                                    val cur2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, curLg, curDefs[1], p2PlusLevel)
+                                    val cur3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, curLg, curDefs[2], p3PlusLevel)
                                     val replacedName = when (slotIndex) {
                                         0 -> cur1.name
                                         1 -> cur2.name
@@ -14260,9 +14684,9 @@ class MainActivity : AppCompatActivity() {
         fun runTeamMovesetOptimizationSimulation(showBannerOnComplete: Boolean) {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedDialogLogs)
             val manualArch = dialogManualArchetypeOverride
 
@@ -14273,9 +14697,9 @@ class MainActivity : AppCompatActivity() {
             movesetOptJob = lifecycleScope.launch(Dispatchers.Default) {
                 val moveResult = OverlayService.recommendTop3MovesetsForTeamStatic(
                     slots = listOf(
-                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel),
-                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel),
-                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel)
+                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel, s1.isBestBuddy, s1.builtPokemonId),
+                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel, s2.isBestBuddy, s2.builtPokemonId),
+                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel, s3.isBestBuddy, s3.builtPokemonId)
                     ),
                     league = lg,
                     seasonLogs = seasonLogs,
@@ -14410,9 +14834,9 @@ class MainActivity : AppCompatActivity() {
                 val top3Defaults = getLeagueTop3Defaults(league)
                 val name = editName.text.toString().trim().ifEmpty { "${league.split(" ").first().lowercase().replaceFirstChar { it.uppercase() }} Team" }
 
-                val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, league, top3Defaults[0], p1PlusLevel)
-                val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, league, top3Defaults[1], p2PlusLevel)
-                val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, league, top3Defaults[2], p3PlusLevel)
+                val p1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, league, top3Defaults[0], p1PlusLevel)
+                val p2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, league, top3Defaults[1], p2PlusLevel)
+                val p3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, league, top3Defaults[2], p3PlusLevel)
 
                 if (OverlayService.hasMultipleMegasStatic(listOf(p1.name, p2.name, p3.name))) {
                     Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per team!", Toast.LENGTH_LONG).show()
@@ -14467,20 +14891,31 @@ class MainActivity : AppCompatActivity() {
         btnModalCopyCrossMode?.text = if (isShow6CombatMode()) "🛡️ Copy → GBL Blind 3" else "🏛️ Copy → Show 6 Trio"
 
         fun collectCurrentDialogSlotsForTargetLeague(targetLg: String): List<PokemonSlot>? {
+            val curLgNow = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(targetLg)
-            val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, targetLg, top3Defaults[0], p1PlusLevel)
-            val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, targetLg, top3Defaults[1], p2PlusLevel)
-            val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, targetLg, top3Defaults[2], p3PlusLevel)
+            val p1 = buildResolvedSlot(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2, curLgNow, top3Defaults[0], p1PlusLevel)
+            val p2 = buildResolvedSlot(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2, curLgNow, top3Defaults[1], p2PlusLevel)
+            val p3 = buildResolvedSlot(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2, curLgNow, top3Defaults[2], p3PlusLevel)
             if (OverlayService.hasMultipleMegasStatic(listOf(p1.name, p2.name, p3.name))) {
                 Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per team!", Toast.LENGTH_LONG).show()
                 return null
             }
+            if (OverlayService.getLeagueCpCapStatic(targetLg) == OverlayService.getLeagueCpCapStatic(curLgNow)) {
+                return listOf(p1, p2, p3)
+            }
+            val builtRosterNow = loadBuiltPokemonRoster()
             return listOf(p1, p2, p3).map { s ->
-                val resolved = OverlayService.resolveRecommendedMovesForSpecies(s.name, targetLg)
-                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetLg) else null
-                if (scaled != null) {
-                    s.copy(cp = scaled.defaultCp, ivs = scaled.defaultIvsGl)
-                } else s
+                val builtMatches = IvMatrixEngine.findMatchingBuiltPokemon(builtRosterNow, s.name, targetLg)
+                if (builtMatches.size == 1) {
+                    IvMatrixEngine.builtPokemonToSlot(builtMatches[0]).copy(plusMoveLevel = s.plusMoveLevel)
+                } else {
+                    val resolved = OverlayService.resolveRecommendedMovesForSpecies(s.name, targetLg)
+                    val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetLg) else null
+                    val defIvs = OverlayService.formatDefaultIvsForLeague(resolved, targetLg)
+                    if (scaled != null) {
+                        s.copy(cp = scaled.defaultCp, ivs = defIvs, isBestBuddy = false, builtPokemonId = null)
+                    } else s
+                }
             }
         }
 
@@ -15313,5 +15748,2329 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    // ==================== BUILT POKÉMON ROSTER PERSISTENCE & D1 SYNC HELPERS ====================
+
+    private fun loadBuiltPokemonRoster(): MutableList<BuiltPokemonEntry> {
+        val raw = prefs.getString(OverlayService.PREFS_KEY_BUILT_POKEMON_ROSTER, null)
+        if (raw.isNullOrBlank()) return mutableListOf()
+        return try {
+            val type = object : TypeToken<List<BuiltPokemonEntry>>() {}.type
+            val parsed: List<BuiltPokemonEntry>? = gson.fromJson(raw, type)
+            parsed?.filter { it.id.isNotBlank() && it.speciesName.isNotBlank() }?.toMutableList() ?: mutableListOf()
+        } catch (_: Exception) {
+            mutableListOf()
+        }
+    }
+
+    private fun saveBuiltPokemonRoster(list: List<BuiltPokemonEntry>) {
+        prefs.edit()
+            .putString(OverlayService.PREFS_KEY_BUILT_POKEMON_ROSTER, gson.toJson(list))
+            .apply()
+    }
+
+    private fun loadDeletedBuiltPokemonIds(): MutableList<String> {
+        val raw = prefs.getString(OverlayService.PREFS_KEY_DELETED_BUILT_POKEMON_IDS, null)
+        if (raw.isNullOrBlank()) return mutableListOf()
+        return try {
+            val type = object : TypeToken<List<String>>() {}.type
+            val parsed: List<String>? = gson.fromJson(raw, type)
+            parsed?.filter { it.isNotBlank() }?.distinct()?.toMutableList() ?: mutableListOf()
+        } catch (_: Exception) {
+            mutableListOf()
+        }
+    }
+
+    private fun saveDeletedBuiltPokemonIds(ids: List<String>) {
+        val cleaned = ids.filter { it.isNotBlank() }.distinct().takeLast(500)
+        prefs.edit()
+            .putString(OverlayService.PREFS_KEY_DELETED_BUILT_POKEMON_IDS, gson.toJson(cleaned))
+            .apply()
+    }
+
+    private fun upsertBuiltPokemonEntry(
+        entry: BuiltPokemonEntry,
+        triggerSync: Boolean = true
+    ): BuiltPokemonEntry {
+        val cleanId = entry.id.ifBlank { UUID.randomUUID().toString() }
+        val normalized = entry.copy(
+            id = cleanId,
+            ivs = "${entry.atkIv.coerceIn(0, 15)}/${entry.defIv.coerceIn(0, 15)}/${entry.staIv.coerceIn(0, 15)}",
+            updatedAt = System.currentTimeMillis()
+        )
+        val deletedIds = loadDeletedBuiltPokemonIds()
+        if (deletedIds.removeAll { it == cleanId }) {
+            saveDeletedBuiltPokemonIds(deletedIds)
+        }
+        val list = loadBuiltPokemonRoster()
+        val idx = list.indexOfFirst { it.id == cleanId }
+        if (idx >= 0) {
+            list[idx] = normalized
+        } else {
+            list.add(0, normalized)
+        }
+        saveBuiltPokemonRoster(list)
+        if (triggerSync) {
+            triggerTwoDeviceCloudSync(silent = true)
+        }
+        return normalized
+    }
+
+    private fun deleteBuiltPokemonEntry(id: String, triggerSync: Boolean = true) {
+        if (id.isBlank()) return
+        val list = loadBuiltPokemonRoster().filterNot { it.id == id }
+        saveBuiltPokemonRoster(list)
+        val deleted = loadDeletedBuiltPokemonIds()
+        if (!deleted.contains(id)) {
+            deleted.add(id)
+            saveDeletedBuiltPokemonIds(deleted)
+        }
+        if (triggerSync) {
+            triggerTwoDeviceCloudSync(silent = true)
+        }
+    }
+
+    // ==================== UNIVERSAL 3-BOX [ATK][DEF][STA] IV CONTROL ====================
+
+    private fun ivDp(dpVal: Int): Int = (dpVal * resources.displayMetrics.density).roundToInt()
+
+    private fun makeIvCardBg(
+        fillColor: Int,
+        strokeColor: Int,
+        radiusDp: Int = 8,
+        strokeDp: Int = 1
+    ): android.graphics.drawable.GradientDrawable {
+        return android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = ivDp(radiusDp).toFloat()
+            setColor(fillColor)
+            setStroke(ivDp(strokeDp).coerceAtLeast(1), strokeColor)
+        }
+    }
+
+    private fun formatIvLevelStr(level: Double): String {
+        return if ((level * 2.0).roundToInt() % 2 == 0) {
+            level.roundToInt().toString()
+        } else {
+            String.format(java.util.Locale.US, "%.1f", level)
+        }
+    }
+
+    private inner class IvTripletController(
+        val rootView: LinearLayout,
+        private val atkEdit: EditText,
+        private val defEdit: EditText,
+        private val staEdit: EditText,
+        private val btnBestBuddy: Button,
+        private val tvReadout: TextView,
+        private val btnBuiltPick: Button,
+        private val btnSaveBuilt: Button,
+        private val speciesNameProvider: () -> String,
+        private val leagueProvider: () -> String,
+        private val linkedCpEdit: EditText?,
+        private val movesProvider: (() -> Triple<String, String, String>)?,
+        private val onMovesPickedFromBuilt: ((fast: String, c1: String, c2: String, resolvedName: String?, pickedCp: Int) -> Unit)?,
+        private val onChanged: ((IvMatrixEngine.IvSpreadEvalDetails?) -> Unit)?
+    ) {
+        var isBestBuddy: Boolean = false
+        var builtPokemonId: String? = null
+        internal var isProgrammaticUpdate: Boolean = false
+
+        private fun parseBox(edit: EditText): Int {
+            return (edit.text?.toString()?.trim()?.toIntOrNull() ?: 0).coerceIn(0, 15)
+        }
+
+        fun getTriplet(): Triple<Int, Int, Int> {
+            return Triple(parseBox(atkEdit), parseBox(defEdit), parseBox(staEdit))
+        }
+
+        fun getIvsString(): String {
+            val (a, d, s) = getTriplet()
+            return "$a/$d/$s"
+        }
+
+        fun getComputedDetails(): IvMatrixEngine.IvSpreadEvalDetails? {
+            val sp = speciesNameProvider().trim()
+            if (sp.isEmpty()) return null
+            val (a, d, s) = getTriplet()
+            return IvMatrixEngine.evaluateIvSpreadDetails(
+                speciesName = sp,
+                atkIv = a,
+                defIv = d,
+                staIv = s,
+                league = leagueProvider(),
+                isBestBuddy = isBestBuddy
+            )
+        }
+
+        fun refreshBestBuddyVisual() {
+            val theme = getActiveAppTheme()
+            if (isBestBuddy) {
+                btnBestBuddy.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.accentColor)
+                btnBestBuddy.setTextColor(android.graphics.Color.WHITE)
+            } else {
+                btnBestBuddy.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btnBestBuddy.setTextColor(theme.secondaryTextColor)
+            }
+        }
+
+        fun refreshBuiltBadge() {
+            if (btnBuiltPick.visibility != android.view.View.VISIBLE) return
+            val sp = speciesNameProvider().trim()
+            val lg = leagueProvider()
+            val matches = if (sp.isNotEmpty()) {
+                IvMatrixEngine.findMatchingBuiltPokemon(loadBuiltPokemonRoster(), sp, lg)
+            } else emptyList()
+            val activeTag = if (!builtPokemonId.isNullOrBlank()) " ✓" else ""
+            btnBuiltPick.text = if (matches.isNotEmpty()) {
+                "📦 Built (${matches.size})$activeTag"
+            } else {
+                "📦 Built$activeTag"
+            }
+        }
+
+        fun updateReadoutAndCp(updateLinkedCp: Boolean) {
+            val details = getComputedDetails()
+            val theme = getActiveAppTheme()
+            if (details == null) {
+                tvReadout.text = "Select Pokémon for live CP, Level & Stat Rank"
+                tvReadout.setTextColor(theme.secondaryTextColor)
+            } else {
+                val pctStr = String.format(java.util.Locale.US, "%.1f%%", details.pctOfRank1)
+                val bbStr = if (isBestBuddy) " • 🎀BB" else ""
+                tvReadout.text = "CP ${details.cp}  •  Lv ${formatIvLevelStr(details.level)}$bbStr  •  Rank #${details.rank} ($pctStr of R1)"
+                tvReadout.setTextColor(theme.primaryTextColor)
+                if (updateLinkedCp && linkedCpEdit != null && details.cp > 0) {
+                    val curCp = linkedCpEdit.text?.toString()?.trim()?.toIntOrNull() ?: 0
+                    if (curCp != details.cp) {
+                        linkedCpEdit.setText(details.cp.toString())
+                    }
+                }
+            }
+            refreshBestBuddyVisual()
+            refreshBuiltBadge()
+        }
+
+        fun setValues(
+            atk: Int,
+            def: Int,
+            sta: Int,
+            bestBuddy: Boolean = isBestBuddy,
+            builtId: String? = null,
+            notify: Boolean = true
+        ) {
+            val a = atk.coerceIn(0, 15)
+            val d = def.coerceIn(0, 15)
+            val s = sta.coerceIn(0, 15)
+            isProgrammaticUpdate = true
+            try {
+                if (atkEdit.text?.toString()?.trim() != a.toString()) atkEdit.setText(a.toString())
+                if (defEdit.text?.toString()?.trim() != d.toString()) defEdit.setText(d.toString())
+                if (staEdit.text?.toString()?.trim() != s.toString()) staEdit.setText(s.toString())
+                isBestBuddy = bestBuddy
+                builtPokemonId = builtId
+            } finally {
+                isProgrammaticUpdate = false
+            }
+            updateReadoutAndCp(updateLinkedCp = true)
+            if (notify) {
+                onChanged?.invoke(getComputedDetails())
+            }
+        }
+
+        fun applySlotOrDefaults(slot: PokemonSlot?, league: String) {
+            if (slot == null) {
+                refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
+                return
+            }
+            val sp = slot.name.trim().ifEmpty { speciesNameProvider().trim() }
+            val bb = slot.isBestBuddy == true
+            val parsedFromStr = slot.ivs?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+                val parts = raw.split(Regex("[/\\-,\\s]+")).mapNotNull { it.toIntOrNull() }
+                if (parts.size >= 3) Triple(parts[0].coerceIn(0, 15), parts[1].coerceIn(0, 15), parts[2].coerceIn(0, 15)) else null
+            }
+            val defSpread = parsedFromStr
+                ?: OverlayService.resolveRecommendedMovesForSpecies(sp, league)?.let { meta ->
+                    OverlayService.parseIvTriplet(null, league, meta)
+                }
+                ?: IvMatrixEngine.getPresetIvSpread(sp, league, IvMatrixEngine.IvPresetMode.PVPOKE_DEFAULT, bb)
+                    ?.let { Triple(it.atkIv, it.defIv, it.staIv) }
+                ?: Triple(0, 15, 15)
+
+            isProgrammaticUpdate = true
+            try {
+                atkEdit.setText(defSpread.first.toString())
+                defEdit.setText(defSpread.second.toString())
+                staEdit.setText(defSpread.third.toString())
+                isBestBuddy = bb
+                builtPokemonId = slot.builtPokemonId
+            } finally {
+                isProgrammaticUpdate = false
+            }
+            val shouldUpdateCp = !slot.ivs.isNullOrBlank() || slot.cp <= 0
+            updateReadoutAndCp(updateLinkedCp = shouldUpdateCp)
+        }
+
+        fun refreshFromSpeciesOrLeague(resetToLeagueDefault: Boolean = false) {
+            val sp = speciesNameProvider().trim()
+            val lg = leagueProvider()
+            if (resetToLeagueDefault && sp.isNotEmpty()) {
+                val presetSpread = IvMatrixEngine.getPresetIvSpread(
+                    speciesName = sp,
+                    league = lg,
+                    preset = IvMatrixEngine.IvPresetMode.PVPOKE_DEFAULT,
+                    isBestBuddy = isBestBuddy
+                )
+                if (presetSpread != null) {
+                    setValues(presetSpread.atkIv, presetSpread.defIv, presetSpread.staIv, bestBuddy = isBestBuddy, builtId = null, notify = true)
+                    return
+                }
+            }
+            updateReadoutAndCp(updateLinkedCp = true)
+            onChanged?.invoke(getComputedDetails())
+        }
+    }
+
+    private fun createIvTripletControlView(
+        speciesNameProvider: () -> String,
+        leagueProvider: () -> String,
+        initialIvs: String? = null,
+        initialIsBestBuddy: Boolean = false,
+        initialBuiltPokemonId: String? = null,
+        linkedCpEdit: EditText? = null,
+        movesProvider: (() -> Triple<String, String, String>)? = null,
+        onMovesPickedFromBuilt: ((fast: String, c1: String, c2: String, resolvedName: String?, pickedCp: Int) -> Unit)? = null,
+        enableBuiltControls: Boolean = true,
+        showPresetChips: Boolean = true,
+        onChanged: ((IvMatrixEngine.IvSpreadEvalDetails?) -> Unit)? = null
+    ): IvTripletController {
+        val theme = getActiveAppTheme()
+        val initParts = initialIvs?.trim()?.split(Regex("[/\\-,\\s]+"))?.mapNotNull { it.toIntOrNull() }
+        val initAtk = (initParts?.getOrNull(0) ?: 0).coerceIn(0, 15)
+        val initDef = (initParts?.getOrNull(1) ?: 15).coerceIn(0, 15)
+        val initSta = (initParts?.getOrNull(2) ?: 15).coerceIn(0, 15)
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(4), 0, ivDp(4)) }
+            setPadding(ivDp(8), ivDp(7), ivDp(8), ivDp(7))
+            background = makeIvCardBg(theme.innerCardColor, theme.overlayBorderColor, radiusDp = 8)
+        }
+
+        val inputRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        fun makeStatCell(labelStr: String, initVal: Int, imeNext: Boolean): Pair<EditText, Button> {
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(0, 0, ivDp(4), 0)
+                }
+            }
+            val lbl = TextView(this).apply {
+                text = labelStr
+                textSize = 10f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.secondaryTextColor)
+            }
+            val boxRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 6)
+                setPadding(ivDp(4), ivDp(2), ivDp(2), ivDp(2))
+            }
+            val edit = EditText(this).apply {
+                setText(initVal.toString())
+                textSize = 13f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.primaryTextColor)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                gravity = android.view.Gravity.CENTER
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                filters = arrayOf(android.text.InputFilter.LengthFilter(2))
+                imeOptions = if (imeNext) {
+                    android.view.inputmethod.EditorInfo.IME_ACTION_NEXT
+                } else {
+                    android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+                }
+                setSelectAllOnFocus(true)
+                setPadding(ivDp(2), ivDp(4), ivDp(2), ivDp(4))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val dropBtn = Button(this).apply {
+                text = "▾"
+                textSize = 11f
+                setPadding(0, 0, 0, 0)
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                setTextColor(theme.accentColor)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                layoutParams = LinearLayout.LayoutParams(ivDp(22), ivDp(28))
+            }
+            boxRow.addView(edit)
+            boxRow.addView(dropBtn)
+            cell.addView(lbl)
+            cell.addView(boxRow)
+            inputRow.addView(cell)
+            return Pair(edit, dropBtn)
+        }
+
+        val (atkEdit, atkDrop) = makeStatCell("ATK", initAtk, true)
+        val (defEdit, defDrop) = makeStatCell("DEF", initDef, true)
+        val (staEdit, staDrop) = makeStatCell("STA", initSta, false)
+
+        val btnBestBuddy = Button(this).apply {
+            text = "🎀 Lv51"
+            textSize = 10.5f
+            isAllCaps = false
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(ivDp(8), ivDp(4), ivDp(8), ivDp(4))
+            minWidth = 0
+            minimumWidth = 0
+            minHeight = 0
+            minimumHeight = 0
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                ivDp(34)
+            ).apply {
+                gravity = android.view.Gravity.BOTTOM
+            }
+        }
+        inputRow.addView(btnBestBuddy)
+        root.addView(inputRow)
+
+        val tvReadout = TextView(this).apply {
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, ivDp(5), 0, ivDp(2))
+        }
+        root.addView(tvReadout)
+
+        val btnBuiltPick = Button(this).apply {
+            text = "📦 Built"
+            textSize = 10.5f
+            isAllCaps = false
+            setPadding(ivDp(7), ivDp(2), ivDp(7), ivDp(2))
+            minWidth = 0
+            minimumWidth = 0
+            minHeight = 0
+            minimumHeight = 0
+            backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+            setTextColor(android.graphics.Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                ivDp(28)
+            ).apply { setMargins(0, 0, ivDp(4), 0) }
+        }
+        val btnSaveBuilt = Button(this).apply {
+            text = "💾 Save"
+            textSize = 10.5f
+            isAllCaps = false
+            setPadding(ivDp(7), ivDp(2), ivDp(7), ivDp(2))
+            minWidth = 0
+            minimumWidth = 0
+            minHeight = 0
+            minimumHeight = 0
+            backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            setTextColor(android.graphics.Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                ivDp(28)
+            ).apply { setMargins(0, 0, ivDp(4), 0) }
+        }
+
+        if (!enableBuiltControls) {
+            btnBuiltPick.visibility = android.view.View.GONE
+            btnSaveBuilt.visibility = android.view.View.GONE
+        }
+
+        val controller = IvTripletController(
+            rootView = root,
+            atkEdit = atkEdit,
+            defEdit = defEdit,
+            staEdit = staEdit,
+            btnBestBuddy = btnBestBuddy,
+            tvReadout = tvReadout,
+            btnBuiltPick = btnBuiltPick,
+            btnSaveBuilt = btnSaveBuilt,
+            speciesNameProvider = speciesNameProvider,
+            leagueProvider = leagueProvider,
+            linkedCpEdit = linkedCpEdit,
+            movesProvider = movesProvider,
+            onMovesPickedFromBuilt = onMovesPickedFromBuilt,
+            onChanged = onChanged
+        )
+        controller.isBestBuddy = initialIsBestBuddy
+        controller.builtPokemonId = initialBuiltPokemonId
+
+        if (showPresetChips || enableBuiltControls) {
+            val actionScroll = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, ivDp(3), 0, 0) }
+            }
+            val chipRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            fun addPresetChip(title: String, mode: IvMatrixEngine.IvPresetMode) {
+                val b = Button(this).apply {
+                    text = title
+                    textSize = 10f
+                    isAllCaps = false
+                    setPadding(ivDp(7), ivDp(2), ivDp(7), ivDp(2))
+                    minWidth = 0
+                    minimumWidth = 0
+                    minHeight = 0
+                    minimumHeight = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                    setTextColor(theme.primaryTextColor)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ivDp(28)
+                    ).apply { setMargins(0, 0, ivDp(4), 0) }
+                    setOnClickListener {
+                        val sp = speciesNameProvider().trim()
+                        if (sp.isEmpty()) {
+                            Toast.makeText(this@MainActivity, "Select a Pokémon first.", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        val lg = leagueProvider()
+                        val spread = IvMatrixEngine.getPresetIvSpread(sp, lg, mode, controller.isBestBuddy)
+                        if (spread != null) {
+                            controller.setValues(spread.atkIv, spread.defIv, spread.staIv, controller.isBestBuddy, null, true)
+                        }
+                    }
+                }
+                chipRow.addView(b)
+            }
+            if (showPresetChips) {
+                addPresetChip("🏆 R1", IvMatrixEngine.IvPresetMode.RANK_1)
+                addPresetChip("📊 Def", IvMatrixEngine.IvPresetMode.PVPOKE_DEFAULT)
+                addPresetChip("⚔️ Atk", IvMatrixEngine.IvPresetMode.MAX_ATK)
+                addPresetChip("💯 15", IvMatrixEngine.IvPresetMode.HUNDO)
+            }
+            if (enableBuiltControls) {
+                chipRow.addView(btnBuiltPick)
+                chipRow.addView(btnSaveBuilt)
+            }
+            actionScroll.addView(chipRow)
+            root.addView(actionScroll)
+        }
+
+        fun bindStatInput(edit: EditText, nextEdit: EditText?, dropBtn: Button, statTitle: String) {
+            edit.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if (controller.isProgrammaticUpdate) return
+                    val txt = s?.toString()?.trim().orEmpty()
+                    if (txt.isEmpty()) {
+                        controller.builtPokemonId = null
+                        controller.updateReadoutAndCp(updateLinkedCp = true)
+                        onChanged?.invoke(controller.getComputedDetails())
+                        return
+                    }
+                    val num = txt.toIntOrNull()
+                    if (num != null && num > 15) {
+                        controller.isProgrammaticUpdate = true
+                        edit.setText("15")
+                        edit.setSelection(2)
+                        controller.isProgrammaticUpdate = false
+                    }
+                    controller.builtPokemonId = null
+                    controller.updateReadoutAndCp(updateLinkedCp = true)
+                    onChanged?.invoke(controller.getComputedDetails())
+                    if (nextEdit != null && (txt.length >= 2 || (txt.length == 1 && txt[0] in '2'..'9'))) {
+                        nextEdit.requestFocus()
+                        nextEdit.selectAll()
+                    }
+                }
+            })
+            edit.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus && edit.text?.toString()?.trim().isNullOrEmpty()) {
+                    controller.isProgrammaticUpdate = true
+                    edit.setText("0")
+                    controller.isProgrammaticUpdate = false
+                    controller.updateReadoutAndCp(updateLinkedCp = true)
+                }
+            }
+            dropBtn.setOnClickListener {
+                val options = (15 downTo 0).map { v -> if (v == 15) "15 (Max)" else v.toString() }.toTypedArray()
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Select $statTitle IV (0–15)")
+                    .setItems(options) { _, idx ->
+                        val picked = 15 - idx
+                        val cur = controller.getTriplet()
+                        when (edit) {
+                            atkEdit -> controller.setValues(picked, cur.second, cur.third, controller.isBestBuddy, null, true)
+                            defEdit -> controller.setValues(cur.first, picked, cur.third, controller.isBestBuddy, null, true)
+                            staEdit -> controller.setValues(cur.first, cur.second, picked, controller.isBestBuddy, null, true)
+                        }
+                    }
+                    .show()
+            }
+        }
+
+        bindStatInput(atkEdit, defEdit, atkDrop, "ATK")
+        bindStatInput(defEdit, staEdit, defDrop, "DEF")
+        bindStatInput(staEdit, null, staDrop, "STA")
+
+        btnBestBuddy.setOnClickListener {
+            val cur = controller.getTriplet()
+            controller.setValues(cur.first, cur.second, cur.third, !controller.isBestBuddy, null, true)
+        }
+
+        btnBuiltPick.setOnClickListener {
+            val sp = speciesNameProvider().trim()
+            val lg = leagueProvider()
+            val fullRoster = loadBuiltPokemonRoster()
+            val matching = if (sp.isNotEmpty()) {
+                IvMatrixEngine.findMatchingBuiltPokemon(fullRoster, sp, lg)
+            } else emptyList()
+            val cap = OverlayService.getLeagueCpCapStatic(lg, prefs)
+            val leagueList = fullRoster.filter { it.cpCap == cap || it.league.equals(lg, ignoreCase = true) }
+            val candidates = if (matching.isNotEmpty()) matching else leagueList.ifEmpty { fullRoster }
+            if (candidates.isEmpty()) {
+                Toast.makeText(this@MainActivity, "No Built Pokémon saved yet. Tap 💾 Save or open ⚖️ IVs -> Built Roster.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            fun openPickerDialog(entries: List<BuiltPokemonEntry>, title: String) {
+                val rows = entries.map { e ->
+                    val nameStr = IvMatrixEngine.formatSpeciesDisplayName(e.speciesName, e.isShadow)
+                    val lbl = e.label?.takeIf { it.isNotBlank() }?.let { " [$it]" } ?: ""
+                    val bb = if (e.isBestBuddy) " 🎀BB" else ""
+                    val rStr = e.statProductRank?.let { " • R#$it" } ?: ""
+                    val mv = listOf(e.fastMove, e.chargedMove1, e.chargedMove2).filter { it.isNotBlank() }.joinToString(" / ")
+                    "$nameStr$lbl — ${e.atkIv}/${e.defIv}/${e.staIv} (CP ${e.cp}$bb$rStr)\n   $mv"
+                }.toTypedArray()
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(title)
+                    .setItems(rows) { _, which ->
+                        val chosen = entries[which]
+                        controller.setValues(chosen.atkIv, chosen.defIv, chosen.staIv, chosen.isBestBuddy, chosen.id, true)
+                        onMovesPickedFromBuilt?.invoke(
+                            chosen.fastMove,
+                            chosen.chargedMove1,
+                            chosen.chargedMove2,
+                            IvMatrixEngine.formatSpeciesDisplayName(chosen.speciesName, chosen.isShadow),
+                            chosen.cp
+                        )
+                    }
+                    .apply {
+                        if (matching.isNotEmpty() && fullRoster.size > matching.size) {
+                            setNeutralButton("Show All (${fullRoster.size})") { _, _ ->
+                                openPickerDialog(fullRoster, "All Built Pokémon (${fullRoster.size})")
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            val titleText = if (matching.isNotEmpty()) {
+                "📦 Built Copies: $sp (${matching.size})"
+            } else {
+                "📦 Built Pokémon (${candidates.size})"
+            }
+            openPickerDialog(candidates, titleText)
+        }
+
+        btnSaveBuilt.setOnClickListener {
+            val sp = speciesNameProvider().trim()
+            if (sp.isEmpty()) {
+                Toast.makeText(this@MainActivity, "Enter a Pokémon name first.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val lg = leagueProvider()
+            val (a, d, s) = controller.getTriplet()
+            val details = controller.getComputedDetails()
+            val (cleanName, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(sp)
+            val meta = OverlayService.resolveRecommendedMovesForSpecies(sp, lg)
+            val mvTriple = movesProvider?.invoke() ?: Triple(
+                meta?.defaultFastMove.orEmpty(),
+                meta?.chargedMove1.orEmpty(),
+                meta?.chargedMove2.orEmpty()
+            )
+            val editLbl = EditText(this@MainActivity).apply {
+                hint = "Optional label (e.g. Rank #1, Shiny, Atk-Weight)"
+                setText(if ((details?.rank ?: 999) == 1) "Rank #1" else "")
+                setSingleLine(true)
+            }
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("💾 Save to Built Roster")
+                .setMessage(
+                    "${IvMatrixEngine.formatSpeciesDisplayName(cleanName, isSh)} ($lg)\n" +
+                        "IVs: $a/$d/$s  •  CP ${details?.cp ?: 1500}  •  Lv ${formatIvLevelStr(details?.level ?: 25.0)}" +
+                        if (controller.isBestBuddy) " 🎀BB" else ""
+                )
+                .setView(editLbl)
+                .setPositiveButton("Save Built") { _, _ ->
+                    val entry = BuiltPokemonEntry(
+                        id = controller.builtPokemonId ?: UUID.randomUUID().toString(),
+                        speciesName = cleanName,
+                        isShadow = isSh,
+                        atkIv = a,
+                        defIv = d,
+                        staIv = s,
+                        ivs = "$a/$d/$s",
+                        league = lg,
+                        cpCap = OverlayService.getLeagueCpCapStatic(lg, prefs),
+                        cp = details?.cp ?: 1500,
+                        level = details?.level ?: 25.0,
+                        isBestBuddy = controller.isBestBuddy,
+                        fastMove = mvTriple.first,
+                        chargedMove1 = mvTriple.second,
+                        chargedMove2 = mvTriple.third,
+                        plusMoveLevel = 4,
+                        label = editLbl.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+                        statProductRank = details?.rank,
+                        statProductPct = details?.pctOfRank1,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    val saved = upsertBuiltPokemonEntry(entry, triggerSync = true)
+                    controller.builtPokemonId = saved.id
+                    controller.refreshBuiltBadge()
+                    if (currentActivePage == "ivs") refreshIvLabPageUi()
+                    Toast.makeText(this@MainActivity, "✅ Saved ${saved.speciesName} (${saved.ivs}) to Built Roster!", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        controller.updateReadoutAndCp(updateLinkedCp = linkedCpEdit != null && linkedCpEdit.text.isNullOrBlank())
+        return controller
+    }
+
+    // ==================== ⚖️ IV LAB (#6 MULTI-IV MATRIX & #7 BUILT ROSTER) ====================
+
+    private var ivLabActiveSubTab: String = "matrix"
+    private var ivLabSpeciesName: String = "Azumarill"
+    private val ivLabSelectedLeagues: MutableList<String> = mutableListOf("GREAT LEAGUE")
+    private var ivLabOppPoolMode: IvMatrixEngine.OppMetaPoolMode = IvMatrixEngine.OppMetaPoolMode.PVPOKE_TOP_100
+    private var ivLabOppIvBaseline: IvMatrixEngine.OppIvBaselineMode = IvMatrixEngine.OppIvBaselineMode.PVPOKE_DEFAULT
+    private var ivLabBaselineCompareId: String = IvMatrixEngine.PINNED_RANK1_CANDIDATE_ID
+    private val ivLabCandidates: MutableList<IvMatrixEngine.IvCandidateConfig> = mutableListOf()
+    private var ivLabLastResult: IvMatrixEngine.MultiIvMatrixResult? = null
+    private var ivLabExpandedCandidateKey: String? = null
+    private var ivLabBuiltLeagueFilter: String = "ALL"
+    private var ivLabBuiltSearchQuery: String = ""
+    private var ivLabIsRunning: Boolean = false
+
+    private fun ensureIvLabDefaultCandidates() {
+        if (ivLabCandidates.isNotEmpty()) return
+        val lg = ivLabSelectedLeagues.firstOrNull() ?: "GREAT LEAGUE"
+        val (cleanSp, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(ivLabSpeciesName)
+        val meta = OverlayService.resolveRecommendedMovesForSpecies(ivLabSpeciesName, lg)
+        val fast = meta?.defaultFastMove.orEmpty()
+        val c1 = meta?.chargedMove1.orEmpty()
+        val c2 = meta?.chargedMove2.orEmpty()
+        val defSpread = IvMatrixEngine.getPresetIvSpread(cleanSp, lg, IvMatrixEngine.IvPresetMode.PVPOKE_DEFAULT, false)
+        val atkSpread = IvMatrixEngine.getPresetIvSpread(cleanSp, lg, IvMatrixEngine.IvPresetMode.MAX_ATK, false)
+        ivLabCandidates.add(
+            IvMatrixEngine.IvCandidateConfig(
+                id = UUID.randomUUID().toString(),
+                label = "PvPoke Default",
+                speciesName = cleanSp,
+                isShadow = isSh,
+                atkIv = defSpread?.atkIv ?: 1,
+                defIv = defSpread?.defIv ?: 15,
+                staIv = defSpread?.staIv ?: 15,
+                isBestBuddy = false,
+                fastMove = fast,
+                chargedMove1 = c1,
+                chargedMove2 = c2
+            )
+        )
+        ivLabCandidates.add(
+            IvMatrixEngine.IvCandidateConfig(
+                id = UUID.randomUUID().toString(),
+                label = "Attack-Weight",
+                speciesName = cleanSp,
+                isShadow = isSh,
+                atkIv = atkSpread?.atkIv ?: 15,
+                defIv = atkSpread?.defIv ?: 0,
+                staIv = atkSpread?.staIv ?: 0,
+                isBestBuddy = false,
+                fastMove = fast,
+                chargedMove1 = c1,
+                chargedMove2 = c2
+            )
+        )
+    }
+
+    private fun updateIvLabCandidatesForNewSpecies(rawSpecies: String) {
+        ivLabSpeciesName = rawSpecies.trim().ifEmpty { "Azumarill" }
+        val lg = ivLabSelectedLeagues.firstOrNull() ?: "GREAT LEAGUE"
+        val (cleanSp, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(ivLabSpeciesName)
+        val meta = OverlayService.resolveRecommendedMovesForSpecies(ivLabSpeciesName, lg)
+        val fast = meta?.defaultFastMove.orEmpty()
+        val c1 = meta?.chargedMove1.orEmpty()
+        val c2 = meta?.chargedMove2.orEmpty()
+        for (i in ivLabCandidates.indices) {
+            val c = ivLabCandidates[i]
+            val spread = if (i == 0) {
+                IvMatrixEngine.getPresetIvSpread(cleanSp, lg, IvMatrixEngine.IvPresetMode.PVPOKE_DEFAULT, c.isBestBuddy)
+            } else null
+            ivLabCandidates[i] = c.copy(
+                speciesName = cleanSp,
+                isShadow = isSh,
+                atkIv = spread?.atkIv ?: c.atkIv,
+                defIv = spread?.defIv ?: c.defIv,
+                staIv = spread?.staIv ?: c.staIv,
+                fastMove = fast.ifEmpty { c.fastMove },
+                chargedMove1 = c1.ifEmpty { c.chargedMove1 },
+                chargedMove2 = c2.ifEmpty { c.chargedMove2 }
+            )
+        }
+        ivLabLastResult = null
+        ivLabExpandedCandidateKey = null
+    }
+
+    private fun showIvLabUpgradePrompt(title: String, message: String, stripeUrl: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("💳 Upgrade Membership") { _, _ -> openCheckoutUrl(stripeUrl) }
+            .setNegativeButton("Not Now", null)
+            .show()
+    }
+
+    private fun refreshIvLabPageUi() {
+        val pageRoot = findViewById<LinearLayout?>(R.id.page_iv_lab) ?: return
+        val tvTitle = findViewById<TextView?>(R.id.tv_iv_lab_title) ?: return
+        val btnSubMatrix = findViewById<Button?>(R.id.btn_iv_sub_matrix) ?: return
+        val btnSubBuilt = findViewById<Button?>(R.id.btn_iv_sub_built) ?: return
+        val container = findViewById<LinearLayout?>(R.id.container_iv_lab_content) ?: return
+
+        val theme = getActiveAppTheme()
+        pageRoot.setBackgroundColor(theme.bgColor)
+        tvTitle.setTextColor(theme.primaryTextColor)
+
+        val roster = loadBuiltPokemonRoster()
+        btnSubMatrix.text = "⚖️ Multi-IV Matrix"
+        btnSubBuilt.text = "📦 Built Roster (${roster.size})"
+
+        btnSubMatrix.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (ivLabActiveSubTab == "matrix") theme.buttonAccentColor else theme.elevatedColor
+        )
+        btnSubMatrix.setTextColor(if (ivLabActiveSubTab == "matrix") android.graphics.Color.WHITE else theme.secondaryTextColor)
+
+        btnSubBuilt.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (ivLabActiveSubTab == "built") theme.buttonAccentColor else theme.elevatedColor
+        )
+        btnSubBuilt.setTextColor(if (ivLabActiveSubTab == "built") android.graphics.Color.WHITE else theme.secondaryTextColor)
+
+        btnSubMatrix.setOnClickListener {
+            if (ivLabActiveSubTab != "matrix") {
+                ivLabActiveSubTab = "matrix"
+                refreshIvLabPageUi()
+            }
+        }
+        btnSubBuilt.setOnClickListener {
+            if (ivLabActiveSubTab != "built") {
+                ivLabActiveSubTab = "built"
+                refreshIvLabPageUi()
+            }
+        }
+
+        container.removeAllViews()
+        if (ivLabActiveSubTab == "built") {
+            renderIvLabBuiltRosterSubTab(container, roster, theme)
+        } else {
+            ensureIvLabDefaultCandidates()
+            renderIvLabMatrixSubTab(container, roster, theme)
+        }
+    }
+
+    private fun openIvLabMovePicker(
+        speciesDisplay: String,
+        league: String,
+        isFast: Boolean,
+        currentMove: String,
+        onPicked: (String) -> Unit
+    ) {
+        val (fastPool, chargedPool) = OverlayService.getAvailableMovePoolForSpeciesStatic(speciesDisplay, league)
+        val rawPool = (if (isFast) fastPool else chargedPool).distinct()
+        val fullPool = if (currentMove.isNotBlank() && rawPool.none { it.equals(currentMove, ignoreCase = true) }) {
+            listOf(currentMove) + rawPool
+        } else rawPool
+        if (fullPool.isEmpty()) {
+            Toast.makeText(this, "No moves found for $speciesDisplay", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val items = fullPool.map { if (it.equals(currentMove, ignoreCase = true)) "✓ $it" else it }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(if (isFast) "Select Fast Move" else "Select Charged Move")
+            .setItems(items) { _, idx -> onPicked(fullPool[idx]) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun renderIvLabMatrixSubTab(
+        container: LinearLayout,
+        roster: List<BuiltPokemonEntry>,
+        theme: AppThemePalette
+    ) {
+        val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
+        val primaryLeague = ivLabSelectedLeagues.firstOrNull() ?: "GREAT LEAGUE"
+
+        // 1. Species Picker + Quick Load Built Specimen Card
+        val speciesCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ivDp(12), ivDp(10), ivDp(12), ivDp(10))
+            background = makeIvCardBg(theme.surfaceColor, theme.overlayBorderColor, radiusDp = 10)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, ivDp(10)) }
+        }
+        speciesCard.addView(TextView(this).apply {
+            text = "1️⃣ SPECIES & OWNED BUILT SPECIMENS"
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(theme.accentColor)
+        })
+        val spInputRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(6), 0, 0) }
+        }
+        val acSpecies = AutoCompleteTextView(this).apply {
+            setText(ivLabSpeciesName)
+            hint = "Search Pokémon (e.g. Azumarill, Shadow Feraligatr)..."
+            textSize = 13.5f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(theme.primaryTextColor)
+            setHintTextColor(theme.secondaryTextColor)
+            threshold = 1
+            background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 8)
+            setPadding(ivDp(10), ivDp(8), ivDp(10), ivDp(8))
+            setAdapter(PokemonAutocompleteAdapter { ivLabSelectedLeagues.firstOrNull() ?: "GREAT LEAGUE" })
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(0, 0, ivDp(6), 0)
+            }
+            setOnItemClickListener { parent, _, pos, _ ->
+                val chosen = parent.getItemAtPosition(pos) as? OverlayService.Companion.PokemonAutocompleteSuggestion ?: return@setOnItemClickListener
+                setText(chosen.name, false)
+                updateIvLabCandidatesForNewSpecies(chosen.name)
+                refreshIvLabPageUi()
+            }
+        }
+        val btnApplySpecies = Button(this).apply {
+            text = "Set"
+            textSize = 11.5f
+            isAllCaps = false
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            setTextColor(android.graphics.Color.WHITE)
+            setPadding(ivDp(12), ivDp(6), ivDp(12), ivDp(6))
+            minWidth = 0
+            minimumWidth = 0
+            setOnClickListener {
+                updateIvLabCandidatesForNewSpecies(acSpecies.text?.toString().orEmpty())
+                refreshIvLabPageUi()
+            }
+        }
+        spInputRow.addView(acSpecies)
+        spInputRow.addView(btnApplySpecies)
+        speciesCard.addView(spInputRow)
+
+        val ownedMatches = IvMatrixEngine.findMatchingBuiltPokemon(roster, ivLabSpeciesName, primaryLeague)
+        if (ownedMatches.isNotEmpty()) {
+            val builtBar = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, ivDp(6), 0, 0) }
+            }
+            val builtChips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (bEntry in ownedMatches) {
+                val lbl = bEntry.label?.takeIf { it.isNotBlank() } ?: "Built"
+                val bb = if (bEntry.isBestBuddy) " 🎀" else ""
+                builtChips.addView(Button(this).apply {
+                    text = "+ Load $lbl (${bEntry.ivs}$bb)"
+                    textSize = 10.5f
+                    isAllCaps = false
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+                    setTextColor(android.graphics.Color.WHITE)
+                    setPadding(ivDp(8), ivDp(2), ivDp(8), ivDp(2))
+                    minWidth = 0
+                    minimumWidth = 0
+                    minHeight = 0
+                    minimumHeight = 0
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ivDp(30)
+                    ).apply { setMargins(0, 0, ivDp(6), 0) }
+                    setOnClickListener {
+                        if (ivLabCandidates.size >= 6) {
+                            Toast.makeText(this@MainActivity, "Max 6 candidates supported.", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        ivLabCandidates.add(
+                            0,
+                            IvMatrixEngine.IvCandidateConfig(
+                                id = UUID.randomUUID().toString(),
+                                label = bEntry.label?.takeIf { it.isNotBlank() } ?: "Owned (${bEntry.ivs})",
+                                speciesName = bEntry.speciesName,
+                                isShadow = bEntry.isShadow,
+                                atkIv = bEntry.atkIv,
+                                defIv = bEntry.defIv,
+                                staIv = bEntry.staIv,
+                                isBestBuddy = bEntry.isBestBuddy,
+                                fastMove = bEntry.fastMove,
+                                chargedMove1 = bEntry.chargedMove1,
+                                chargedMove2 = bEntry.chargedMove2
+                            )
+                        )
+                        ivLabLastResult = null
+                        refreshIvLabPageUi()
+                    }
+                })
+            }
+            builtBar.addView(builtChips)
+            speciesCard.addView(builtBar)
+        }
+        container.addView(speciesCard)
+
+        // 2. Multi-Select Leagues & Meta Pool Config Card
+        val cfgCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ivDp(12), ivDp(10), ivDp(12), ivDp(10))
+            background = makeIvCardBg(theme.surfaceColor, theme.overlayBorderColor, radiusDp = 10)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, ivDp(10)) }
+        }
+        cfgCard.addView(TextView(this).apply {
+            text = "2️⃣ LEAGUES (MULTI-SELECT) & OPPONENT BASELINE"
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(theme.accentColor)
+        })
+
+        val coreLeagues = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
+        val cupItems = OverlayService.getLimitedMetaCatalogStatic(prefs)
+            .filter { !OverlayService.isExpiredLimitedMetaStatic(it) }
+            .map { it.leagueKey }
+            .filter { k -> coreLeagues.none { it.equals(k, ignoreCase = true) } }
+            .distinct()
+            .take(6)
+
+        val leagueScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(6), 0, 0) }
+        }
+        val leagueRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (lg in coreLeagues + cupItems) {
+            val isCup = coreLeagues.none { it.equals(lg, ignoreCase = true) }
+            val locked = isCup && tier == "free"
+            val isSelected = ivLabSelectedLeagues.any { it.equals(lg, ignoreCase = true) }
+            val shortName = when (lg) {
+                "GREAT LEAGUE" -> "GL (≤1500)"
+                "ULTRA LEAGUE" -> "UL (≤2500)"
+                "MASTER LEAGUE" -> "ML (Open)"
+                else -> lg
+            }
+            leagueRow.addView(Button(this).apply {
+                text = (if (locked) "🔒 " else if (isSelected) "✓ " else "") + shortName
+                textSize = 10.5f
+                isAllCaps = false
+                setTypeface(null, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (isSelected) theme.buttonAccentColor else theme.elevatedColor
+                )
+                setTextColor(if (isSelected) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(10), ivDp(3), ivDp(10), ivDp(3))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ivDp(32)
+                ).apply { setMargins(0, 0, ivDp(6), 0) }
+                setOnClickListener {
+                    if (locked) {
+                        showIvLabUpgradePrompt(
+                            "🏅 Supporter Feature",
+                            "Great, Ultra & Master League IV evaluations are 100% Free forever!\n\nUnlock Specialty & Limited Cups in Multi-IV Matrix with a one-time \$2 Lifetime Supporter pass (or Pro/VIP).",
+                            OverlayService.STRIPE_URL_SUPPORTER
+                        )
+                        return@setOnClickListener
+                    }
+                    if (isSelected) {
+                        if (ivLabSelectedLeagues.size > 1) {
+                            ivLabSelectedLeagues.removeAll { it.equals(lg, ignoreCase = true) }
+                        } else {
+                            Toast.makeText(this@MainActivity, "Keep at least 1 league selected.", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        ivLabSelectedLeagues.add(lg)
+                    }
+                    ivLabLastResult = null
+                    refreshIvLabPageUi()
+                }
+            })
+        }
+        leagueScroll.addView(leagueRow)
+        cfgCard.addView(leagueScroll)
+
+        // Opponent Meta Pool
+        cfgCard.addView(TextView(this).apply {
+            text = "Opponent Meta Pool"
+            textSize = 10.5f
+            setTextColor(theme.secondaryTextColor)
+            setPadding(0, ivDp(8), 0, ivDp(3))
+        })
+        val poolRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val isProPlus = tier == "pro" || tier == "vip"
+        for ((mode, label, locked) in listOf(
+            Triple(IvMatrixEngine.OppMetaPoolMode.PVPOKE_TOP_100, "📊 PvPoke Top 100", false),
+            Triple(IvMatrixEngine.OppMetaPoolMode.BLENDED_ELO_META, "🎯 Blended ELO Meta", !isProPlus)
+        )) {
+            val active = ivLabOppPoolMode == mode
+            poolRow.addView(Button(this).apply {
+                text = (if (locked) "🔒 " else "") + label
+                textSize = 11f
+                isAllCaps = false
+                setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (active) theme.buttonAccentColor else theme.elevatedColor
+                )
+                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(8), ivDp(4), ivDp(8), ivDp(4))
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(0, ivDp(34), 1f).apply { setMargins(0, 0, ivDp(6), 0) }
+                setOnClickListener {
+                    if (locked) {
+                        showIvLabUpgradePrompt(
+                            "🏆 Legend Pro Feature",
+                            "Evaluating your IVs against PvPoke Top 100 is 100% Free!\n\nSimulating against your live Blended Personal & ELO Meta requires Legend Pro or VIP.",
+                            OverlayService.STRIPE_URL_PRO_SEASON
+                        )
+                        return@setOnClickListener
+                    }
+                    ivLabOppPoolMode = mode
+                    ivLabLastResult = null
+                    refreshIvLabPageUi()
+                }
+            })
+        }
+        cfgCard.addView(poolRow)
+
+        // Opponent IV Baseline
+        cfgCard.addView(TextView(this).apply {
+            text = "Opponent Spread Baseline"
+            textSize = 10.5f
+            setTextColor(theme.secondaryTextColor)
+            setPadding(0, ivDp(8), 0, ivDp(3))
+        })
+        val oppIvRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((mode, label) in listOf(
+            IvMatrixEngine.OppIvBaselineMode.PVPOKE_DEFAULT to "📊 PvPoke Def",
+            IvMatrixEngine.OppIvBaselineMode.RANK_1 to "🏆 Rank #1",
+            IvMatrixEngine.OppIvBaselineMode.MAX_ATK to "⚔️ Max Atk"
+        )) {
+            val active = ivLabOppIvBaseline == mode
+            oppIvRow.addView(Button(this).apply {
+                text = label
+                textSize = 10.5f
+                isAllCaps = false
+                setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (active) theme.accentColor else theme.elevatedColor
+                )
+                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(4), ivDp(4), ivDp(4), ivDp(4))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(0, ivDp(32), 1f).apply { setMargins(0, 0, ivDp(4), 0) }
+                setOnClickListener {
+                    ivLabOppIvBaseline = mode
+                    ivLabLastResult = null
+                    refreshIvLabPageUi()
+                }
+            })
+        }
+        cfgCard.addView(oppIvRow)
+
+        // Compare Against Switcher
+        cfgCard.addView(TextView(this).apply {
+            text = "Compare Breakpoints & Flips Against:"
+            textSize = 10.5f
+            setTextColor(theme.secondaryTextColor)
+            setPadding(0, ivDp(8), 0, ivDp(3))
+        })
+        val cmpScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val cmpRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val compareTargets = mutableListOf(IvMatrixEngine.PINNED_RANK1_CANDIDATE_ID to "🏆 Rank #1 (Pinned)")
+        ivLabCandidates.forEachIndexed { idx, c ->
+            compareTargets.add(c.id to "${c.label.ifBlank { "Cand #${idx + 1}" }} (${c.atkIv}/${c.defIv}/${c.staIv})")
+        }
+        if (compareTargets.none { it.first == ivLabBaselineCompareId }) {
+            ivLabBaselineCompareId = IvMatrixEngine.PINNED_RANK1_CANDIDATE_ID
+        }
+        for ((cid, clabel) in compareTargets) {
+            val active = ivLabBaselineCompareId == cid
+            cmpRow.addView(Button(this).apply {
+                text = (if (active) "✓ " else "") + clabel
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (active) theme.secondaryAccentColor else theme.elevatedColor
+                )
+                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ivDp(30)
+                ).apply { setMargins(0, 0, ivDp(6), 0) }
+                setOnClickListener {
+                    ivLabBaselineCompareId = cid
+                    ivLabLastResult = null
+                    refreshIvLabPageUi()
+                }
+            })
+        }
+        cmpScroll.addView(cmpRow)
+        cfgCard.addView(cmpScroll)
+        container.addView(cfgCard)
+
+        // 3. Pinned Rank #1 Benchmark Banner + Editable Candidates
+        val firstCandBb = ivLabCandidates.firstOrNull()?.isBestBuddy ?: false
+        val pinnedRank1 = IvMatrixEngine.getPresetIvSpread(
+            speciesName = ivLabSpeciesName,
+            league = primaryLeague,
+            preset = IvMatrixEngine.IvPresetMode.RANK_1,
+            isBestBuddy = firstCandBb
+        )
+        if (pinnedRank1 != null) {
+            val rank1Banner = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(ivDp(12), ivDp(9), ivDp(12), ivDp(9))
+                background = makeIvCardBg(theme.innerCardColor, theme.accentColor, radiusDp = 10, strokeDp = 2)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, ivDp(10)) }
+            }
+            rank1Banner.addView(TextView(this).apply {
+                text = "🏆 PINNED BENCHMARK: RANK #1 STAT PRODUCT ($primaryLeague)"
+                textSize = 10.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.accentColor)
+            })
+            rank1Banner.addView(TextView(this).apply {
+                text = "${ivLabSpeciesName} — ${pinnedRank1.ivs}  •  CP ${pinnedRank1.cp}  •  Lv ${formatIvLevelStr(pinnedRank1.level)}" +
+                    if (firstCandBb) " 🎀BB" else ""
+                textSize = 12.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.primaryTextColor)
+                setPadding(0, ivDp(2), 0, 0)
+            })
+            container.addView(rank1Banner)
+        }
+
+        // Candidate Cards
+        ivLabCandidates.forEachIndexed { idx, cand ->
+            val candCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(ivDp(10), ivDp(9), ivDp(10), ivDp(9))
+                background = makeIvCardBg(theme.surfaceColor, theme.overlayBorderColor, radiusDp = 10)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, ivDp(8)) }
+            }
+            val headRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            val editLabel = EditText(this).apply {
+                setText(cand.label)
+                hint = "Candidate #${idx + 1}"
+                textSize = 12.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.primaryTextColor)
+                setHintTextColor(theme.secondaryTextColor)
+                setSingleLine(true)
+                background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 6)
+                setPadding(ivDp(8), ivDp(4), ivDp(8), ivDp(4))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(0, 0, ivDp(6), 0)
+                }
+                addTextChangedListener(object : android.text.TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: android.text.Editable?) {
+                        val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                        if (cIdx >= 0) {
+                            ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(label = s?.toString()?.trim().orEmpty())
+                        }
+                    }
+                })
+            }
+            val btnShadow = Button(this).apply {
+                text = if (cand.isShadow) "🟣 Shadow ON" else "Shadow"
+                textSize = 10.5f
+                isAllCaps = false
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (cand.isShadow) android.graphics.Color.parseColor("#6D28D9") else theme.elevatedColor
+                )
+                setTextColor(if (cand.isShadow) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(8), ivDp(2), ivDp(8), ivDp(2))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ivDp(30)
+                ).apply { setMargins(0, 0, ivDp(4), 0) }
+                setOnClickListener {
+                    val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                    if (cIdx >= 0) {
+                        ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(isShadow = !ivLabCandidates[cIdx].isShadow)
+                        ivLabLastResult = null
+                        refreshIvLabPageUi()
+                    }
+                }
+            }
+            headRow.addView(editLabel)
+            headRow.addView(btnShadow)
+            if (ivLabCandidates.size > 1) {
+                headRow.addView(Button(this).apply {
+                    text = "✕"
+                    textSize = 11f
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#7F1D1D"))
+                    setTextColor(android.graphics.Color.WHITE)
+                    setPadding(0, 0, 0, 0)
+                    minWidth = 0
+                    minimumWidth = 0
+                    minHeight = 0
+                    minimumHeight = 0
+                    layoutParams = LinearLayout.LayoutParams(ivDp(30), ivDp(30))
+                    setOnClickListener {
+                        ivLabCandidates.removeAll { it.id == cand.id }
+                        if (ivLabBaselineCompareId == cand.id) {
+                            ivLabBaselineCompareId = IvMatrixEngine.PINNED_RANK1_CANDIDATE_ID
+                        }
+                        ivLabLastResult = null
+                        refreshIvLabPageUi()
+                    }
+                })
+            }
+            candCard.addView(headRow)
+
+            val effSpecies = IvMatrixEngine.formatSpeciesDisplayName(cand.speciesName, cand.isShadow)
+            lateinit var ivCtrl: IvTripletController
+            ivCtrl = createIvTripletControlView(
+                speciesNameProvider = {
+                    val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                    if (cIdx >= 0) IvMatrixEngine.formatSpeciesDisplayName(ivLabCandidates[cIdx].speciesName, ivLabCandidates[cIdx].isShadow)
+                    else effSpecies
+                },
+                leagueProvider = { ivLabSelectedLeagues.firstOrNull() ?: "GREAT LEAGUE" },
+                initialIvs = "${cand.atkIv}/${cand.defIv}/${cand.staIv}",
+                initialIsBestBuddy = cand.isBestBuddy,
+                movesProvider = {
+                    val cur = ivLabCandidates.firstOrNull { it.id == cand.id } ?: cand
+                    Triple(cur.fastMove, cur.chargedMove1, cur.chargedMove2)
+                },
+                onMovesPickedFromBuilt = { f, c1, c2, _, _ ->
+                    val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                    if (cIdx >= 0) {
+                        val (na, nd, ns) = ivCtrl.getTriplet()
+                        ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(
+                            atkIv = na,
+                            defIv = nd,
+                            staIv = ns,
+                            isBestBuddy = ivCtrl.isBestBuddy,
+                            fastMove = f.ifBlank { ivLabCandidates[cIdx].fastMove },
+                            chargedMove1 = c1.ifBlank { ivLabCandidates[cIdx].chargedMove1 },
+                            chargedMove2 = c2.ifBlank { ivLabCandidates[cIdx].chargedMove2 }
+                        )
+                        ivLabLastResult = null
+                        refreshIvLabPageUi()
+                    }
+                },
+                enableBuiltControls = true,
+                showPresetChips = true,
+                onChanged = {
+                    val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                    if (cIdx >= 0) {
+                        val (na, nd, ns) = ivCtrl.getTriplet()
+                        ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(
+                            atkIv = na,
+                            defIv = nd,
+                            staIv = ns,
+                            isBestBuddy = ivCtrl.isBestBuddy
+                        )
+                        ivLabLastResult = null
+                    }
+                }
+            )
+            candCard.addView(ivCtrl.rootView)
+
+            // Moveset pickers row
+            val movesRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, ivDp(4), 0, 0) }
+            }
+            fun makeMoveBtn(prefix: String, curMove: String, isFast: Boolean, onUpdated: (String) -> Unit): Button {
+                return Button(this).apply {
+                    text = "$prefix ${curMove.ifBlank { "Auto" }} ▾"
+                    textSize = 10f
+                    isAllCaps = false
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.bgColor)
+                    setTextColor(theme.primaryTextColor)
+                    setPadding(ivDp(6), ivDp(3), ivDp(6), ivDp(3))
+                    minWidth = 0
+                    minimumWidth = 0
+                    minHeight = 0
+                    minimumHeight = 0
+                    layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f).apply { setMargins(0, 0, ivDp(4), 0) }
+                    setOnClickListener {
+                        openIvLabMovePicker(effSpecies, primaryLeague, isFast, curMove) { picked ->
+                            onUpdated(picked)
+                            ivLabLastResult = null
+                            refreshIvLabPageUi()
+                        }
+                    }
+                }
+            }
+            movesRow.addView(makeMoveBtn("⚡", cand.fastMove, true) { mv ->
+                val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                if (cIdx >= 0) ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(fastMove = mv)
+            })
+            movesRow.addView(makeMoveBtn("1️⃣", cand.chargedMove1, false) { mv ->
+                val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                if (cIdx >= 0) ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(chargedMove1 = mv)
+            })
+            movesRow.addView(makeMoveBtn("2️⃣", cand.chargedMove2, false) { mv ->
+                val cIdx = ivLabCandidates.indexOfFirst { it.id == cand.id }
+                if (cIdx >= 0) ivLabCandidates[cIdx] = ivLabCandidates[cIdx].copy(chargedMove2 = mv)
+            })
+            candCard.addView(movesRow)
+            container.addView(candCard)
+        }
+
+        // Action Buttons Row: + Add Candidate & Run Simulation
+        val ctaRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(2), 0, ivDp(12)) }
+        }
+        ctaRow.addView(Button(this).apply {
+            text = "+ Add Spread"
+            textSize = 12f
+            isAllCaps = false
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            setTextColor(theme.primaryTextColor)
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(42), 0.9f).apply { setMargins(0, 0, ivDp(6), 0) }
+            setOnClickListener {
+                if (ivLabCandidates.size >= 6) {
+                    Toast.makeText(this@MainActivity, "Maximum 6 candidates at once.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val (cleanSp, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(ivLabSpeciesName)
+                val meta = OverlayService.resolveRecommendedMovesForSpecies(ivLabSpeciesName, primaryLeague)
+                val mode = when (ivLabCandidates.size % 3) {
+                    0 -> IvMatrixEngine.IvPresetMode.RANK_1
+                    1 -> IvMatrixEngine.IvPresetMode.HUNDO
+                    else -> IvMatrixEngine.IvPresetMode.MAX_ATK
+                }
+                val sp = IvMatrixEngine.getPresetIvSpread(cleanSp, primaryLeague, mode, false)
+                ivLabCandidates.add(
+                    IvMatrixEngine.IvCandidateConfig(
+                        id = UUID.randomUUID().toString(),
+                        label = "Candidate #${ivLabCandidates.size + 1}",
+                        speciesName = cleanSp,
+                        isShadow = isSh,
+                        atkIv = sp?.atkIv ?: 15,
+                        defIv = sp?.defIv ?: 15,
+                        staIv = sp?.staIv ?: 15,
+                        isBestBuddy = false,
+                        fastMove = meta?.defaultFastMove.orEmpty(),
+                        chargedMove1 = meta?.chargedMove1.orEmpty(),
+                        chargedMove2 = meta?.chargedMove2.orEmpty()
+                    )
+                )
+                ivLabLastResult = null
+                refreshIvLabPageUi()
+            }
+        })
+
+        ctaRow.addView(Button(this).apply {
+            text = if (ivLabIsRunning) "⏳ Simulating Top 100..." else "⚡ Run Multi-IV Matrix"
+            textSize = 12.5f
+            isAllCaps = false
+            isEnabled = !ivLabIsRunning
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            setTextColor(android.graphics.Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(42), 1.4f)
+            setOnClickListener {
+                val targetLeagues = ivLabSelectedLeagues.toList()
+                val snapshotCandidates = ivLabCandidates.toList()
+                val targetSpecies = ivLabSpeciesName
+                val poolMode = ivLabOppPoolMode
+                val oppIvMode = ivLabOppIvBaseline
+                val compareId = ivLabBaselineCompareId
+                ivLabIsRunning = true
+                refreshIvLabPageUi()
+                lifecycleScope.launch(Dispatchers.Default) {
+                    val allLogs = if (poolMode == IvMatrixEngine.OppMetaPoolMode.BLENDED_ELO_META) {
+                        val rawLogs = loadBattleLogs()
+                        targetLeagues.flatMap { lg -> getCurrentSeasonLogsForLeague(lg, rawLogs) }
+                    } else emptyList()
+                    val result = IvMatrixEngine.runMultiIvMatrixEvaluation(
+                        speciesName = targetSpecies,
+                        leagues = targetLeagues,
+                        candidates = snapshotCandidates,
+                        oppMetaPool = poolMode,
+                        oppIvBaseline = oppIvMode,
+                        baselineComparisonId = compareId,
+                        seasonLogs = allLogs,
+                        maxOpponents = 100
+                    )
+                    withContext(Dispatchers.Main) {
+                        ivLabIsRunning = false
+                        ivLabLastResult = result
+                        refreshIvLabPageUi()
+                    }
+                }
+            }
+        })
+        container.addView(ctaRow)
+
+        // 4. Simulation Results
+        val simRes = ivLabLastResult
+        if (simRes == null) {
+            container.addView(TextView(this).apply {
+                text = "Configure spreads above and tap ⚡ Run Multi-IV Matrix to evaluate 0v0 / 1v1 / 2v2 W-L-T, matchup flips, +1 fast breakpoints, -1 fast bulkpoints, and CMP flips against ${if (ivLabOppPoolMode == IvMatrixEngine.OppMetaPoolMode.BLENDED_ELO_META) "your Blended ELO Meta" else "PvPoke Top 100"}."
+                textSize = 11.5f
+                setTextColor(theme.secondaryTextColor)
+                setPadding(ivDp(6), ivDp(4), ivDp(6), ivDp(12))
+            })
+            return
+        }
+
+        for (leagueRes in simRes.leagues) {
+            val secHead = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(ivDp(10), ivDp(8), ivDp(10), ivDp(8))
+                background = makeIvCardBg(theme.elevatedColor, theme.accentColor, radiusDp = 8)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, ivDp(4), 0, ivDp(6)) }
+            }
+            secHead.addView(TextView(this).apply {
+                text = "📊 ${leagueRes.league}  •  ${leagueRes.opponentCount} Opponents"
+                textSize = 13f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.primaryTextColor)
+            })
+            val poolStr = if (leagueRes.oppMetaPool == IvMatrixEngine.OppMetaPoolMode.BLENDED_ELO_META) "Blended ELO Meta" else "PvPoke Top 100"
+            val oppIvStr = when (leagueRes.oppIvBaseline) {
+                IvMatrixEngine.OppIvBaselineMode.RANK_1 -> "Rank #1 Opp IVs"
+                IvMatrixEngine.OppIvBaselineMode.MAX_ATK -> "Max Atk Opp IVs"
+                IvMatrixEngine.OppIvBaselineMode.PVPOKE_DEFAULT -> "PvPoke Default Opp IVs"
+            }
+            secHead.addView(TextView(this).apply {
+                text = "$poolStr • $oppIvStr • Comparing vs: ${leagueRes.baselineLabel}"
+                textSize = 11f
+                setTextColor(theme.secondaryTextColor)
+            })
+            container.addView(secHead)
+
+            for (candRes in leagueRes.candidateResults) {
+                val rowKey = "${leagueRes.league}|${candRes.candidateId}"
+                val isBaseTarget = candRes.candidateId == leagueRes.baselineComparisonId
+                val cardBorder = when {
+                    isBaseTarget -> theme.secondaryAccentColor
+                    candRes.isPinnedRank1 -> theme.accentColor
+                    else -> theme.overlayBorderColor
+                }
+                val resCard = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(ivDp(10), ivDp(9), ivDp(10), ivDp(9))
+                    background = makeIvCardBg(theme.surfaceColor, cardBorder, radiusDp = 10, strokeDp = if (candRes.isPinnedRank1 || isBaseTarget) 2 else 1)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, 0, 0, ivDp(8)) }
+                }
+
+                val badges = buildString {
+                    if (candRes.isPinnedRank1) append("🏆 BENCHMARK • ")
+                    if (isBaseTarget) append("📌 BASELINE • ")
+                    append(candRes.label.ifBlank { candRes.displayName })
+                }
+                resCard.addView(TextView(this).apply {
+                    text = badges
+                    textSize = 12.5f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(if (candRes.isPinnedRank1) theme.accentColor else theme.primaryTextColor)
+                })
+                val bbTag = if (candRes.isBestBuddy) " 🎀BB" else ""
+                val shTag = if (candRes.isShadow) "🟣 Shadow " else ""
+                resCard.addView(TextView(this).apply {
+                    text = "${shTag}IVs ${candRes.ivs}  •  CP ${candRes.cp}  •  Lv ${formatIvLevelStr(candRes.level)}$bbTag  •  Rank #${candRes.rank} (${String.format(java.util.Locale.US, "%.1f%%", candRes.pctOfRank1)})"
+                    textSize = 11.5f
+                    setTextColor(theme.primaryTextColor)
+                    setPadding(0, ivDp(2), 0, ivDp(2))
+                })
+                resCard.addView(TextView(this).apply {
+                    text = "Moves: ${candRes.fastMove} / ${candRes.chargedMove1} + ${candRes.chargedMove2}  •  Atk ${String.format(java.util.Locale.US, "%.1f", candRes.effAtk)}"
+                    textSize = 10.5f
+                    setTextColor(theme.secondaryTextColor)
+                })
+
+                // 0v0 | 1v1 | 2v2 summary grid
+                val shieldGrid = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, ivDp(6), 0, ivDp(6)) }
+                }
+                fun addShieldBox(title: String, rec: IvMatrixEngine.ShieldRecordSummary, extraLine: String?) {
+                    val box = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(ivDp(6), ivDp(5), ivDp(6), ivDp(5))
+                        background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 7)
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            setMargins(0, 0, ivDp(4), 0)
+                        }
+                    }
+                    box.addView(TextView(this).apply {
+                        text = title
+                        textSize = 10f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setTextColor(theme.secondaryTextColor)
+                    })
+                    box.addView(TextView(this).apply {
+                        text = "${rec.wins}-${rec.losses}-${rec.ties}"
+                        textSize = 13f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setTextColor(theme.primaryTextColor)
+                    })
+                    box.addView(TextView(this).apply {
+                        text = "Avg ${rec.avgBr} (${String.format(java.util.Locale.US, "%.0f%%", rec.weightedWinPct)})"
+                        textSize = 10f
+                        setTextColor(theme.secondaryTextColor)
+                    })
+                    if (!extraLine.isNullOrBlank()) {
+                        box.addView(TextView(this).apply {
+                            text = extraLine
+                            textSize = 10f
+                            setTypeface(null, android.graphics.Typeface.BOLD)
+                            setTextColor(
+                                when {
+                                    extraLine.startsWith("+") -> android.graphics.Color.parseColor("#34D399")
+                                    extraLine.startsWith("-") -> android.graphics.Color.parseColor("#F87171")
+                                    else -> theme.secondaryTextColor
+                                }
+                            )
+                        })
+                    }
+                    shieldGrid.addView(box)
+                }
+                val r1Delta = if (!candRes.isPinnedRank1) {
+                    val signW = if (candRes.deltaWinsVsRank1 > 0) "+" else ""
+                    val signB = if (candRes.deltaBr1v1VsRank1 > 0) "+" else ""
+                    "${signW}${candRes.deltaWinsVsRank1}W / ${signB}${candRes.deltaBr1v1VsRank1} BR vs R1"
+                } else null
+                val baseDelta = if (!isBaseTarget && leagueRes.baselineComparisonId != IvMatrixEngine.PINNED_RANK1_CANDIDATE_ID) {
+                    val signW = if (candRes.deltaWinsVsBaseline > 0) "+" else ""
+                    "${signW}${candRes.deltaWinsVsBaseline}W vs Base"
+                } else null
+                addShieldBox("0v0", candRes.rec0v0, null)
+                addShieldBox("1v1", candRes.rec1v1, r1Delta)
+                addShieldBox("2v2", candRes.rec2v2, baseDelta)
+                resCard.addView(shieldGrid)
+
+                if (!isBaseTarget) {
+                    val flipsLW = candRes.opponents.count { it.flip1v1 == "L->W" || it.flip0v0 == "L->W" || it.flip2v2 == "L->W" }
+                    val flipsWL = candRes.opponents.count { it.flip1v1 == "W->L" || it.flip0v0 == "W->L" || it.flip2v2 == "W->L" }
+                    resCard.addView(TextView(this).apply {
+                        text = "🔄 Flips: +$flipsLW W / -$flipsWL L   •   ⚔️ +1 Fast BP: +${candRes.breakpointsGainedCount} / -${candRes.breakpointsLostCount}\n" +
+                            "🛡️ -1 Bulk: +${candRes.bulkpointsGainedCount} / -${candRes.bulkpointsLostCount}   •   ⚡ CMP: +${candRes.cmpFlipsGainedCount} / -${candRes.cmpFlipsLostCount}   •   ❤️ +Cycle: ${candRes.extraCycleSurvivedCount}"
+                        textSize = 10.5f
+                        setTextColor(theme.primaryTextColor)
+                        setPadding(0, ivDp(2), 0, ivDp(4))
+                    })
+                }
+
+                // Action Row: Details + Save Built
+                val resBtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val keyOpps = candRes.opponents.filter {
+                    it.flip0v0 != "NONE" || it.flip1v1 != "NONE" || it.flip2v2 != "NONE" ||
+                        it.fastBreakpointDelta != 0 || it.fastBulkpointDelta != 0 ||
+                        it.cmpFlip != "NONE" || it.survivesExtraChargedCycle || it.losesExtraChargedCycle
+                }
+                val isExpanded = ivLabExpandedCandidateKey == rowKey
+                resBtns.addView(Button(this).apply {
+                    text = if (isExpanded) "▲ Hide Shifts (${keyOpps.size})" else "🔍 Key Shifts (${keyOpps.size})"
+                    textSize = 10.5f
+                    isAllCaps = false
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                    setTextColor(theme.primaryTextColor)
+                    setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
+                    minWidth = 0
+                    minimumWidth = 0
+                    minHeight = 0
+                    minimumHeight = 0
+                    layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f).apply { setMargins(0, 0, ivDp(6), 0) }
+                    setOnClickListener {
+                        ivLabExpandedCandidateKey = if (isExpanded) null else rowKey
+                        refreshIvLabPageUi()
+                    }
+                })
+                resBtns.addView(Button(this).apply {
+                    text = "💾 Save Built"
+                    textSize = 10.5f
+                    isAllCaps = false
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                    setTextColor(android.graphics.Color.WHITE)
+                    setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
+                    minWidth = 0
+                    minimumWidth = 0
+                    minHeight = 0
+                    minimumHeight = 0
+                    layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f)
+                    setOnClickListener {
+                        val (cleanSp, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(candRes.speciesName)
+                        val saved = upsertBuiltPokemonEntry(
+                            BuiltPokemonEntry(
+                                id = UUID.randomUUID().toString(),
+                                speciesName = cleanSp,
+                                isShadow = isSh || candRes.isShadow,
+                                atkIv = candRes.atkIv,
+                                defIv = candRes.defIv,
+                                staIv = candRes.staIv,
+                                ivs = candRes.ivs,
+                                league = candRes.league,
+                                cpCap = OverlayService.getLeagueCpCapStatic(candRes.league, prefs),
+                                cp = candRes.cp,
+                                level = candRes.level,
+                                isBestBuddy = candRes.isBestBuddy,
+                                fastMove = candRes.fastMove,
+                                chargedMove1 = candRes.chargedMove1,
+                                chargedMove2 = candRes.chargedMove2,
+                                plusMoveLevel = 4,
+                                label = if (candRes.isPinnedRank1) "Rank #1" else candRes.label.ifBlank { null },
+                                statProductRank = candRes.rank,
+                                statProductPct = candRes.pctOfRank1,
+                                updatedAt = System.currentTimeMillis()
+                            ),
+                            triggerSync = true
+                        )
+                        refreshIvLabPageUi()
+                        Toast.makeText(this@MainActivity, "✅ Saved ${saved.speciesName} (${saved.ivs}) to Built Roster!", Toast.LENGTH_SHORT).show()
+                    }
+                })
+                resCard.addView(resBtns)
+
+                if (isExpanded) {
+                    val listWrap = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(ivDp(6), ivDp(6), ivDp(6), ivDp(4))
+                        background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 8)
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply { setMargins(0, ivDp(6), 0, 0) }
+                    }
+                    val displayRows = if (keyOpps.isNotEmpty()) keyOpps.take(40) else candRes.opponents.take(25)
+                    for (opp in displayRows) {
+                        val tags = mutableListOf<String>()
+                        if (opp.flip1v1 != "NONE") tags.add("1v1 ${opp.flip1v1}")
+                        if (opp.flip0v0 != "NONE") tags.add("0v0 ${opp.flip0v0}")
+                        if (opp.flip2v2 != "NONE") tags.add("2v2 ${opp.flip2v2}")
+                        if (opp.fastBreakpointDelta > 0) tags.add("+${opp.fastBreakpointDelta} Fast Dmg (${opp.baselineFastDmgDealt}→${opp.fastDmgDealt})")
+                        if (opp.fastBreakpointDelta < 0) tags.add("${opp.fastBreakpointDelta} Fast Dmg (${opp.baselineFastDmgDealt}→${opp.fastDmgDealt})")
+                        if (opp.fastBulkpointDelta < 0) tags.add("${opp.fastBulkpointDelta} Taken (${opp.baselineFastDmgTaken}→${opp.fastDmgTaken})")
+                        if (opp.fastBulkpointDelta > 0) tags.add("+${opp.fastBulkpointDelta} Taken (${opp.baselineFastDmgTaken}→${opp.fastDmgTaken})")
+                        if (opp.cmpFlip == "GAINED") tags.add("⚡ CMP GAINED")
+                        if (opp.cmpFlip == "LOST") tags.add("⚡ CMP LOST")
+                        if (opp.survivesExtraChargedCycle) tags.add("❤️ +1 Cycle")
+                        val tagStr = if (tags.isNotEmpty()) tags.joinToString(" • ") else "1v1 BR ${opp.baselineBr1v1} → ${opp.br1v1}"
+                        listWrap.addView(TextView(this).apply {
+                            text = "• ${opp.oppName} (${opp.oppIvs}) — 1v1 BR ${opp.br1v1}\n   $tagStr"
+                            textSize = 10.5f
+                            setTextColor(
+                                when {
+                                    opp.flip1v1 == "L->W" || opp.fastBreakpointDelta > 0 || opp.fastBulkpointDelta < 0 || opp.cmpFlip == "GAINED" -> android.graphics.Color.parseColor("#34D399")
+                                    opp.flip1v1 == "W->L" || opp.cmpFlip == "LOST" -> android.graphics.Color.parseColor("#F87171")
+                                    else -> theme.secondaryTextColor
+                                }
+                            )
+                            setPadding(0, ivDp(2), 0, ivDp(3))
+                        })
+                    }
+                    resCard.addView(listWrap)
+                }
+
+                container.addView(resCard)
+            }
+        }
+    }
+
+    private fun renderIvLabBuiltRosterSubTab(
+        container: LinearLayout,
+        roster: List<BuiltPokemonEntry>,
+        theme: AppThemePalette
+    ) {
+        // Top Search + Add Card
+        val topCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ivDp(12), ivDp(10), ivDp(12), ivDp(10))
+            background = makeIvCardBg(theme.surfaceColor, theme.overlayBorderColor, radiusDp = 10)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, ivDp(10)) }
+        }
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val searchBox = EditText(this).apply {
+            setText(ivLabBuiltSearchQuery)
+            hint = "Filter by Pokémon, label, IVs, or move..."
+            textSize = 12.5f
+            setTextColor(theme.primaryTextColor)
+            setHintTextColor(theme.secondaryTextColor)
+            setSingleLine(true)
+            background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 8)
+            setPadding(ivDp(10), ivDp(7), ivDp(10), ivDp(7))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(0, 0, ivDp(6), 0)
+            }
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val q = s?.toString()?.trim().orEmpty()
+                    if (q != ivLabBuiltSearchQuery) {
+                        ivLabBuiltSearchQuery = q
+                        val listHost = container.findViewWithTag<LinearLayout>("built_list_host")
+                        if (listHost != null) {
+                            renderIvLabBuiltCards(listHost, loadBuiltPokemonRoster(), theme)
+                        }
+                    }
+                }
+            })
+        }
+        val btnAdd = Button(this).apply {
+            text = "+ Add Built"
+            textSize = 11.5f
+            isAllCaps = false
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            setTextColor(android.graphics.Color.WHITE)
+            setPadding(ivDp(10), ivDp(6), ivDp(10), ivDp(6))
+            minWidth = 0
+            minimumWidth = 0
+            setOnClickListener {
+                showBuiltSpecimenEditorDialog(existing = null) { refreshIvLabPageUi() }
+            }
+        }
+        topRow.addView(searchBox)
+        topRow.addView(btnAdd)
+        topCard.addView(topRow)
+
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(8), 0, 0) }
+        }
+        for ((fKey, fLabel) in listOf(
+            "ALL" to "All (${roster.size})",
+            "GREAT LEAGUE" to "GL (≤1500)",
+            "ULTRA LEAGUE" to "UL (≤2500)",
+            "MASTER LEAGUE" to "ML (Open)"
+        )) {
+            val active = ivLabBuiltLeagueFilter == fKey
+            filterRow.addView(Button(this).apply {
+                text = fLabel
+                textSize = 10.5f
+                isAllCaps = false
+                setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (active) theme.buttonAccentColor else theme.elevatedColor
+                )
+                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(4), ivDp(2), ivDp(4), ivDp(2))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f).apply { setMargins(0, 0, ivDp(4), 0) }
+                setOnClickListener {
+                    ivLabBuiltLeagueFilter = fKey
+                    refreshIvLabPageUi()
+                }
+            })
+        }
+        topCard.addView(filterRow)
+        container.addView(topCard)
+
+        val listHost = LinearLayout(this).apply {
+            tag = "built_list_host"
+            orientation = LinearLayout.VERTICAL
+        }
+        renderIvLabBuiltCards(listHost, roster, theme)
+        container.addView(listHost)
+    }
+
+    private fun renderIvLabBuiltCards(
+        listHost: LinearLayout,
+        roster: List<BuiltPokemonEntry>,
+        theme: AppThemePalette
+    ) {
+        listHost.removeAllViews()
+        val q = ivLabBuiltSearchQuery.lowercase()
+        val filtered = roster.filter { e ->
+            val leagueOk = when (ivLabBuiltLeagueFilter) {
+                "GREAT LEAGUE" -> e.cpCap in 501..1500 || e.league.equals("GREAT LEAGUE", ignoreCase = true)
+                "ULTRA LEAGUE" -> e.cpCap == 2500 || e.league.equals("ULTRA LEAGUE", ignoreCase = true)
+                "MASTER LEAGUE" -> e.cpCap >= 10000 || e.league.equals("MASTER LEAGUE", ignoreCase = true)
+                else -> true
+            }
+            val queryOk = if (q.isEmpty()) true else {
+                e.speciesName.lowercase().contains(q) ||
+                    (e.label?.lowercase()?.contains(q) == true) ||
+                    e.ivs.contains(q) ||
+                    e.fastMove.lowercase().contains(q) ||
+                    e.chargedMove1.lowercase().contains(q) ||
+                    e.chargedMove2.lowercase().contains(q)
+            }
+            leagueOk && queryOk
+        }.sortedByDescending { it.updatedAt }
+
+        if (filtered.isEmpty()) {
+            listHost.addView(TextView(this).apply {
+                text = if (roster.isEmpty()) {
+                    "No Built Pokémon saved yet!\n\nTap '+ Add Built' above, or tap '💾 Save' directly from any Team Editor slot or Multi-IV Matrix result. All specimens sync automatically across your Android & Web Vault."
+                } else {
+                    "No saved Built Pokémon match your current filter."
+                }
+                textSize = 12f
+                setTextColor(theme.secondaryTextColor)
+                setPadding(ivDp(8), ivDp(14), ivDp(8), ivDp(14))
+            })
+            return
+        }
+
+        for (entry in filtered) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(ivDp(12), ivDp(10), ivDp(12), ivDp(10))
+                background = makeIvCardBg(theme.surfaceColor, theme.overlayBorderColor, radiusDp = 10)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, ivDp(8)) }
+            }
+
+            val displaySp = IvMatrixEngine.formatSpeciesDisplayName(entry.speciesName, entry.isShadow)
+            val labelPill = entry.label?.takeIf { it.isNotBlank() }?.let { "  [$it]" } ?: ""
+            val bbStr = if (entry.isBestBuddy) "  🎀 Lv51" else ""
+            card.addView(TextView(this).apply {
+                text = "$displaySp$labelPill$bbStr"
+                textSize = 13.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.primaryTextColor)
+            })
+            val rankStr = entry.statProductRank?.let { "  •  R#$it (${String.format(java.util.Locale.US, "%.1f%%", entry.statProductPct ?: 100.0)})" } ?: ""
+            card.addView(TextView(this).apply {
+                text = "${entry.league}  •  IVs ${entry.ivs}  •  CP ${entry.cp}  •  Lv ${formatIvLevelStr(entry.level)}$rankStr"
+                textSize = 11.5f
+                setTextColor(theme.accentColor)
+                setPadding(0, ivDp(2), 0, ivDp(2))
+            })
+            val movesText = listOf(entry.fastMove, entry.chargedMove1, entry.chargedMove2).filter { it.isNotBlank() }.joinToString(" / ")
+            if (movesText.isNotBlank()) {
+                card.addView(TextView(this).apply {
+                    text = "Moves: $movesText"
+                    textSize = 11f
+                    setTextColor(theme.secondaryTextColor)
+                    setPadding(0, 0, 0, ivDp(6))
+                })
+            }
+
+            val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            btnRow.addView(Button(this).apply {
+                text = "⚖️ Analyze"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                setTextColor(android.graphics.Color.WHITE)
+                setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1.1f).apply { setMargins(0, 0, ivDp(4), 0) }
+                setOnClickListener {
+                    ivLabSpeciesName = IvMatrixEngine.formatSpeciesDisplayName(entry.speciesName, entry.isShadow)
+                    ivLabSelectedLeagues.clear()
+                    ivLabSelectedLeagues.add(entry.league)
+                    ivLabCandidates.clear()
+                    ivLabCandidates.add(
+                        IvMatrixEngine.IvCandidateConfig(
+                            id = UUID.randomUUID().toString(),
+                            label = entry.label?.takeIf { it.isNotBlank() } ?: "Built (${entry.ivs})",
+                            speciesName = entry.speciesName,
+                            isShadow = entry.isShadow,
+                            atkIv = entry.atkIv,
+                            defIv = entry.defIv,
+                            staIv = entry.staIv,
+                            isBestBuddy = entry.isBestBuddy,
+                            fastMove = entry.fastMove,
+                            chargedMove1 = entry.chargedMove1,
+                            chargedMove2 = entry.chargedMove2
+                        )
+                    )
+                    val r1 = IvMatrixEngine.getPresetIvSpread(entry.speciesName, entry.league, IvMatrixEngine.IvPresetMode.PVPOKE_DEFAULT, false)
+                    if (r1 != null && (r1.atkIv != entry.atkIv || r1.defIv != entry.defIv || r1.staIv != entry.staIv)) {
+                        ivLabCandidates.add(
+                            IvMatrixEngine.IvCandidateConfig(
+                                id = UUID.randomUUID().toString(),
+                                label = "PvPoke Default",
+                                speciesName = entry.speciesName,
+                                isShadow = entry.isShadow,
+                                atkIv = r1.atkIv,
+                                defIv = r1.defIv,
+                                staIv = r1.staIv,
+                                isBestBuddy = false,
+                                fastMove = entry.fastMove,
+                                chargedMove1 = entry.chargedMove1,
+                                chargedMove2 = entry.chargedMove2
+                            )
+                        )
+                    }
+                    ivLabBaselineCompareId = IvMatrixEngine.PINNED_RANK1_CANDIDATE_ID
+                    ivLabLastResult = null
+                    ivLabActiveSubTab = "matrix"
+                    refreshIvLabPageUi()
+                }
+            })
+            btnRow.addView(Button(this).apply {
+                text = "✏️ Edit"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                setTextColor(theme.primaryTextColor)
+                setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 0.9f).apply { setMargins(0, 0, ivDp(4), 0) }
+                setOnClickListener {
+                    showBuiltSpecimenEditorDialog(existing = entry) { refreshIvLabPageUi() }
+                }
+            })
+            btnRow.addView(Button(this).apply {
+                text = "🗑️ Delete"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#7F1D1D"))
+                setTextColor(android.graphics.Color.WHITE)
+                setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 0.9f)
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Delete Built Pokémon?")
+                        .setMessage("Remove $displaySp (${entry.ivs}, ${entry.league}) from your Built Roster and Cloud Sync Vault?")
+                        .setPositiveButton("Delete") { _, _ ->
+                            deleteBuiltPokemonEntry(entry.id, triggerSync = true)
+                            refreshIvLabPageUi()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            })
+            card.addView(btnRow)
+            listHost.addView(card)
+        }
+    }
+
+    private fun showBuiltSpecimenEditorDialog(
+        existing: BuiltPokemonEntry? = null,
+        onSaved: () -> Unit
+    ) {
+        val theme = getActiveAppTheme()
+        val scroll = ScrollView(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ivDp(16), ivDp(12), ivDp(16), ivDp(8))
+        }
+        scroll.addView(root)
+
+        val leagues = OverlayService.getEnabledGblLeaguesStatic(prefs).ifEmpty {
+            listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
+        }
+        var selectedLeague = existing?.league?.takeIf { lg -> leagues.any { it.equals(lg, ignoreCase = true) } } ?: leagues.first()
+        var isShadow = existing?.isShadow ?: false
+        var fastMove = existing?.fastMove.orEmpty()
+        var c1Move = existing?.chargedMove1.orEmpty()
+        var c2Move = existing?.chargedMove2.orEmpty()
+
+        val spEdit = AutoCompleteTextView(this).apply {
+            setText(existing?.speciesName.orEmpty())
+            hint = "Species (e.g. Azumarill, Feraligatr)"
+            textSize = 13.5f
+            threshold = 1
+            setAdapter(PokemonAutocompleteAdapter { selectedLeague })
+        }
+        root.addView(TextView(this).apply {
+            text = "Species Name"
+            textSize = 11f
+            setTextColor(theme.secondaryTextColor)
+        })
+        root.addView(spEdit)
+
+        val optRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(6), 0, ivDp(6)) }
+        }
+        val btnLeague = Button(this).apply {
+            text = "League: $selectedLeague ▾"
+            textSize = 11f
+            isAllCaps = false
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(36), 1.4f).apply { setMargins(0, 0, ivDp(6), 0) }
+        }
+        val btnSh = Button(this).apply {
+            text = if (isShadow) "🟣 Shadow ON" else "Shadow"
+            textSize = 11f
+            isAllCaps = false
+            backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isShadow) android.graphics.Color.parseColor("#6D28D9") else theme.elevatedColor
+            )
+            setTextColor(if (isShadow) android.graphics.Color.WHITE else theme.secondaryTextColor)
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(36), 1f)
+        }
+        optRow.addView(btnLeague)
+        optRow.addView(btnSh)
+        root.addView(optRow)
+
+        val lblEdit = EditText(this).apply {
+            setText(existing?.label.orEmpty())
+            hint = "Nickname / Note (e.g. Shiny, Rank #1, Raid Catch)"
+            textSize = 12.5f
+            setSingleLine(true)
+        }
+        root.addView(lblEdit)
+
+        lateinit var ivCtrl: IvTripletController
+        ivCtrl = createIvTripletControlView(
+            speciesNameProvider = {
+                IvMatrixEngine.formatSpeciesDisplayName(spEdit.text?.toString()?.trim().orEmpty(), isShadow)
+            },
+            leagueProvider = { selectedLeague },
+            initialIvs = existing?.ivs ?: "0/15/15",
+            initialIsBestBuddy = existing?.isBestBuddy ?: false,
+            enableBuiltControls = false,
+            showPresetChips = true
+        )
+        root.addView(ivCtrl.rootView)
+
+        val moveRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(6), 0, 0) }
+        }
+        val btnFast = Button(this).apply {
+            text = "⚡ ${fastMove.ifBlank { "Fast" }} ▾"
+            textSize = 10.5f
+            isAllCaps = false
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(34), 1f).apply { setMargins(0, 0, ivDp(4), 0) }
+        }
+        val btnC1 = Button(this).apply {
+            text = "1️⃣ ${c1Move.ifBlank { "C1" }} ▾"
+            textSize = 10.5f
+            isAllCaps = false
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(34), 1f).apply { setMargins(0, 0, ivDp(4), 0) }
+        }
+        val btnC2 = Button(this).apply {
+            text = "2️⃣ ${c2Move.ifBlank { "C2" }} ▾"
+            textSize = 10.5f
+            isAllCaps = false
+            layoutParams = LinearLayout.LayoutParams(0, ivDp(34), 1f)
+        }
+        moveRow.addView(btnFast)
+        moveRow.addView(btnC1)
+        moveRow.addView(btnC2)
+        root.addView(moveRow)
+
+        fun refreshMovesText() {
+            btnFast.text = "⚡ ${fastMove.ifBlank { "Fast" }} ▾"
+            btnC1.text = "1️⃣ ${c1Move.ifBlank { "C1" }} ▾"
+            btnC2.text = "2️⃣ ${c2Move.ifBlank { "C2" }} ▾"
+        }
+
+        spEdit.setOnItemClickListener { parent, _, pos, _ ->
+            val chosen = parent.getItemAtPosition(pos) as? OverlayService.Companion.PokemonAutocompleteSuggestion ?: return@setOnItemClickListener
+            val (cleanSp, chosenSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(chosen.name)
+            spEdit.setText(cleanSp, false)
+            isShadow = chosenSh || chosen.isShadow
+            btnSh.text = if (isShadow) "🟣 Shadow ON" else "Shadow"
+            btnSh.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isShadow) android.graphics.Color.parseColor("#6D28D9") else theme.elevatedColor
+            )
+            btnSh.setTextColor(if (isShadow) android.graphics.Color.WHITE else theme.secondaryTextColor)
+            val meta = OverlayService.resolveRecommendedMovesForSpecies(chosen.name, selectedLeague)
+            fastMove = chosen.fastMove.ifBlank { meta?.defaultFastMove.orEmpty() }
+            c1Move = chosen.chargedMove1.ifBlank { meta?.chargedMove1.orEmpty() }
+            c2Move = chosen.chargedMove2.ifBlank { meta?.chargedMove2.orEmpty() }
+            refreshMovesText()
+            ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = (existing == null))
+        }
+
+        btnLeague.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Select League")
+                .setItems(leagues.toTypedArray()) { _, idx ->
+                    selectedLeague = leagues[idx]
+                    btnLeague.text = "League: $selectedLeague ▾"
+                    ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = false)
+                }
+                .show()
+        }
+        btnSh.setOnClickListener {
+            isShadow = !isShadow
+            btnSh.text = if (isShadow) "🟣 Shadow ON" else "Shadow"
+            btnSh.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isShadow) android.graphics.Color.parseColor("#6D28D9") else theme.elevatedColor
+            )
+            btnSh.setTextColor(if (isShadow) android.graphics.Color.WHITE else theme.secondaryTextColor)
+            ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = false)
+        }
+        btnFast.setOnClickListener {
+            val sp = IvMatrixEngine.formatSpeciesDisplayName(spEdit.text?.toString()?.trim().orEmpty(), isShadow)
+            if (sp.isEmpty()) return@setOnClickListener
+            openIvLabMovePicker(sp, selectedLeague, true, fastMove) { picked ->
+                fastMove = picked
+                refreshMovesText()
+            }
+        }
+        btnC1.setOnClickListener {
+            val sp = IvMatrixEngine.formatSpeciesDisplayName(spEdit.text?.toString()?.trim().orEmpty(), isShadow)
+            if (sp.isEmpty()) return@setOnClickListener
+            openIvLabMovePicker(sp, selectedLeague, false, c1Move) { picked ->
+                c1Move = picked
+                refreshMovesText()
+            }
+        }
+        btnC2.setOnClickListener {
+            val sp = IvMatrixEngine.formatSpeciesDisplayName(spEdit.text?.toString()?.trim().orEmpty(), isShadow)
+            if (sp.isEmpty()) return@setOnClickListener
+            openIvLabMovePicker(sp, selectedLeague, false, c2Move) { picked ->
+                c2Move = picked
+                refreshMovesText()
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(if (existing == null) "📦 Add Built Pokémon" else "✏️ Edit Built Pokémon")
+            .setView(scroll)
+            .setPositiveButton("Save Specimen") { _, _ ->
+                val rawSp = spEdit.text?.toString()?.trim().orEmpty()
+                if (rawSp.isEmpty()) {
+                    Toast.makeText(this, "Species name required.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val (cleanSp, spSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(rawSp)
+                val finalSh = isShadow || spSh
+                val (a, d, s) = ivCtrl.getTriplet()
+                val details = ivCtrl.getComputedDetails()
+                val meta = OverlayService.resolveRecommendedMovesForSpecies(
+                    IvMatrixEngine.formatSpeciesDisplayName(cleanSp, finalSh),
+                    selectedLeague
+                )
+                upsertBuiltPokemonEntry(
+                    BuiltPokemonEntry(
+                        id = existing?.id ?: UUID.randomUUID().toString(),
+                        speciesName = cleanSp,
+                        isShadow = finalSh,
+                        atkIv = a,
+                        defIv = d,
+                        staIv = s,
+                        ivs = "$a/$d/$s",
+                        league = selectedLeague,
+                        cpCap = OverlayService.getLeagueCpCapStatic(selectedLeague, prefs),
+                        cp = details?.cp ?: existing?.cp ?: 1500,
+                        level = details?.level ?: existing?.level ?: 25.0,
+                        isBestBuddy = ivCtrl.isBestBuddy,
+                        fastMove = fastMove.ifBlank { meta?.defaultFastMove.orEmpty() },
+                        chargedMove1 = c1Move.ifBlank { meta?.chargedMove1.orEmpty() },
+                        chargedMove2 = c2Move.ifBlank { meta?.chargedMove2.orEmpty() },
+                        plusMoveLevel = existing?.plusMoveLevel ?: 4,
+                        label = lblEdit.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+                        statProductRank = details?.rank,
+                        statProductPct = details?.pctOfRank1,
+                        updatedAt = System.currentTimeMillis()
+                    ),
+                    triggerSync = true
+                )
+                onSaved()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

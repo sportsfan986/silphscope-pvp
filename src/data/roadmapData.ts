@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.38',
+    codename: 'IV Lab (Multi-IV Matrix & Breakpoint Engine), Universal 3-Box IV Inputs & My Built Pokémon Roster',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Introduces the new IV Lab tab next to Meta across both Android and Web Simulator featuring side-by-side Multi-IV Matrix evaluation against Rank #1 Stat Product and custom candidate spreads, fast-move Breakpoints/Bulkpoints and CMP tie flips, universal 3-box [ATK][DEF][STA] inputs with real-time auto-CP recalculation, and Cloudflare D1-synced Built Pokémon roster linking.',
+    icon: '⚖️',
+    accentColor: '#14B8A6',
+    highlights: [
+      'Multi-IV Matrix Evaluator (GL, UL, ML & active cups) comparing Rank #1 Stat Product and custom candidates side-by-side across 0v0/1v1/2v2 shields',
+      'Automated Fast Move Breakpoint (+1 dmg), Bulkpoint (-1 dmg taken), CMP Flip, and Extra Charged-Cycle Survival matchup surfacing',
+      'Universal 3-box [ATK][DEF][STA] numeric inputs + optional 0–15 dropdowns + Best Buddy Lv51 toggle with instant league optimal CP/Level solving',
+      'My Built Pokémon Roster supporting multi-copy specimens, 1-click Save Built, smart Team Builder & Show 6 auto-fill, and Cloudflare D1 Vault delta sync'
+    ]
+  },
+  {
     version: 'v7.37',
     codename: 'Instant Pre-Battle Wake-Up, Zero-Lock 30 FPS Hardware DVR & Combat Energy/Shield Hardening',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Eliminates v7.34–v7.35 CPU optimization regressions with unconditional 100ms intro detection and screen dim/flash wake-up, zero-contention hardware DVR Surface scaling, full-corridor HP scanning, MainLooper payload serialization, and four live combat energy/shield fixes (plus Cloud DVR Vault upload auth & retry queueing).',
     icon: '🚀',
@@ -288,37 +302,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Zero-clutter primary mobile screen while companion laptop displays full HUD',
       'Real-time practice partner & coach spectator view with live turn clocks',
       'Streamer OBS browser dock integration without covering phone display'
-    ]
-  },
-  {
-    id: 'iv-checker-matrix',
-    title: 'Multi-IV Matrix Evaluator, Breakpoint Analyzer & 3-Field Numeric Input',
-    badge: 'META SIMULATOR',
-    status: 'In Design',
-    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-    category: 'Analytics & Team Builder',
-    icon: '⚖️',
-    description: 'Multi-select league comparison (GL, UL, ML) evaluating candidate IV spreads side-by-side against the Top 100 meta with real-time auto-CP recalculation, 3 numeric IV fields (Atk/Def/Sta) or dropdown pickers, W/L delta records, and Fast Move breakpoint/bulkpoint highlighting.',
-    keyGoals: [
-      'Universal 3-box numeric IV inputs [Atk][Def][Sta] with optional 0–15 dropdown selector',
-      'Real-time automatic CP and Level recomputation upon IV adjustment',
-      'Top 100 synthetic meta win/loss/tie record comparison & net flip matchups',
-      'Automated Fast Move breakpoint (+1 dmg) & bulkpoint (-1 dmg taken) delta highlighting'
-    ]
-  },
-  {
-    id: 'built-pokemon-roster-ivs',
-    title: 'Built Pokémon IV Storage & Roster Integration',
-    badge: 'TEAM BUILDER & SYNC',
-    status: 'In Design',
-    statusColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-    category: 'Analytics & Team Builder',
-    icon: '📦',
-    description: 'Save exact built IV spreads (Atk/Def/Sta + Level) from the IV checker or team builder into a personal roster, feeding true CMP ties and precise damage intake into all team sims.',
-    keyGoals: [
-      '1-Click "Save to Built Roster" from the Multi-IV Matrix Evaluator',
-      'Team Preset integration: attach actual owned IVs to custom team slots',
-      'Cloud Delta Sync across multiple devices via Cloudflare D1 Vault'
     ]
   },
   {

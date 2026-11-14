@@ -1,4 +1,21 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.36`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.38`)
+
+---
+
+## v7.38 (2026-11-14) — Multi-IV Matrix Evaluator, Universal 3-Box IV Controls & Built Pokémon Roster Sync
+*Live Android APK & Web Simulator release (`v7.38`, `versionCode = 1738`) introducing the top-level **⚖️ IV Lab** tab (**Multi-IV Matrix Evaluator** + **📦 My Built Pokémon Roster**), universal 3-box `[ATK] [DEF] [STA]` IV controls with real-time auto-CP recalculation, and Cloudflare D1 multi-device Built Roster delta sync.*
+
+- **⚖️ Multi-IV Matrix Evaluator (`IvMatrixEngine.kt`, `ivMatrixEngine.ts`, `IvLabTab.tsx`, `MainActivity.kt`)**:
+  - Added a dedicated top-level **⚖️ IV Lab** / **⚖️ IVs** navigation tab right next to **📊 Meta** across both the Web Simulator and Android Native App.
+  - Compares **🏆 Rank #1 Stat Product** (auto-pinned) and user-added IV spreads head-to-head across multi-selected leagues (`Great League`, `Ultra League`, `Master League`, and Supporter+ active Specialty/Limited Cups) and shield scenarios (`0v0`, `1v1`, `2v2`).
+  - Evaluates against **PvPoke Top 100** or **🎯 Blended ELO Meta** (Legend Pro/VIP) using selectable **PvPoke Default**, **Rank #1 Stat Product**, or **Max Atk** opponent IV baselines, with 1-tap `Compare vs.` baseline switching (Rank #1 or any candidate).
+  - Surfaces exact **Net Matchup Flips** (`L→W`, `W→L`), **+1 Fast Move Breakpoints**, **-1 Fast Move Bulkpoints**, **CMP Tie Flips**, and **Extra Charged Cycle Survivals**.
+- **🔢 Universal 3-Box `[ATK] [DEF] [STA]` IV Input & Real-Time Auto-CP (`IvTripletInput.tsx`, `MainActivity.kt`, `PokemonDatabase.kt`, `pokemonDb.ts`)**:
+  - Replaced legacy `"1/15/15"` string inputs across IV Lab, 3v3 Team Editor, Show 6 Editor, and Built Roster with separate `0–15` numeric inputs (auto-advance + `0–15` quick dropdown) and a **`🎀 Lv51` Best Buddy** toggle that solves optimal league Level/CPM (`Lv 1.0–51.0`) and updates CP in real time.
+- **📦 My Built Pokémon Roster & Cloudflare D1 Delta Sync (`worker.mjs`, `schema.sql`, `GitHubCloudSync.kt`, `src/App.tsx`)**:
+  - Save unlimited built specimens per species (`ATK/DEF/STA`, moveset, Shadow flag, `Lv51` flag, optional label) from IV Lab or team editors.
+  - Selecting a Pokémon in Team Builder (`3v3` or `Show 6`) automatically fills unique built specimens for that league/Shadow variant or lets you pick from multiple saved copies via `📦 Pick Built`, feeding exact IV-derived stats into 9×9 team matrices, CMP tie checks, and battle math.
+  - Backed by a dedicated `built_pokemon` table in Cloudflare D1 (`silphscope-sync-db`) with LWW conflict resolution and tombstone deletion syncing via `/v1/sync/vault`.
 
 ---
 

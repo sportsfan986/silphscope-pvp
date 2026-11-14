@@ -5,3 +5,4 @@ export * from "./pokemonDb";
 export * from "./combatSimulator";
 export * from "./teamAndMetaEngine";
 export * from "./show6Engine";
+export * from "./ivMatrixEngine";

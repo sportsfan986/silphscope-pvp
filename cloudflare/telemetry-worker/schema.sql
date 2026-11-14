@@ -69,3 +69,16 @@ CREATE TABLE IF NOT EXISTS team_presets (
 
 CREATE INDEX IF NOT EXISTS idx_team_presets_user_sync
   ON team_presets (screen_name, server_updated_ms);
+
+CREATE TABLE IF NOT EXISTS built_pokemon (
+  screen_name TEXT NOT NULL COLLATE NOCASE,
+  pokemon_id TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  server_updated_ms INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL,
+  PRIMARY KEY (screen_name, pokemon_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_built_pokemon_user_sync
+  ON built_pokemon (screen_name, server_updated_ms);

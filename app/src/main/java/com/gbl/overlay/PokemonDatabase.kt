@@ -1627,7 +1627,8 @@ internal object PokemonStaticData {
         43.0 to 0.8053, 43.5 to 0.8078, 44.0 to 0.81029999, 44.5 to 0.812799985,
         45.0 to 0.81529999, 45.5 to 0.81779999, 46.0 to 0.82029999, 46.5 to 0.82279999,
         47.0 to 0.82529999, 47.5 to 0.82779999, 48.0 to 0.83029999, 48.5 to 0.83279999,
-        49.0 to 0.83529999, 49.5 to 0.83779999, 50.0 to 0.84029999
+        49.0 to 0.83529999, 49.5 to 0.83779999, 50.0 to 0.84029999, 50.5 to 0.84279999,
+        51.0 to 0.84529999
     )
 
     internal val fastMovePowerMapStatic: Map<String, Int> = mapOf<String, Int>(
@@ -2587,19 +2588,39 @@ internal fun OverlayService.Companion.getAutocompletePokemonSuggestions(
     return results.take(limit)
 }
 
-internal fun OverlayService.Companion.solveLeagueLevelCpm(uAtk: Double, uDef: Double, uHp: Double, leagueCap: Int): Pair<Double, Int> {
+internal fun OverlayService.Companion.solveLeagueLevelAndCpm(
+    uAtk: Double,
+    uDef: Double,
+    uHp: Double,
+    leagueCap: Int,
+    maxLevel: Double = 50.0
+): Triple<Double, Double, Int> {
+    var bestLevel = 1.0
     var bestCpm = 0.094
     var bestCp = 10
-    for ((_, cpm) in CPM_TABLE) {
+    for ((lvl, cpm) in CPM_TABLE) {
+        if (lvl > maxLevel + 1e-6) break
         val cp = floor(uAtk * kotlin.math.sqrt(uDef * uHp) * cpm * cpm / 10.0).toInt().coerceAtLeast(10)
         if (cp <= leagueCap) {
+            bestLevel = lvl
             bestCpm = cpm
             bestCp = cp
         } else {
             break
         }
     }
-    return bestCpm to bestCp
+    return Triple(bestLevel, bestCpm, bestCp)
+}
+
+internal fun OverlayService.Companion.solveLeagueLevelCpm(
+    uAtk: Double,
+    uDef: Double,
+    uHp: Double,
+    leagueCap: Int,
+    maxLevel: Double = 50.0
+): Pair<Double, Int> {
+    val (_, cpm, cp) = solveLeagueLevelAndCpm(uAtk, uDef, uHp, leagueCap, maxLevel)
+    return cpm to cp
 }
 
 /**
@@ -2610,12 +2631,13 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
     rawName: String,
     league: String = "GREAT LEAGUE",
     customCp: Int? = null,
-    customIvs: String? = null
+    customIvs: String? = null,
+    isBestBuddy: Boolean = false
 ): PokemonMeta? {
     val trimmed = rawName.trim()
     if (trimmed.isEmpty()) return null
     val normLeague = normalizeLeagueKeyStatic(league)
-    val cacheKey = "${trimmed.lowercase()}|$normLeague|${customCp ?: -1}|${customIvs?.trim()?.lowercase().orEmpty()}"
+    val cacheKey = "${trimmed.lowercase()}|$normLeague|${customCp ?: -1}|${customIvs?.trim()?.lowercase().orEmpty()}|${if (isBestBuddy) 1 else 0}"
     RESOLVED_SPECIES_CACHE[cacheKey]?.let { return it }
 
     val isShadowInput = trimmed.startsWith("Shadow ", ignoreCase = true) || trimmed.contains("(Shadow)", ignoreCase = true)
@@ -2640,7 +2662,7 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
     }
     if (exactByName != null) {
         val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(exactByName), normLeague, isShadowInput)
-        return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs))
+        return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs, isBestBuddy))
     }
 
     val base = FormResolver.extractBaseSpecies(cleanNoShadow)
@@ -2648,7 +2670,7 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
     if (variants.isNotEmpty()) {
         val chosen = FormResolver.resolveBestDefaultVariant(variants.first(), cleanNoShadow, normLeague)
         val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(chosen), normLeague, isShadowInput)
-        return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs))
+        return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs, isBestBuddy))
     }
 
     val exactById = allMeta.find {
@@ -2656,7 +2678,7 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
     }
     if (exactById != null) {
         val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(exactById), normLeague, isShadowInput)
-        return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs))
+        return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs, isBestBuddy))
     }
 
     val partial = allMeta.firstOrNull {
@@ -2671,7 +2693,7 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
     }
     return cacheAndReturn(partial?.let {
         val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(it), normLeague, isShadowInput)
-        computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs)
+        computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs, isBestBuddy)
     })
 }
 
@@ -2703,6 +2725,15 @@ internal fun OverlayService.Companion.parseIvTriplet(ivStr: String?, league: Str
     }
 }
 
+internal fun OverlayService.Companion.formatDefaultIvsForLeague(meta: PokemonMeta?, league: String): String {
+    if (meta == null) {
+        val cpCap = getLeagueCpCapStatic(league)
+        return if (cpCap > 2500) "15/15/15" else "1/15/15"
+    }
+    val (a, d, s) = parseIvTriplet(null, league, meta)
+    return "$a/$d/$s"
+}
+
 /**
  * Computes League CP-scaled and IV-adjusted effective combat stats (Atk, Def, HP, and CP).
  * Automatically defaults to PvPoke standard IVs and official half-level CPM when customIvs/customCp is blank.
@@ -2711,7 +2742,8 @@ internal fun OverlayService.Companion.computeEffectiveCombatStats(
     meta: PokemonMeta,
     league: String,
     customCp: Int? = null,
-    customIvs: String? = null
+    customIvs: String? = null,
+    isBestBuddy: Boolean = false
 ): PokemonMeta {
     val cpCap = getLeagueCpCapStatic(league)
     val isLittle = cpCap == 500
@@ -2721,20 +2753,49 @@ internal fun OverlayService.Companion.computeEffectiveCombatStats(
         isLittle -> 500
         isGreat -> 1500
         isUltra -> 2500
-        else -> 6000
+        else -> 10000
     }
 
     val actualIvs = parseIvTriplet(customIvs, league, meta)
+    val maxLvl = if (isBestBuddy) 51.0 else 50.0
 
     if (meta.isRawBaseStats) {
         val uAtk = (meta.atk + actualIvs.first).coerceAtLeast(20.0)
         val uDef = (meta.def + actualIvs.second).coerceAtLeast(20.0)
         val uHp = (meta.hp.toDouble() + actualIvs.third).coerceAtLeast(20.0)
-        val (cpm, targetCp) = if (customCp != null && customCp in 100..(leagueCap + 100)) {
-            val solvedCpm = kotlin.math.sqrt((customCp * 10.0) / (uAtk * kotlin.math.sqrt(uDef * uHp))).coerceIn(0.094, 0.8453)
-            solvedCpm to customCp
-        } else {
-            solveLeagueLevelCpm(uAtk, uDef, uHp, leagueCap)
+        val solved = solveLeagueLevelAndCpm(uAtk, uDef, uHp, leagueCap, maxLvl)
+        var targetCp = solved.third
+        var cpm = solved.second
+
+        if (customCp != null && customCp in 100..(leagueCap + 250) && customCp != solved.third) {
+            var exactCpm: Double? = null
+            for (i in CPM_TABLE.lastIndex downTo 0) {
+                val (lvl, lvlCpm) = CPM_TABLE[i]
+                if (lvl > maxLvl + 1e-6) continue
+                val lvlCp = floor(uAtk * kotlin.math.sqrt(uDef * uHp) * lvlCpm * lvlCpm / 10.0).toInt().coerceAtLeast(10)
+                if (lvlCp == customCp) {
+                    exactCpm = lvlCpm
+                    break
+                }
+            }
+            if (exactCpm == null && !isBestBuddy && customCp <= leagueCap) {
+                for (i in CPM_TABLE.lastIndex downTo 0) {
+                    val (lvl, lvlCpm) = CPM_TABLE[i]
+                    if (lvl <= maxLvl + 1e-6) break
+                    val lvlCp = floor(uAtk * kotlin.math.sqrt(uDef * uHp) * lvlCpm * lvlCpm / 10.0).toInt().coerceAtLeast(10)
+                    if (lvlCp == customCp) {
+                        exactCpm = lvlCpm
+                        break
+                    }
+                }
+            }
+            if (exactCpm != null) {
+                cpm = exactCpm
+                targetCp = customCp
+            } else if (customIvs.isNullOrBlank()) {
+                cpm = kotlin.math.sqrt((customCp * 10.0) / (uAtk * kotlin.math.sqrt(uDef * uHp))).coerceIn(0.094, 0.8453)
+                targetCp = customCp
+            }
         }
         return meta.copy(
             defaultCp = targetCp,
@@ -3305,7 +3366,11 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     myCharged2: String? = null,
     myCp: Int? = null,
     myIvs: String? = null,
-    myPlusMoveLevel: Int? = 4
+    myPlusMoveLevel: Int? = 4,
+    myIsBestBuddy: Boolean = false,
+    oppIvs: String? = null,
+    oppCp: Int? = null,
+    oppIsBestBuddy: Boolean = false
 ): Int {
     val sUser = userShields.coerceIn(0, 2)
     val sOpp = oppShields.coerceIn(0, 2)
@@ -3313,10 +3378,10 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     val myShadow = myName.trim().startsWith("Shadow ", ignoreCase = true) || myName.contains("(Shadow)", ignoreCase = true)
     val oppShadow = oppName.trim().startsWith("Shadow ", ignoreCase = true) || oppName.contains("(Shadow)", ignoreCase = true)
 
-    val myMeta = resolveRecommendedMovesForSpecies(myName, league, myCp, myIvs)
-        ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league, myCp, myIvs) }
-    val oppMeta = resolveRecommendedMovesForSpecies(oppName, league)
-        ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league) }
+    val myMeta = resolveRecommendedMovesForSpecies(myName, league, myCp, myIvs, myIsBestBuddy)
+        ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league, myCp, myIvs, myIsBestBuddy) }
+    val oppMeta = resolveRecommendedMovesForSpecies(oppName, league, oppCp, oppIvs, oppIsBestBuddy)
+        ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league, oppCp, oppIvs, oppIsBestBuddy) }
 
     val myIsMimikyu = myMeta.baseSpecies.equals("mimikyu", ignoreCase = true)
     val oppIsMimikyu = oppMeta.baseSpecies.equals("mimikyu", ignoreCase = true)

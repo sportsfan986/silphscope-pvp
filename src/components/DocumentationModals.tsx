@@ -8,7 +8,7 @@ export interface DocumentationModalsProps {
   setHelpMetricGuideTopic: React.Dispatch<React.SetStateAction<'wae' | 'bmf' | 'badges'>>;
   showOverlayQuickHelpModal: boolean;
   setShowOverlayQuickHelpModal: React.Dispatch<React.SetStateAction<boolean>>;
-  setActiveTab: (tab: 'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'math_validator') => void;
+  setActiveTab: (tab: 'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'iv_lab' | 'help' | 'math_validator') => void;
 }
 
 export function DocumentationModals({
