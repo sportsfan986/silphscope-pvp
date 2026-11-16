@@ -41,7 +41,7 @@ import {
   SHOW6_LEAGUES,
   isBattleFrontierLeague,
   normalizeLeagueName,
-  stripLeagueCpSuffix,
+  formatLeagueDisplayLabel,
   calculateTurnAlignment,
   resolveFastMove,
   resolveChargedMove,
@@ -807,14 +807,69 @@ export default function App() {
     return 0.06;
   });
 
-  // Anti-Meta Team Builder State (Team Presets Page: 0, 1, or 2 Featured Pokémon + League -> 5 ABB & 5 ABC Teams)
+  // Anti-Meta Team Builder State (Team Presets Page: 0, 1, or 2 Featured Pokémon + Multi-Cup -> 5 ABB, 5 ABC & 5 Duo-Core Teams)
   const [showAntiMetaBuilder, setShowAntiMetaBuilder] = useState<boolean>(true);
   const [antiMetaLeague, setAntiMetaLeague] = useState<LeagueType>('GREAT LEAGUE');
+  const [antiMetaSelectedCpTier, setAntiMetaSelectedCpTier] = useState<'GL' | 'UL' | 'ML' | 'ALL'>('GL');
+  const [antiMetaSelectedLeagues, setAntiMetaSelectedLeagues] = useState<LeagueType[]>(['GREAT LEAGUE']);
   const [antiMetaFeat1, setAntiMetaFeat1] = useState<string>('');
   const [antiMetaFeat2, setAntiMetaFeat2] = useState<string>('');
   const [antiMetaDropdownSlot, setAntiMetaDropdownSlot] = useState<1 | 2 | null>(null);
   const [antiMetaResult, setAntiMetaResult] = useState<AntiMetaTeamBuilderResult | null>(null);
+  const [antiMetaResultsList, setAntiMetaResultsList] = useState<AntiMetaTeamBuilderResult[]>([]);
+  const [antiMetaResultCupFilter, setAntiMetaResultCupFilter] = useState<string>('ALL');
   const [isGeneratingAntiMeta, setIsGeneratingAntiMeta] = useState<boolean>(false);
+
+  const isAntiMetaLeagueUnlocked = (lg: string, tier: string): boolean => {
+    const normLg = normalizeLeagueName(lg);
+    const isGlOrMl = normLg === 'GREAT LEAGUE' || normLg === 'MASTER LEAGUE';
+    const isCore3 = isGlOrMl || normLg === 'ULTRA LEAGUE';
+    if (tier === 'free') return isGlOrMl;
+    if (tier === 'supporter') return isCore3;
+    return true;
+  };
+
+  const getVisibleAntiMetaCups = (
+    cpTier: 'GL' | 'UL' | 'ML' | 'ALL',
+    mode: AppCombatMode,
+    gblLeagues: LeagueType[],
+    show6Leagues: LeagueType[]
+  ): LeagueType[] => {
+    const targetCp = cpTier === 'GL' ? 'GREAT' : cpTier === 'UL' ? 'ULTRA' : cpTier === 'ML' ? 'MASTER' : 'ALL';
+    const openForTier: LeagueType[] =
+      cpTier === 'GL'
+        ? ['GREAT LEAGUE']
+        : cpTier === 'UL'
+        ? ['ULTRA LEAGUE']
+        : cpTier === 'ML'
+        ? ['MASTER LEAGUE']
+        : ['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE'];
+    const modePool = mode === 'show6' ? show6Leagues : gblLeagues;
+    const seen = new Set<string>();
+    const combined: LeagueType[] = [];
+    for (const lg of [...openForTier, ...modePool]) {
+      const k = normalizeLeagueName(lg);
+      if (!seen.has(k)) {
+        seen.add(k);
+        if (targetCp === 'ALL' || resolveLeagueCpTier(lg) === targetCp) {
+          combined.push(lg);
+        }
+      }
+    }
+    const orderRank = (x: string) => {
+      const u = normalizeLeagueName(x);
+      if (u === 'GREAT LEAGUE') return 0;
+      if (u === 'ULTRA LEAGUE') return 1;
+      if (u === 'MASTER LEAGUE') return 2;
+      if (u.includes('MEGA')) return 3;
+      return 4;
+    };
+    return combined.sort((a, b) => {
+      const ra = orderRank(a);
+      const rb = orderRank(b);
+      return ra !== rb ? ra - rb : a.localeCompare(b);
+    });
+  };
 
   // Floating Overlay Visibility & Competitive Log-Only Stealth Mode State
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
@@ -1267,17 +1322,20 @@ export default function App() {
     try {
       localStorage.setItem('gbl_app_combat_mode', mode);
     } catch {}
+    setAntiMetaSelectedCpTier('GL');
+    setAntiMetaResult(null);
+    setAntiMetaResultsList([]);
+    setAntiMetaResultCupFilter('ALL');
     if (mode === 'show6') {
-      if (!isShow6EligibleLeague(antiMetaLeague)) {
-        setAntiMetaLeague('Battle Frontier (Spectral)');
-      }
+      const defShow6: LeagueType = 'Battle Frontier (Spectral)';
+      setAntiMetaSelectedLeagues([defShow6]);
+      setAntiMetaLeague(defShow6);
       if (selectedOpponentLeague !== 'AUTO' && !isShow6EligibleLeague(selectedOpponentLeague)) {
         setSelectedOpponentLeague('AUTO');
       }
     } else {
-      if (isBattleFrontierLeague(antiMetaLeague)) {
-        setAntiMetaLeague('GREAT LEAGUE');
-      }
+      setAntiMetaSelectedLeagues(['GREAT LEAGUE']);
+      setAntiMetaLeague('GREAT LEAGUE');
       if (selectedOpponentLeague !== 'AUTO' && isBattleFrontierLeague(selectedOpponentLeague)) {
         setSelectedOpponentLeague('AUTO');
       }
@@ -1309,6 +1367,7 @@ export default function App() {
     setCurrentUserElo(parsed);
     setEloHeaderDraft(parsed !== null ? String(parsed) : '');
     setAntiMetaResult(null);
+    setAntiMetaResultsList([]);
     return parsed;
   };
 
@@ -2230,8 +2289,8 @@ export default function App() {
       setDbTelemetry(getPvPokeDatabaseTelemetry());
       setStartBattleToast(
         count > 0
-          ? `🏛️ Pinned "${metaId}" to Battle Frontier / Show 6 (${count} ranked Pokémon synced)!`
-          : `🏛️ Pinned "${metaId}" to Battle Frontier / Show 6!`
+          ? `🏛️ Pinned "${metaId}" to BF / Show 6 (${count} ranked Pokémon synced)!`
+          : `🏛️ Pinned "${metaId}" to BF / Show 6!`
       );
       setTimeout(() => setStartBattleToast(null), 2600);
     } else {
@@ -2245,7 +2304,7 @@ export default function App() {
       setStartBattleToast(
         hasPresetForCup
           ? `Removed "${metaId}" from Show 6 selector (existing teams moved to "Old Cups" filter).`
-          : `Removed "${metaId}" from Battle Frontier / Show 6 selector.`
+          : `Removed "${metaId}" from BF / Show 6 selector.`
       );
       setTimeout(() => setStartBattleToast(null), 2400);
     }
@@ -2544,7 +2603,7 @@ export default function App() {
       setStartBattleToast(`🏛️ ${res.summary}`);
       setTimeout(() => setStartBattleToast(null), 2800);
     } catch (err) {
-      setStartBattleToast('⚠️ Could not reach Google Sheets CSV export — using cached Battle Frontier Usage & Cores');
+      setStartBattleToast('⚠️ Could not reach Google Sheets CSV export — using cached BF Usage & Cores');
       setTimeout(() => setStartBattleToast(null), 2800);
     } finally {
       setIsSyncingBfSheets(false);
@@ -5828,24 +5887,30 @@ export default function App() {
     setTimeout(() => setStartBattleToast(null), 2400);
   };
 
-  // Anti-Meta Team Builder: Generate Best ABB + ABC + Duo Teams (Tier-Gated in v7.00) & Select Option to Create + Open Edit Modal
+  // Anti-Meta Team Builder: Generate Best ABB + ABC + Duo Teams (Tier-Gated in v7.00, Multi-Cup in v7.43) & Select Option to Create + Open Edit Modal
   const handleGenerateAntiMetaTeams = (
-    overrideLeague?: LeagueType,
+    overrideLeagues?: LeagueType | LeagueType[],
     overrideFeat1?: string,
     overrideFeat2?: string
   ) => {
-    const targetLeague = overrideLeague || antiMetaLeague;
-    const normLg = normalizeLeagueName(targetLeague);
-    const isGlOrMl = normLg === 'GREAT LEAGUE' || normLg === 'MASTER LEAGUE';
-    const isCore3 = isGlOrMl || normLg === 'ULTRA LEAGUE';
-    if (webMembershipTier === 'free' && !isGlOrMl) {
+    const targetLeagues: LeagueType[] = Array.isArray(overrideLeagues)
+      ? overrideLeagues.length > 0
+        ? overrideLeagues
+        : antiMetaSelectedLeagues
+      : overrideLeagues
+      ? [overrideLeagues]
+      : antiMetaSelectedLeagues.length > 0
+      ? antiMetaSelectedLeagues
+      : [antiMetaLeague];
+    const lockedLg = targetLeagues.find((lg) => !isAntiMetaLeagueUnlocked(lg, webMembershipTier));
+    if (lockedLg) {
+      const displayLg = formatLeagueDisplayLabel(lockedLg);
       setShowMembershipModal(true);
-      setMembershipStatusMsg(`🔒 ${targetLeague} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`);
-      return;
-    }
-    if (webMembershipTier === 'supporter' && !isCore3) {
-      setShowMembershipModal(true);
-      setMembershipStatusMsg(`🏆 ${targetLeague} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`);
+      setMembershipStatusMsg(
+        webMembershipTier === 'free'
+          ? `🔒 ${displayLg} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`
+          : `🏆 ${displayLg} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`
+      );
       return;
     }
     const f1 = (overrideFeat1 !== undefined ? overrideFeat1 : antiMetaFeat1).trim();
@@ -5854,25 +5919,35 @@ export default function App() {
     setIsGeneratingAntiMeta(true);
     setTimeout(() => {
       try {
-        const effCrowd =
-          antiMetaCrowdSnap && normalizeLeagueName(antiMetaCrowdSnap.league) === normalizeLeagueName(targetLeague)
-            ? antiMetaCrowdSnap
-            : getCachedCrowdEloMetaForLeague(targetLeague, currentUserElo);
-        const res = generateAntiMetaTeamOptions(
-          targetLeague,
-          featuredList,
-          battleLogs,
-          activeSeasonBounds,
-          effCrowd,
-          currentUserElo
-        );
-        const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
-        setAntiMetaResult({
-          ...res,
-          top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
-          top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
-          top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+        const maxPerArch =
+          webMembershipTier === 'pro' || webMembershipTier === 'vip'
+            ? 5
+            : webMembershipTier === 'supporter'
+            ? 2
+            : 1;
+        const results: AntiMetaTeamBuilderResult[] = targetLeagues.map((targetLg) => {
+          const effCrowd =
+            antiMetaCrowdSnap && normalizeLeagueName(antiMetaCrowdSnap.league) === normalizeLeagueName(targetLg)
+              ? antiMetaCrowdSnap
+              : getCachedCrowdEloMetaForLeague(targetLg, currentUserElo);
+          const res = generateAntiMetaTeamOptions(
+            targetLg,
+            featuredList,
+            battleLogs,
+            activeSeasonBounds,
+            effCrowd,
+            currentUserElo
+          );
+          return {
+            ...res,
+            top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
+            top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
+            top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+          };
         });
+        setAntiMetaResultsList(results);
+        setAntiMetaResult(results[0] || null);
+        setAntiMetaResultCupFilter('ALL');
       } finally {
         setIsGeneratingAntiMeta(false);
       }
@@ -5882,6 +5957,12 @@ export default function App() {
   useEffect(() => {
     if (siteView !== 'app' || activeTab !== 'presets' || !showAntiMetaBuilder) return;
     let cancelled = false;
+    const extraLeagues = antiMetaSelectedLeagues.filter(
+      (lg) => normalizeLeagueName(lg) !== normalizeLeagueName(antiMetaLeague)
+    );
+    extraLeagues.forEach((lg) => {
+      fetchCrowdEloMetaForLeague(lg, currentUserElo).catch(() => {});
+    });
     fetchCrowdEloMetaForLeague(antiMetaLeague, currentUserElo)
       .then((freshSnap) => {
         if (cancelled || !freshSnap) return;
@@ -5891,7 +5972,10 @@ export default function App() {
             normalizeLeagueName(prev.league) === normalizeLeagueName(freshSnap.league) &&
             prev.totalRows === freshSnap.totalRows &&
             (prev.eloBucket ?? null) === (freshSnap.eloBucket ?? null);
-          if (!same) setAntiMetaResult(null);
+          if (!same) {
+            setAntiMetaResult(null);
+            setAntiMetaResultsList([]);
+          }
           return freshSnap;
         });
       })
@@ -5899,38 +5983,57 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, currentUserElo]);
+  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, antiMetaSelectedLeagues, currentUserElo]);
 
   useEffect(() => {
     if (siteView !== 'app' || activeTab !== 'presets' || !showAntiMetaBuilder) return;
-    const normTarget = normalizeLeagueName(antiMetaLeague);
-    if (antiMetaResult && antiMetaResult.league === normTarget) return;
+    const unlockedTargets = antiMetaSelectedLeagues.filter((lg) =>
+      isAntiMetaLeagueUnlocked(lg, webMembershipTier)
+    );
+    if (unlockedTargets.length === 0) return;
+    const alreadySynced =
+      antiMetaResultsList.length === unlockedTargets.length &&
+      unlockedTargets.every(
+        (lg, i) => normalizeLeagueName(antiMetaResultsList[i]?.league) === normalizeLeagueName(lg)
+      );
+    if (alreadySynced) return;
     let cancelled = false;
     setIsGeneratingAntiMeta(true);
     const timer = setTimeout(() => {
       if (cancelled) return;
       try {
         const featuredList = [antiMetaFeat1.trim(), antiMetaFeat2.trim()].filter((s) => s.length > 0);
-        const effCrowd =
-          antiMetaCrowdSnap && normalizeLeagueName(antiMetaCrowdSnap.league) === normTarget
-            ? antiMetaCrowdSnap
-            : getCachedCrowdEloMetaForLeague(antiMetaLeague, currentUserElo);
-        const res = generateAntiMetaTeamOptions(
-          antiMetaLeague,
-          featuredList,
-          battleLogs,
-          activeSeasonBounds,
-          effCrowd,
-          currentUserElo
-        );
-        if (cancelled) return;
-        const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
-        setAntiMetaResult({
-          ...res,
-          top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
-          top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
-          top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+        const maxPerArch =
+          webMembershipTier === 'pro' || webMembershipTier === 'vip'
+            ? 5
+            : webMembershipTier === 'supporter'
+            ? 2
+            : 1;
+        const results: AntiMetaTeamBuilderResult[] = unlockedTargets.map((targetLg) => {
+          const normTarget = normalizeLeagueName(targetLg);
+          const effCrowd =
+            antiMetaCrowdSnap && normalizeLeagueName(antiMetaCrowdSnap.league) === normTarget
+              ? antiMetaCrowdSnap
+              : getCachedCrowdEloMetaForLeague(targetLg, currentUserElo);
+          const res = generateAntiMetaTeamOptions(
+            targetLg,
+            featuredList,
+            battleLogs,
+            activeSeasonBounds,
+            effCrowd,
+            currentUserElo
+          );
+          return {
+            ...res,
+            top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
+            top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
+            top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+          };
         });
+        if (cancelled) return;
+        setAntiMetaResultsList(results);
+        setAntiMetaResult(results[0] || null);
+        setAntiMetaResultCupFilter('ALL');
       } finally {
         if (!cancelled) setIsGeneratingAntiMeta(false);
       }
@@ -5939,7 +6042,16 @@ export default function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, webMembershipTier, antiMetaCrowdSnap, currentUserElo]);
+  }, [
+    siteView,
+    activeTab,
+    showAntiMetaBuilder,
+    antiMetaLeague,
+    antiMetaSelectedLeagues,
+    webMembershipTier,
+    antiMetaCrowdSnap,
+    currentUserElo
+  ]);
 
   const handleSelectAntiMetaTeamOption = (option: AntiMetaTeamOption) => {
     const newId = `preset-antimeta-${Date.now()}`;
@@ -6263,7 +6375,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.42 • Android Native Overlay
+                  v7.43 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -6274,19 +6386,19 @@ export default function App() {
                       ? 'bg-amber-500/20 border-amber-400 text-amber-200 hover:bg-amber-500/30'
                       : 'bg-sky-500/20 border-sky-400 text-sky-200 hover:bg-sky-500/30'
                   }`}
-                  title="Active Combat Mode (Click to toggle between Standard GBL Blind 3 Mode and Show 6 Battle Frontier Mode, or configure in Settings)"
+                  title="Active Combat Mode (Click to toggle between Standard GBL Blind 3 Mode and Show 6 BF Mode, or configure in Settings)"
                 >
                   {appCombatMode === 'show6' ? renderBattleFrontierLogo(16) : renderGblModeLogo(16)}
                   <span>
                     {appCombatMode === 'show6'
-                      ? 'SHOW 6 MODE • BATTLE FRONTIER (PICK 3)'
+                      ? 'SHOW 6 MODE • BF (PICK 3)'
                       : 'GBL MODE • BLIND 3 PVP'}
                   </span>
                 </button>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
                 {appCombatMode === 'show6'
-                  ? 'Show 6 Tournament & Battle Frontier Pick-3 Mode • Known Opponent 6 AI Backline Predictor, 6v6 Pick-3 & Blind Show 6 Meta Builders'
+                  ? 'Show 6 Tournament & BF Pick-3 Mode • Known Opponent 6 AI Backline Predictor, 6v6 Pick-3 & Blind Show 6 Meta Builders'
                   : 'Standard GBL Blind 3 PvP Mode • 4-Pillar 2-Line AI Tactical Coach, Personalized Meta Cores & Anti-Meta Team Builder'}
               </p>
             </div>
@@ -8777,7 +8889,7 @@ export default function App() {
                           : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      Auto ({activePreset.league.includes('Spectral') ? 'Spectral' : activePreset.league.includes('Cauldron') ? 'Cauldron' : activePreset.league.includes('Battle Frontier') ? 'BF Master' : activePreset.league.split(' ')[0]})
+                      Auto ({activePreset.league.includes('Spectral') ? 'Spectral' : activePreset.league.includes('Cauldron') ? 'Cauldron' : isBattleFrontierLeague(activePreset.league) ? 'BF Master' : activePreset.league.split(' ')[0]})
                     </button>
                     {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lg) => (
                       <button
@@ -8789,15 +8901,9 @@ export default function App() {
                             : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {lg === 'Battle Frontier (Spectral)'
-                          ? 'BF Spectral'
-                          : lg === 'Battle Frontier (Cauldron)'
-                          ? 'BF Cauldron'
-                          : lg === 'Battle Frontier (Master)'
-                          ? 'BF Master'
-                          : lg === 'MEGA MASTER LEAGUE'
+                        {lg === 'MEGA MASTER LEAGUE'
                           ? 'MEGA ML'
-                          : lg.replace(/\s*\(\d+\)\s*$/, '')}
+                          : formatLeagueDisplayLabel(lg)}
                       </button>
                     ))}
                   </div>
@@ -9376,7 +9482,7 @@ export default function App() {
                           >
                             {enabledShow6Leagues.map((lg) => (
                               <option key={lg} value={lg}>
-                                {stripLeagueCpSuffix(lg)}
+                                {formatLeagueDisplayLabel(lg)}
                               </option>
                             ))}
                           </select>
@@ -9409,7 +9515,7 @@ export default function App() {
                               </span>
                             </span>
                             <p className="text-[11px] text-slate-400">
-                              Synthesized from each format&apos;s #1/#2 Battle Frontier Common Cores + highest-usage tournament Pokémon (≤1 Mega, Species Clause enforced). Click any format below to load its Most Likely Opponent 6 into the simulator!
+                              Synthesized from each format&apos;s #1/#2 BF Common Cores + highest-usage tournament Pokémon (≤1 Mega, Species Clause enforced). Click any format below to load its Most Likely Opponent 6 into the simulator!
                             </p>
                           </div>
                           <button
@@ -9982,7 +10088,7 @@ export default function App() {
                           >
                             {enabledShow6Leagues.map((lg) => (
                               <option key={lg} value={lg}>
-                                {stripLeagueCpSuffix(lg)}
+                                {formatLeagueDisplayLabel(lg)}
                               </option>
                             ))}
                           </select>
@@ -10073,10 +10179,10 @@ export default function App() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <span className="text-xs font-extrabold text-purple-300 block">
-                                🛡️ Limited Meta Filter (Persisted Per League: {blindShow6League.split(' ')[0]})
+                                🛡️ Limited Meta Filter (Persisted Per League: {formatLeagueDisplayLabel(blindShow6League).split(' ')[0]})
                               </span>
                               <span className="text-[10px] text-slate-400">
-                                Saved for {blindShow6League}: <strong>{activeLeagueWhitelistChips.length} Whitelisted</strong> • <strong>{activeLeagueBanlistChips.length} Banned</strong>
+                                Saved for {formatLeagueDisplayLabel(blindShow6League)}: <strong>{activeLeagueWhitelistChips.length} Whitelisted</strong> • <strong>{activeLeagueBanlistChips.length} Banned</strong>
                               </span>
                             </div>
                             {/* User's Clarifying Answer #3: Method Selector between Text Paste and Chip Picker */}
@@ -10486,7 +10592,6 @@ export default function App() {
               const feat2Suggestions = feat2RankRange
                 ? []
                 : getPokemonAutocompleteSuggestions(antiMetaFeat2, antiMetaLeague, 12);
-              const defaultPreviewName = formatAntiMetaDefaultTeamName(antiMetaLeague, new Date());
 
               return (
                 <div className="bg-slate-900 border border-purple-500/40 rounded-2xl p-6 shadow-2xl space-y-5">
@@ -10502,7 +10607,7 @@ export default function App() {
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        Select a League and optionally enter <strong className="text-slate-200">0, 1, or 2 Pokémon or Rank Ranges</strong> (e.g. <code className="text-purple-300 font-mono">200-</code> for Rank #200+, <code className="text-purple-300 font-mono">-10</code> for Top 10, <code className="text-purple-300 font-mono">100-200</code> for #100–#200). Generates the <strong className="text-amber-300">Best 5 ABB</strong>, <strong className="text-sky-300">Best 5 ABC</strong>, and <strong className="text-emerald-300">Best 5 Duo-Core</strong> Anti-Meta teams. Selecting any team creates <code className="text-emerald-300 font-mono">{defaultPreviewName}</code> and opens the Edit Team screen immediately.
+                        Filter by CP Tier (<strong className="text-sky-300">GL / UL / ML / ALL</strong>), multi-select <strong className="text-amber-300">Open + Limited Cups</strong>, and optionally enter <strong className="text-slate-200">0, 1, or 2 Pokémon or Rank Ranges</strong> (e.g. <code className="text-purple-300 font-mono">200-</code>, <code className="text-purple-300 font-mono">-10</code>, <code className="text-purple-300 font-mono">100-200</code>). Generates the <strong className="text-amber-300">Best 5 ABB</strong>, <strong className="text-sky-300">Best 5 ABC</strong>, and <strong className="text-emerald-300">Best 5 Duo-Core</strong> Anti-Meta teams per cup.
                       </p>
                     </div>
 
@@ -10517,11 +10622,14 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleGenerateAntiMetaTeams()}
+                        onClick={() => handleGenerateAntiMetaTeams(antiMetaSelectedLeagues)}
                         className="py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-purple-600/25 transition"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>Generate 5 ABB + 5 ABC + 5 Duo-Core</span>
+                        <span>
+                          Generate 5 ABB + 5 ABC + 5 Duo-Core
+                          {antiMetaSelectedLeagues.length > 1 ? ` (${antiMetaSelectedLeagues.length} Cups)` : ''}
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -10557,48 +10665,132 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Step 2a: League + 0, 1, or 2 Featured Pokémon or Rank Range Inputs */}
+                  {/* Step 2a: 2-Row Multi-Select Leagues & Cups + 0, 1, or 2 Featured Pokémon or Rank Range Inputs */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* League Selection */}
-                    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-2">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                        1. Target League
-                      </label>
-                      <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
-                        {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lgId) => {
-                          const cleanLg = stripLeagueCpSuffix(lgId);
-                          const shortLbl =
-                            cleanLg === 'GREAT LEAGUE'
-                              ? 'Great'
-                              : cleanLg === 'ULTRA LEAGUE'
-                              ? 'Ultra'
-                              : cleanLg === 'MASTER LEAGUE'
-                              ? 'Master'
-                              : cleanLg.toUpperCase() === 'MEGA MASTER LEAGUE'
-                              ? 'Mega ML'
-                              : cleanLg === 'Battle Frontier (Spectral)'
-                              ? 'Spectral'
-                              : cleanLg === 'Battle Frontier (Cauldron)'
-                              ? 'Cauldron'
-                              : cleanLg === 'Battle Frontier (Master)'
-                              ? 'BF Master'
-                              : cleanLg;
+                    {/* 2-Row Multi-Select League & Cup Filter */}
+                    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                          1. Target Leagues &amp; Cups (Multi-Select)
+                        </label>
+                        <span className="text-[10px] font-mono text-sky-300 font-bold">
+                          {antiMetaSelectedLeagues.length} selected
+                        </span>
+                      </div>
+
+                      {/* Row 1: GL | UL | ML | ALL */}
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(['GL', 'UL', 'ML', 'ALL'] as const).map((cpTier) => {
+                          const isActiveTier = antiMetaSelectedCpTier === cpTier;
                           return (
                             <button
-                              key={lgId}
+                              key={`am-tier-${cpTier}`}
                               type="button"
                               onClick={() => {
-                                setAntiMetaLeague(lgId);
-                                handleGenerateAntiMetaTeams(lgId, antiMetaFeat1, antiMetaFeat2);
+                                setAntiMetaSelectedCpTier(cpTier);
+                                const nextVisible = getVisibleAntiMetaCups(
+                                  cpTier,
+                                  appCombatMode,
+                                  enabledGblLeagues,
+                                  enabledShow6Leagues
+                                );
+                                const pruned = antiMetaSelectedLeagues.filter((sel) =>
+                                  nextVisible.some((v) => normalizeLeagueName(v) === normalizeLeagueName(sel))
+                                );
+                                const firstUnlocked = nextVisible.find((v) =>
+                                  isAntiMetaLeagueUnlocked(v, webMembershipTier)
+                                );
+                                const nextSelected: LeagueType[] =
+                                  pruned.length > 0
+                                    ? pruned
+                                    : firstUnlocked
+                                    ? [firstUnlocked]
+                                    : nextVisible[0]
+                                    ? [nextVisible[0]]
+                                    : ['GREAT LEAGUE'];
+                                setAntiMetaSelectedLeagues(nextSelected);
+                                setAntiMetaLeague(nextSelected[0]);
+                                if (nextSelected.every((lg) => isAntiMetaLeagueUnlocked(lg, webMembershipTier))) {
+                                  handleGenerateAntiMetaTeams(nextSelected, antiMetaFeat1, antiMetaFeat2);
+                                }
                               }}
-                              className={`px-2.5 py-2 rounded-lg text-xs font-bold transition border truncate ${
-                                antiMetaLeague === lgId
+                              className={`py-1.5 rounded-lg text-[11px] font-extrabold border transition ${
+                                isActiveTier
                                   ? 'bg-sky-600 text-white border-sky-400 shadow'
                                   : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
                               }`}
-                              title={lgId}
                             >
-                              {shortLbl}
+                              {cpTier}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Row 2: Visible Open + Limited Cups (Multi-Select) */}
+                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                        {getVisibleAntiMetaCups(
+                          antiMetaSelectedCpTier,
+                          appCombatMode,
+                          enabledGblLeagues,
+                          enabledShow6Leagues
+                        ).map((lgId) => {
+                          const norm = normalizeLeagueName(lgId);
+                          const shortLbl =
+                            norm === 'GREAT LEAGUE'
+                              ? 'Open GL'
+                              : norm === 'ULTRA LEAGUE'
+                              ? 'Open UL'
+                              : norm === 'MASTER LEAGUE'
+                              ? 'Open ML'
+                              : norm === 'MEGA MASTER LEAGUE'
+                              ? 'Mega ML'
+                              : formatLeagueDisplayLabel(lgId);
+                          const isSelected = antiMetaSelectedLeagues.some(
+                            (sel) => normalizeLeagueName(sel) === norm
+                          );
+                          const isLocked = !isAntiMetaLeagueUnlocked(lgId, webMembershipTier);
+                          return (
+                            <button
+                              key={`am-cup-${lgId}`}
+                              type="button"
+                              onClick={() => {
+                                if (isLocked) {
+                                  const displayLg = formatLeagueDisplayLabel(lgId);
+                                  setShowMembershipModal(true);
+                                  setMembershipStatusMsg(
+                                    webMembershipTier === 'free'
+                                      ? `🔒 ${displayLg} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`
+                                      : `🏆 ${displayLg} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`
+                                  );
+                                  return;
+                                }
+                                let nextSelected: LeagueType[];
+                                if (isSelected) {
+                                  if (antiMetaSelectedLeagues.length <= 1) {
+                                    setStartBattleToast('Keep at least 1 cup selected in Anti-Meta Builder.');
+                                    setTimeout(() => setStartBattleToast(null), 1800);
+                                    return;
+                                  }
+                                  nextSelected = antiMetaSelectedLeagues.filter(
+                                    (sel) => normalizeLeagueName(sel) !== norm
+                                  );
+                                } else {
+                                  nextSelected = [...antiMetaSelectedLeagues, lgId];
+                                }
+                                setAntiMetaSelectedLeagues(nextSelected);
+                                setAntiMetaLeague(nextSelected[0]);
+                                handleGenerateAntiMetaTeams(nextSelected, antiMetaFeat1, antiMetaFeat2);
+                              }}
+                              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition border ${
+                                isSelected
+                                  ? 'bg-purple-600/85 text-white border-purple-300 shadow'
+                                  : isLocked
+                                  ? 'bg-slate-900/60 text-slate-500 border-slate-800 hover:border-amber-500/40'
+                                  : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                              }`}
+                              title={formatLeagueDisplayLabel(lgId)}
+                            >
+                              {isLocked ? `🔒 ${shortLbl}` : isSelected ? `✓ ${shortLbl}` : shortLbl}
                             </button>
                           );
                         })}
@@ -10616,7 +10808,7 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               setAntiMetaFeat1('');
-                              handleGenerateAntiMetaTeams(antiMetaLeague, '', antiMetaFeat2);
+                              handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, '', antiMetaFeat2);
                             }}
                             className="text-[10px] text-rose-400 hover:text-rose-300 font-bold"
                           >
@@ -10645,7 +10837,7 @@ export default function App() {
                             onClick={() => {
                               setAntiMetaFeat1(rr);
                               setAntiMetaDropdownSlot(null);
-                              handleGenerateAntiMetaTeams(antiMetaLeague, rr, antiMetaFeat2);
+                              handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, rr, antiMetaFeat2);
                             }}
                             className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold border transition ${
                               antiMetaFeat1.trim() === rr
@@ -10667,7 +10859,7 @@ export default function App() {
                                 e.preventDefault();
                                 setAntiMetaFeat1(opt.name);
                                 setAntiMetaDropdownSlot(null);
-                                handleGenerateAntiMetaTeams(antiMetaLeague, opt.name, antiMetaFeat2);
+                                handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, opt.name, antiMetaFeat2);
                               }}
                               className="w-full px-3 py-2 text-left text-xs hover:bg-slate-800 flex items-center justify-between"
                             >
@@ -10699,7 +10891,7 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               setAntiMetaFeat2('');
-                              handleGenerateAntiMetaTeams(antiMetaLeague, antiMetaFeat1, '');
+                              handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, antiMetaFeat1, '');
                             }}
                             className="text-[10px] text-rose-400 hover:text-rose-300 font-bold"
                           >
@@ -10728,7 +10920,7 @@ export default function App() {
                             onClick={() => {
                               setAntiMetaFeat2(rr);
                               setAntiMetaDropdownSlot(null);
-                              handleGenerateAntiMetaTeams(antiMetaLeague, antiMetaFeat1, rr);
+                              handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, antiMetaFeat1, rr);
                             }}
                             className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold border transition ${
                               antiMetaFeat2.trim() === rr
@@ -10750,7 +10942,7 @@ export default function App() {
                                 e.preventDefault();
                                 setAntiMetaFeat2(opt.name);
                                 setAntiMetaDropdownSlot(null);
-                                handleGenerateAntiMetaTeams(antiMetaLeague, antiMetaFeat1, opt.name);
+                                handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, antiMetaFeat1, opt.name);
                               }}
                               className="w-full px-3 py-2 text-left text-xs hover:bg-slate-800 flex items-center justify-between"
                             >
@@ -10772,7 +10964,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Step 2b & 2c: Display Best ABB, ABC & Duo-Core Anti-Meta Team Options (Tier-Gated in v7.00) */}
+                  {/* Step 2b & 2c: Display Best ABB, ABC & Duo-Core Anti-Meta Team Options (Tier-Gated in v7.00, Multi-Cup in v7.43) */}
                   {(() => {
                     const maxPerArch =
                       webMembershipTier === 'pro' || webMembershipTier === 'vip'
@@ -10781,11 +10973,18 @@ export default function App() {
                         ? 2
                         : 1;
                     const isProOrVipTier = webMembershipTier === 'pro' || webMembershipTier === 'vip';
-                    if (!antiMetaResult || isGeneratingAntiMeta) {
+                    const effectiveResults: AntiMetaTeamBuilderResult[] =
+                      antiMetaResultsList.length > 0
+                        ? antiMetaResultsList
+                        : antiMetaResult
+                        ? [antiMetaResult]
+                        : [];
+                    if (effectiveResults.length === 0 || isGeneratingAntiMeta) {
+                      const simCupsStr = antiMetaSelectedLeagues.map(formatLeagueDisplayLabel).join(', ');
                       return (
                         <div className="bg-slate-950/90 border border-purple-500/40 rounded-xl p-6 text-center space-y-2 animate-pulse">
                           <div className="text-sm font-extrabold text-purple-300">
-                            ⚡ Simulating {antiMetaLeague} Top-100 Role-Weighted Meta &amp; Alternate Movesets...
+                            ⚡ Simulating {simCupsStr} Top-100 Role-Weighted Meta &amp; Alternate Movesets...
                           </div>
                           <div className="text-xs text-slate-400">
                             Evaluating ABB, ABC, and Symmetric Duo-Core lineups against Top 50 Meta Threats &amp; Core Breakers
@@ -10793,13 +10992,14 @@ export default function App() {
                         </div>
                       );
                     }
-                    const rawResult = antiMetaResult;
-                    const currentResult = {
-                      ...rawResult,
-                      top5AbbTeams: rawResult.top5AbbTeams.slice(0, maxPerArch),
-                      top5AbcTeams: rawResult.top5AbcTeams.slice(0, maxPerArch),
-                      top5DuoTeams: (rawResult.top5DuoTeams || []).slice(0, maxPerArch)
-                    };
+                    const displayedResults: AntiMetaTeamBuilderResult[] =
+                      antiMetaResultCupFilter === 'ALL'
+                        ? effectiveResults
+                        : effectiveResults.filter(
+                            (r) => normalizeLeagueName(r.league) === normalizeLeagueName(antiMetaResultCupFilter)
+                          );
+                    const finalResultsToShow =
+                      displayedResults.length > 0 ? displayedResults : effectiveResults;
 
                     const renderOptionCard = (opt: AntiMetaTeamOption) => {
                       const machBadge = getMachineBrTierInfo(opt.machineAggBr, machineBrThresholds);
@@ -10808,6 +11008,7 @@ export default function App() {
                       const closerBadge = getSingleSlotBrTierInfo(opt.closerBr, tierThresholds);
                       const totalMetaDepth = opt.topMetaTargetsTotal || 50;
                       const anyAltMoves = (opt.altMovesetSlots || []).some((s) => s.isAltMoveset);
+                      const optDefaultName = formatAntiMetaDefaultTeamName(opt.league, new Date());
 
                       return (
                         <div
@@ -10844,7 +11045,7 @@ export default function App() {
                               type="button"
                               onClick={() => handleSelectAntiMetaTeamOption(opt)}
                               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-[11px] flex items-center gap-1.5 shadow transition shrink-0"
-                              title={`Create "${defaultPreviewName}" and open Edit Team modal`}
+                              title={`Create "${optDefaultName}" and open Edit Team modal`}
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>Use &amp; Edit Team</span>
@@ -10973,74 +11174,151 @@ export default function App() {
                       );
                     };
 
-                    const displayedMetaList = currentResult.top50MetaList || currentResult.top25MetaList || [];
-                    const duoTeamsList = currentResult.top5DuoTeams || [];
-
                     return (
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300 bg-slate-950/70 px-3.5 py-2 rounded-xl border border-slate-800">
-                          <span>
-                            Showing <strong className="text-amber-300">Top {currentResult.top5AbbTeams.length} ABB</strong>,{' '}
-                            <strong className="text-sky-300">Top {currentResult.top5AbcTeams.length} ABC</strong> &amp;{' '}
-                            <strong className="text-emerald-300">Top {duoTeamsList.length} Duo-Core</strong> Anti-Meta Teams for{' '}
-                            <strong className="text-white">{currentResult.league}</strong>
-                            {currentResult.featuredPokemon.length > 0
-                              ? ` featuring ${currentResult.featuredPokemon.join(' + ')}`
-                              : ' (0 featured picks — full Top-100 role-weighted meta optimization)'}
-                            {' • '}
-                            <span className="text-purple-300">
-                              {currentResult.candidatesEvaluated} trios + {currentResult.movesetCombosSimulated || 0} alt movesets simmed
+                      <div className="space-y-5">
+                        {effectiveResults.length > 1 && (
+                          <div className="flex items-center gap-1.5 flex-wrap bg-slate-950/75 px-3 py-2 rounded-xl border border-slate-800">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                              Cup Results Filter:
                             </span>
-                          </span>
-                          <span className="text-[11px] text-emerald-400 font-mono">
-                            Default Team Name on Select: &quot;{defaultPreviewName}&quot;
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                          {/* Section 1: Best 5 ABB Teams */}
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
-                              <h4 className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
-                                <span>🛡️ Best 5 ABB Anti-Meta Lineups (Bait &amp; Sweep)</span>
-                              </h4>
-                              <span className="text-[10px] text-slate-400">
-                                Lead A covers shared B1/B2 weakness
-                              </span>
-                            </div>
-                            {currentResult.top5AbbTeams.map((opt) => renderOptionCard(opt))}
-                          </div>
-
-                          {/* Section 2: Best 5 ABC Teams */}
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between border-b border-sky-500/30 pb-2">
-                              <h4 className="text-sm font-extrabold text-sky-300 flex items-center gap-2">
-                                <span>⚔️ Best 5 ABC Anti-Meta Lineups (Balanced Core)</span>
-                              </h4>
-                              <span className="text-[10px] text-slate-400">
-                                Diversified Lead / Safe Swap / Closer
-                              </span>
-                            </div>
-                            {currentResult.top5AbcTeams.map((opt) => renderOptionCard(opt))}
-                          </div>
-                        </div>
-
-                        {/* Section 3: Best 5 Duo-Core Teams */}
-                        {duoTeamsList.length > 0 && (
-                          <div className="space-y-3 pt-2">
-                            <div className="flex flex-wrap items-center justify-between border-b border-emerald-500/30 pb-2 gap-2">
-                              <h4 className="text-sm font-extrabold text-emerald-300 flex items-center gap-2">
-                                <span>☯️ Best 5 Duo-Core Anti-Meta Lineups (Symmetric Yin &amp; Yang Core + Safe Swap Pivot)</span>
-                              </h4>
-                              <span className="text-[10px] text-slate-400">
-                                Slot 1 &amp; Slot 3 cover each other&apos;s weaknesses (interchangeable Lead/Co-Core) + Slot 2 Safe Switch
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                              {duoTeamsList.map((opt) => renderOptionCard(opt))}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setAntiMetaResultCupFilter('ALL')}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                antiMetaResultCupFilter === 'ALL'
+                                  ? 'bg-purple-600 text-white border-purple-400'
+                                  : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500'
+                              }`}
+                            >
+                              🌐 All ({effectiveResults.length} Cups)
+                            </button>
+                            {effectiveResults.map((resItem) => {
+                              const activeFilter =
+                                normalizeLeagueName(antiMetaResultCupFilter) ===
+                                normalizeLeagueName(resItem.league);
+                              return (
+                                <button
+                                  key={`am-res-pill-${resItem.league}`}
+                                  type="button"
+                                  onClick={() => setAntiMetaResultCupFilter(resItem.league)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                    activeFilter
+                                      ? 'bg-purple-600 text-white border-purple-400'
+                                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500'
+                                  }`}
+                                >
+                                  {formatLeagueDisplayLabel(resItem.league)}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
+
+                        {finalResultsToShow.map((cupRawResult) => {
+                          const cupResult = {
+                            ...cupRawResult,
+                            top5AbbTeams: cupRawResult.top5AbbTeams.slice(0, maxPerArch),
+                            top5AbcTeams: cupRawResult.top5AbcTeams.slice(0, maxPerArch),
+                            top5DuoTeams: (cupRawResult.top5DuoTeams || []).slice(0, maxPerArch)
+                          };
+                          const displayedMetaList = cupResult.top50MetaList || cupResult.top25MetaList || [];
+                          const duoTeamsList = cupResult.top5DuoTeams || [];
+                          const displayCupName = formatLeagueDisplayLabel(cupResult.league);
+                          const cupDefaultName = formatAntiMetaDefaultTeamName(cupResult.league, new Date());
+
+                          return (
+                            <div key={`am-cup-section-${cupResult.league}`} className="space-y-4">
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300 bg-slate-950/70 px-3.5 py-2 rounded-xl border border-slate-800">
+                                <span>
+                                  Showing <strong className="text-amber-300">Top {cupResult.top5AbbTeams.length} ABB</strong>,{' '}
+                                  <strong className="text-sky-300">Top {cupResult.top5AbcTeams.length} ABC</strong> &amp;{' '}
+                                  <strong className="text-emerald-300">Top {duoTeamsList.length} Duo-Core</strong> Anti-Meta Teams for{' '}
+                                  <strong className="text-white">{displayCupName}</strong>
+                                  {cupResult.featuredPokemon.length > 0
+                                    ? ` featuring ${cupResult.featuredPokemon.join(' + ')}`
+                                    : ' (0 featured picks — full Top-100 role-weighted meta optimization)'}
+                                  {' • '}
+                                  <span className="text-purple-300">
+                                    {cupResult.candidatesEvaluated} trios + {cupResult.movesetCombosSimulated || 0} alt movesets simmed
+                                  </span>
+                                </span>
+                                <span className="text-[11px] text-emerald-400 font-mono">
+                                  Default Team Name on Select: &quot;{cupDefaultName}&quot;
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                {/* Section 1: Best 5 ABB Teams */}
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
+                                    <h4 className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
+                                      <span>🛡️ Best 5 ABB Anti-Meta Lineups ({displayCupName} · Bait &amp; Sweep)</span>
+                                    </h4>
+                                    <span className="text-[10px] text-slate-400">
+                                      Lead A covers shared B1/B2 weakness
+                                    </span>
+                                  </div>
+                                  {cupResult.top5AbbTeams.map((opt) => renderOptionCard(opt))}
+                                </div>
+
+                                {/* Section 2: Best 5 ABC Teams */}
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between border-b border-sky-500/30 pb-2">
+                                    <h4 className="text-sm font-extrabold text-sky-300 flex items-center gap-2">
+                                      <span>⚔️ Best 5 ABC Anti-Meta Lineups ({displayCupName} · Balanced Core)</span>
+                                    </h4>
+                                    <span className="text-[10px] text-slate-400">
+                                      Diversified Lead / Safe Swap / Closer
+                                    </span>
+                                  </div>
+                                  {cupResult.top5AbcTeams.map((opt) => renderOptionCard(opt))}
+                                </div>
+                              </div>
+
+                              {/* Section 3: Best 5 Duo-Core Teams */}
+                              {duoTeamsList.length > 0 && (
+                                <div className="space-y-3 pt-2">
+                                  <div className="flex flex-wrap items-center justify-between border-b border-emerald-500/30 pb-2 gap-2">
+                                    <h4 className="text-sm font-extrabold text-emerald-300 flex items-center gap-2">
+                                      <span>☯️ Best 5 Duo-Core Anti-Meta Lineups ({displayCupName} · Symmetric Yin &amp; Yang Core + Safe Swap)</span>
+                                    </h4>
+                                    <span className="text-[10px] text-slate-400">
+                                      Slot 1 &amp; Slot 3 cover each other&apos;s weaknesses (interchangeable Lead/Co-Core) + Slot 2 Safe Switch
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                    {duoTeamsList.map((opt) => renderOptionCard(opt))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Bottom Card: Top 50 Meta Determined by SilphScope with Meta BR in Parentheses */}
+                              <div className="bg-slate-950/85 border border-slate-800 rounded-xl p-4 space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h5 className="text-xs font-extrabold text-purple-300 uppercase tracking-wider">
+                                    🎯 Top 50 {displayCupName} Meta Determined by SilphScope (Meta Battle Ranking in Parentheses • All 50 Used for Key Wins, Threats &amp; Core Breakers Audit)
+                                  </h5>
+                                  <span className="text-[10px] text-slate-400">
+                                    {cupResult.metaSummaryLabel || 'Built against Top-100 Synthetic Role-Weighted Meta blended with Season Logs'}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {displayedMetaList.map((entry) => (
+                                    <span
+                                      key={`top50-meta-${cupResult.league}-${entry.rank}-${entry.name}`}
+                                      className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-slate-200 font-medium"
+                                    >
+                                      <strong className="text-purple-400 font-mono">#{entry.rank}</strong> {entry.name}{' '}
+                                      <span className="text-sky-300 font-mono">
+                                        ({entry.metaBr ?? 500} BR • {entry.weightPct}%)
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
 
                         {!isProOrVipTier && (
                           <div className="bg-indigo-950/60 border border-amber-400/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -11061,31 +11339,6 @@ export default function App() {
                             </button>
                           </div>
                         )}
-
-                        {/* Bottom Card: Top 50 Meta Determined by SilphScope with Meta BR in Parentheses */}
-                        <div className="bg-slate-950/85 border border-slate-800 rounded-xl p-4 space-y-2.5">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <h5 className="text-xs font-extrabold text-purple-300 uppercase tracking-wider">
-                              🎯 Top 50 {currentResult.league} Meta Determined by SilphScope (Meta Battle Ranking in Parentheses • All 50 Used for Key Wins, Threats &amp; Core Breakers Audit)
-                            </h5>
-                            <span className="text-[10px] text-slate-400">
-                              {currentResult.metaSummaryLabel || 'Built against Top-100 Synthetic Role-Weighted Meta blended with Season Logs'}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {displayedMetaList.map((entry) => (
-                              <span
-                                key={`top50-meta-${entry.rank}-${entry.name}`}
-                                className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-slate-200 font-medium"
-                              >
-                                <strong className="text-purple-400 font-mono">#{entry.rank}</strong> {entry.name}{' '}
-                                <span className="text-sky-300 font-mono">
-                                  ({entry.metaBr ?? 500} BR • {entry.weightPct}%)
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
                       </div>
                     );
                   })()}
@@ -11101,11 +11354,12 @@ export default function App() {
               const formatCupSubLabel = (lg: string) => {
                 const u = lg.trim().toUpperCase();
                 if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 'Open / Standard';
-                if (u.includes('MEGA')) return `Mega (${lg})`;
-                if (lg === 'Battle Frontier (Spectral)' || u === 'BATTLE FRONTIER (SPECTRAL)') return 'BF Spectral';
-                if (lg === 'Battle Frontier (Cauldron)' || u === 'BATTLE FRONTIER (CAULDRON)') return 'BF Cauldron';
-                if (lg === 'Battle Frontier (Master)' || u === 'BATTLE FRONTIER (MASTER)') return 'BF Master';
-                return lg;
+                const clean = formatLeagueDisplayLabel(lg);
+                if (u.includes('MEGA')) return `Mega (${clean})`;
+                if (lg === 'Battle Frontier (Spectral)' || u === 'BATTLE FRONTIER (SPECTRAL)' || u === 'BF (SPECTRAL)') return 'BF Spectral';
+                if (lg === 'Battle Frontier (Cauldron)' || u === 'BATTLE FRONTIER (CAULDRON)' || u === 'BF (CAULDRON)') return 'BF Cauldron';
+                if (lg === 'Battle Frontier (Master)' || u === 'BATTLE FRONTIER (MASTER)' || u === 'BF (MASTER)') return 'BF Master';
+                return clean;
               };
               const sortTierCups = (cups: string[]) =>
                 [...cups].sort((a, b) => {
@@ -11625,7 +11879,7 @@ export default function App() {
                               const rescaled = rescaleTeamMembersForLeague(currentMembers, nextL);
                               applyOrderedMembersToModalForm(rescaled);
                               setModalAutoDetectSummary(
-                                `🔄 Rescaled CPs & default IVs for ${nextL}`
+                                `🔄 Rescaled CPs & default IVs for ${formatLeagueDisplayLabel(nextL)}`
                               );
                             }
                           }}
@@ -11633,7 +11887,7 @@ export default function App() {
                         >
                           {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lg) => (
                             <option key={lg} value={lg}>
-                              {stripLeagueCpSuffix(lg)}
+                              {formatLeagueDisplayLabel(lg)}
                             </option>
                           ))}
                         </select>
@@ -11660,7 +11914,7 @@ export default function App() {
                           >
                             {allEnabledLeaguesCombined.map((lg) => (
                               <option key={lg} value={lg}>
-                                {stripLeagueCpSuffix(lg)}
+                                {formatLeagueDisplayLabel(lg)}
                               </option>
                             ))}
                           </select>
@@ -12978,13 +13232,13 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <div>
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
-                    <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
+                    <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 BF)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
                       v6.26
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
-                    Switch between <strong>Standard GBL (Blind 3 PvP)</strong> and <strong>Show 6 (Battle Frontier / Pick-3)</strong>. Show 6 Mode features its own independent Battle Logs, Teams of 6 &amp; Teams of 3 storage, Dual Show 6 Team Builders, and Known-Opponent-6 AI backline constraints.
+                    Switch between <strong>Standard GBL (Blind 3 PvP)</strong> and <strong>Show 6 (BF / Pick-3)</strong>. Show 6 Mode features its own independent Battle Logs, Teams of 6 &amp; Teams of 3 storage, Dual Show 6 Team Builders, and Known-Opponent-6 AI backline constraints.
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -13039,7 +13293,7 @@ export default function App() {
                   {renderBattleFrontierLogo('w-8 h-8 shrink-0 mt-0.5')}
                   <div>
                     <div className="text-xs font-extrabold text-amber-300 flex items-center gap-1.5">
-                      <span>🏛️ Show 6 Mode (Battle Frontier / Pick-3)</span>
+                      <span>🏛️ Show 6 Mode (BF / Pick-3)</span>
                       {appCombatMode === 'show6' && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 font-mono">ACTIVE</span>
                       )}
@@ -13376,14 +13630,14 @@ export default function App() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-extrabold text-white">
-                      🌐 PvPoke GitHub Limited Metas Selector (Dedicated GBL &amp; Battle Frontier Formats)
+                      🌐 PvPoke GitHub Limited Metas Selector (Dedicated GBL &amp; BF Formats)
                     </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 font-mono">
                       GBL Pinned: {pinnedGblMetas.length} • Show 6 Pinned: {pinnedShow6Metas.length}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Pulls verified ranked formats directly from the official <code className="text-purple-300 font-mono">pvpoke/pvpoke</code> GitHub repository (<code className="text-sky-300 font-mono">formats.json</code> + active <code className="text-sky-300 font-mono">cups/*.json</code> + verified <code className="text-sky-300 font-mono">rankings-&#123;cp&#125;.json</code>). Automatically groups metas into <strong className="text-emerald-300">🟢 Current</strong>, <strong className="text-sky-300">🔜 Upcoming</strong>, and <strong className="text-amber-300">🕒 Recent (This Season)</strong> while hiding obsolete archived formats. Pin any number of Limited Metas independently for <strong className="text-sky-300">Standard GBL (Blind 3)</strong> and <strong className="text-amber-300">Battle Frontier (Show 6)</strong>!
+                    Pulls verified ranked formats directly from the official <code className="text-purple-300 font-mono">pvpoke/pvpoke</code> GitHub repository (<code className="text-sky-300 font-mono">formats.json</code> + active <code className="text-sky-300 font-mono">cups/*.json</code> + verified <code className="text-sky-300 font-mono">rankings-&#123;cp&#125;.json</code>). Automatically groups metas into <strong className="text-emerald-300">🟢 Current</strong>, <strong className="text-sky-300">🔜 Upcoming</strong>, and <strong className="text-amber-300">🕒 Recent (This Season)</strong> while hiding obsolete archived formats. Pin any number of Limited Metas independently for <strong className="text-sky-300">Standard GBL (Blind 3)</strong> and <strong className="text-amber-300">BF (Show 6)</strong>!
                   </p>
                   <div className="text-[11px] font-mono text-emerald-400">{pvPokeMetasSyncStatus}</div>
                 </div>
@@ -13429,14 +13683,14 @@ export default function App() {
                           className="px-2.5 py-1 rounded-md bg-sky-500/20 border border-sky-400/50 text-sky-200 text-[10.5px] font-black font-mono flex items-center gap-1"
                         >
                           <span>🔒</span>
-                          <span>{lg}</span>
+                          <span>{formatLeagueDisplayLabel(lg)}</span>
                         </span>
                       ))}
                     </div>
                   </div>
                   <div className="p-2.5 rounded-lg bg-slate-900/90 border border-amber-500/30 space-y-1.5">
                     <div className="text-[11px] font-extrabold text-amber-300">
-                      🏛️ Show 6 Pick 3 (Battle Frontier) — Forced Top Defaults (All &quot;Battle Frontier&quot; Cups):
+                      🏛️ Show 6 Pick 3 (BF) — Forced Top Defaults (All &quot;BF&quot; Cups):
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {forcedShow6Leagues.map((lg) => (
@@ -13445,7 +13699,7 @@ export default function App() {
                           className="px-2.5 py-1 rounded-md bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[10.5px] font-black font-mono flex items-center gap-1"
                         >
                           <span>🔒</span>
-                          <span>{lg}</span>
+                          <span>{formatLeagueDisplayLabel(lg)}</span>
                         </span>
                       ))}
                     </div>
@@ -13520,8 +13774,8 @@ export default function App() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="font-extrabold text-xs text-white truncate" title={stripLeagueCpSuffix(fmt.id)}>
-                                  {stripLeagueCpSuffix(fmt.id)}
+                                <div className="font-extrabold text-xs text-white truncate" title={formatLeagueDisplayLabel(fmt.id)}>
+                                  {formatLeagueDisplayLabel(fmt.id)}
                                 </div>
                                 <div className="text-[10px] font-mono text-slate-400">
                                   cup: <span className="text-purple-300">{fmt.cupKey}</span> • tier:{' '}
@@ -13563,7 +13817,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => {
                                   if (isForcedShow6BF) {
-                                    setStartBattleToast(`🔒 ${fmt.id} is a forced Battle Frontier default in Show 6.`);
+                                    setStartBattleToast(`🔒 ${formatLeagueDisplayLabel(fmt.id)} is a forced BF default in Show 6.`);
                                     return;
                                   }
                                   handleTogglePinnedShow6Meta(fmt.id);
@@ -13589,7 +13843,7 @@ export default function App() {
                             {isPinnedShow6 && (
                               <div className="pt-1.5 border-t border-slate-800/80 space-y-1">
                                 <label className="block text-[9.5px] font-bold text-amber-300">
-                                  Optional Battle Frontier Sheet Tab/Column Keyword (blank = 100% PvPoke Rankings):
+                                  Optional BF Sheet Tab/Column Keyword (blank = 100% PvPoke Rankings):
                                 </label>
                                 <input
                                   type="text"
@@ -14882,6 +15136,7 @@ export default function App() {
                           setCurrentUserElo(syncedElo);
                           setEloHeaderDraft(syncedElo !== null ? String(syncedElo) : '');
                           setAntiMetaResult(null);
+                          setAntiMetaResultsList([]);
                           if (pulledSettingsUpdAt > 0) {
                             localStorage.setItem(
                               USER_SETTINGS_UPDATED_AT_STORAGE_KEY,
@@ -15167,7 +15422,7 @@ export default function App() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                       <div>
                         <span className="text-sm font-extrabold text-amber-300 block">
-                          🏛️ Battle Frontier Show 6 Meta Usage (Week - All) &amp; Most-Used Cores Sync
+                          🏛️ BF Show 6 Meta Usage (Week - All) &amp; Most-Used Cores Sync
                         </span>
                         <span className="text-xs text-slate-400 font-mono">
                           Status: <strong className="text-emerald-400">{bfSheetSyncStatus}</strong>
@@ -15208,7 +15463,7 @@ export default function App() {
               <div className="space-y-3 text-xs">
                 <div>
                   <label className="block font-bold text-slate-300 mb-1">
-                    1. Battle Frontier Meta Usage Sheet Link (Week - All / Cumulative Tab):
+                    1. BF Meta Usage Sheet Link (Week - All / Cumulative Tab):
                   </label>
                   <input
                     type="text"
@@ -15220,7 +15475,7 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block font-bold text-slate-300 mb-1">
-                    2. Battle Frontier Most-Used Cores Sheet Link:
+                    2. BF Most-Used Cores Sheet Link:
                   </label>
                   <input
                     type="text"
@@ -15241,8 +15496,8 @@ export default function App() {
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBfSheets ? 'animate-spin' : ''}`} />
                     <span>
                       {isSyncingBfSheets
-                        ? 'Importing Battle Frontier Sheets...'
-                        : '📥 Save Links & Import Battle Frontier Usage + Cores'}
+                        ? 'Importing BF Sheets...'
+                        : '📥 Save Links & Import BF Usage + Cores'}
                     </span>
                   </button>
                   <span className="text-[11px] text-slate-400 font-mono">
@@ -15810,7 +16065,7 @@ export default function App() {
                               const c = battleLogs.filter((b) => b.league.toLowerCase() === lg.toLowerCase()).length;
                               return (
                                 <option key={lg} value={lg}>
-                                  {stripLeagueCpSuffix(lg)} ({c})
+                                  {formatLeagueDisplayLabel(lg)} ({c})
                                 </option>
                               );
                             })}
@@ -15857,8 +16112,9 @@ export default function App() {
                             if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') {
                               return `Open / Standard (${lg})`;
                             }
-                            if (u.includes('MEGA')) return `Mega (${lg})`;
-                            return lg;
+                            const clean = formatLeagueDisplayLabel(lg);
+                            if (u.includes('MEGA')) return `Mega (${clean})`;
+                            return clean;
                           };
                           return (
                             <>
@@ -17413,9 +17669,13 @@ export default function App() {
             currentUserElo={currentUserElo}
             onChangeCurrentUserElo={handleUpdateCurrentUserElo}
             onBuildAntiNemesisTeam={(lg) => {
+              const cp = resolveLeagueCpTier(lg);
+              const mappedTier: 'GL' | 'UL' | 'ML' = cp === 'ULTRA' ? 'UL' : cp === 'MASTER' ? 'ML' : 'GL';
+              setAntiMetaSelectedCpTier(mappedTier);
+              setAntiMetaSelectedLeagues([lg]);
               setAntiMetaLeague(lg);
               setActiveTab('presets');
-              handleGenerateAntiMetaTeams(lg);
+              handleGenerateAntiMetaTeams([lg]);
             }}
           />
         )}
@@ -17482,7 +17742,7 @@ export default function App() {
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Click any of the 6 slots below to inspect &amp; apply <strong>Top Alternate Pokémon Upgrades</strong> and <strong>Top Alternate Movesets</strong> against the fused Battle Frontier Usage + Core + PvPoke meta!
+                    Click any of the 6 slots below to inspect &amp; apply <strong>Top Alternate Pokémon Upgrades</strong> and <strong>Top Alternate Movesets</strong> against the fused BF Usage + Core + PvPoke meta!
                   </p>
                 </div>
                 <button
@@ -17535,7 +17795,7 @@ export default function App() {
                   >
                     {enabledShow6Leagues.map((lg) => (
                       <option key={lg} value={lg}>
-                        {stripLeagueCpSuffix(lg)}
+                        {formatLeagueDisplayLabel(lg)}
                       </option>
                     ))}
                   </select>
@@ -17905,7 +18165,7 @@ export default function App() {
                   </div>
                   {show6EditorSlotUpgrades.length === 0 ? (
                     <p className="text-[11px] text-slate-400">
-                      Click any slot card above to compute top Battle Frontier meta &amp; core Pokémon replacements.
+                      Click any slot card above to compute top BF meta &amp; core Pokémon replacements.
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -18080,7 +18340,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.42 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.43 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

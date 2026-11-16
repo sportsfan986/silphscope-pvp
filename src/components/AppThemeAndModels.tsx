@@ -48,7 +48,7 @@ export function renderBattleFrontierLogo(sizeOrClass: number | string = 22) {
           ? { width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
           : { display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
       }
-      aria-label="Battle Frontier Show 6 Emblem"
+      aria-label="BF Show 6 Emblem"
     >
       <defs>
         <linearGradient id="bfGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">

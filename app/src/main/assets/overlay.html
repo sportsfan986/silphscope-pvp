@@ -3780,7 +3780,11 @@
             }
 
             const idleTeamBannerEl = document.getElementById("sky-idle-team-banner");
-            const activeLeagueStr = String(battleData.activeLeague || "MASTER LEAGUE").replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, "").trim().toUpperCase();
+            const activeLeagueStr = String(battleData.activeLeague || "MASTER LEAGUE")
+                .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, "")
+                .replace(/\bBATTLE\s+FRONTIER\b/gi, "BF")
+                .trim()
+                .toUpperCase();
             const activeTeamNameStr = String(battleData.activeTeamName || "").trim();
             const activeArchStr = String(battleData.teamArchetype || "ABC").toUpperCase();
 

@@ -410,6 +410,52 @@ object IvMatrixEngine {
         val cmpFlip: String // "GAINED" | "LOST" | "NONE"
     )
 
+    data class SpeciesCupRankInfo(
+        val league: String,
+        val rank: Int?,
+        val score: Double?,
+        val totalRanked: Int
+    )
+
+    fun getSpeciesCupRankInfo(
+        speciesName: String,
+        isShadow: Boolean,
+        league: String
+    ): SpeciesCupRankInfo {
+        val (cleanName, nameHasShadow) = cleanSpeciesNameWithoutShadow(speciesName)
+        val effectiveShadow = isShadow || nameHasShadow
+        val meta = resolveRawSpeciesMeta(cleanName) ?: return SpeciesCupRankInfo(league, null, null, 0)
+        val normLeague = OverlayService.normalizeLeagueKeyStatic(league)
+        val upperRaw = league.trim().uppercase()
+        val withoutCp = normLeague.replace(Regex("\\s*\\(\\d+\\)\\s*$"), "").trim().uppercase()
+        val map = OverlayService.LIVE_RANKINGS_MAP[normLeague]?.takeIf { it.isNotEmpty() }
+            ?: OverlayService.LIVE_RANKINGS_MAP[upperRaw]?.takeIf { it.isNotEmpty() }
+            ?: OverlayService.LIVE_RANKINGS_MAP[withoutCp]?.takeIf { it.isNotEmpty() }
+        val baseId = meta.speciesId.lowercase().removeSuffix("_shadow")
+        val targetId = if (effectiveShadow) "${baseId}_shadow" else baseId
+        if (map != null) {
+            val entry = map[targetId]
+            if (entry != null) {
+                return SpeciesCupRankInfo(
+                    league = league,
+                    rank = entry.rank,
+                    score = entry.score,
+                    totalRanked = map.size
+                )
+            }
+            return SpeciesCupRankInfo(league = league, rank = null, score = null, totalRanked = map.size)
+        }
+        val staticFallbackRank = if (!effectiveShadow) {
+            when (normLeague) {
+                "GREAT LEAGUE" -> meta.glRank.takeIf { it in 1..450 }
+                "ULTRA LEAGUE" -> meta.ulRank.takeIf { it in 1..450 }
+                "MASTER LEAGUE" -> meta.mlRank.takeIf { it in 1..450 }
+                else -> null
+            }
+        } else null
+        return SpeciesCupRankInfo(league = league, rank = staticFallbackRank, score = null, totalRanked = 0)
+    }
+
     data class IvCandidateLeagueResult(
         val candidateId: String,
         val label: String,
@@ -430,6 +476,8 @@ object IvMatrixEngine {
         val statProduct: Double,
         val rank: Int,
         val pctOfRank1: Double,
+        val cupRank: Int? = null,
+        val cupScore: Double? = null,
         val league: String,
         val fastMove: String,
         val chargedMove1: String,
@@ -437,8 +485,12 @@ object IvMatrixEngine {
         val rec0v0: ShieldRecordSummary,
         val rec1v1: ShieldRecordSummary,
         val rec2v2: ShieldRecordSummary,
+        val overallEven3: ShieldRecordSummary,
+        val overallRealistic7: ShieldRecordSummary,
         val deltaWinsVsRank1: Int,
         val deltaBr1v1VsRank1: Int,
+        val deltaOverallEven3WinsVsRank1: Int = 0,
+        val deltaOverallRealistic7WinsVsRank1: Int = 0,
         val deltaWinsVsBaseline: Int,
         val deltaBr1v1VsBaseline: Int,
         val breakpointsGainedCount: Int,
@@ -882,7 +934,44 @@ object IvMatrixEngine {
                 )
             }
 
+            fun summarizeOverall(list: List<PerOppCandSim>, keys: List<String>): ShieldRecordSummary {
+                var w = 0
+                var l = 0
+                var t = 0
+                var sum = 0
+                var wPct = 0.0
+                val scCount = max(1, keys.size).toDouble()
+                for (i in list.indices) {
+                    val weight = (preparedOpps.getOrNull(i)?.weight ?: 0.0) / scCount
+                    for (scKey in keys) {
+                        val br = list[i].brByShield[scKey] ?: 500
+                        sum += br
+                        when {
+                            br > 500 -> {
+                                w += 1
+                                wPct += weight
+                            }
+                            br < 500 -> l += 1
+                            else -> {
+                                t += 1
+                                wPct += 0.5 * weight
+                            }
+                        }
+                    }
+                }
+                val cnt = max(1, list.size * max(1, keys.size))
+                return ShieldRecordSummary(
+                    wins = w,
+                    losses = l,
+                    ties = t,
+                    avgBr = (sum.toDouble() / cnt).roundToInt(),
+                    weightedWinPct = (wPct * 1000.0).roundToInt() / 10.0
+                )
+            }
+
             val rank1Summary1v1 = rank1Eval?.let { r1 -> summarize(r1.perOpp) { it.brByShield["1v1"] ?: 500 } }
+            val rank1OverallEven3 = rank1Eval?.let { r1 -> summarizeOverall(r1.perOpp, EVEN_3_SHIELD_KEYS) }
+            val rank1OverallRealistic7 = rank1Eval?.let { r1 -> summarizeOverall(r1.perOpp, REALISTIC_7_SHIELD_KEYS) }
             val baseSummary1v1 = baseEval?.let { b -> summarize(b.perOpp) { it.brByShield["1v1"] ?: 500 } }
 
             val results: List<IvCandidateLeagueResult> = evals.map { ev ->
@@ -970,6 +1059,9 @@ object IvMatrixEngine {
                 val r0 = summarize(ev.perOpp) { it.brByShield["0v0"] ?: 500 }
                 val r1 = summarize(ev.perOpp) { it.brByShield["1v1"] ?: 500 }
                 val r2 = summarize(ev.perOpp) { it.brByShield["2v2"] ?: 500 }
+                val ovEven3 = summarizeOverall(ev.perOpp, EVEN_3_SHIELD_KEYS)
+                val ovReal7 = summarizeOverall(ev.perOpp, REALISTIC_7_SHIELD_KEYS)
+                val cupRankInfo = getSpeciesCupRankInfo(ev.config.speciesName, ev.config.isShadow, league)
 
                 IvCandidateLeagueResult(
                     candidateId = ev.config.id,
@@ -991,6 +1083,8 @@ object IvMatrixEngine {
                     statProduct = ev.details.statProduct,
                     rank = ev.details.rank,
                     pctOfRank1 = ev.details.pctOfRank1,
+                    cupRank = cupRankInfo.rank,
+                    cupScore = cupRankInfo.score,
                     league = league,
                     fastMove = ev.fastMove,
                     chargedMove1 = ev.c1,
@@ -998,8 +1092,12 @@ object IvMatrixEngine {
                     rec0v0 = r0,
                     rec1v1 = r1,
                     rec2v2 = r2,
+                    overallEven3 = ovEven3,
+                    overallRealistic7 = ovReal7,
                     deltaWinsVsRank1 = r1.wins - (rank1Summary1v1?.wins ?: r1.wins),
                     deltaBr1v1VsRank1 = r1.avgBr - (rank1Summary1v1?.avgBr ?: r1.avgBr),
+                    deltaOverallEven3WinsVsRank1 = ovEven3.wins - (rank1OverallEven3?.wins ?: ovEven3.wins),
+                    deltaOverallRealistic7WinsVsRank1 = ovReal7.wins - (rank1OverallRealistic7?.wins ?: ovReal7.wins),
                     deltaWinsVsBaseline = r1.wins - (baseSummary1v1?.wins ?: r1.wins),
                     deltaBr1v1VsBaseline = r1.avgBr - (baseSummary1v1?.avgBr ?: r1.avgBr),
                     breakpointsGainedCount = brkGain,

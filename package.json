@@ -1,7 +1,7 @@
 {
   "name": "silphscope-pvp",
   "private": true,
-  "version": "7.42.0",
+  "version": "7.43.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
     "lint": "tsc --noEmit",
+    "release:check": "node scripts/verify-release-ready.mjs",
+    "hooks:install": "node scripts/verify-release-ready.mjs --install-hook",
     "ingest": "node scripts/ingest-telemetry.mjs --prune-remote",
     "telemetry:sync": "node scripts/ingest-telemetry.mjs --sync-only --prune-remote",
     "telemetry:report": "node scripts/ingest-telemetry.mjs --prune-remote",

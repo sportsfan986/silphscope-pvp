@@ -1003,7 +1003,7 @@ export function mapBfHeaderCellToLeague(cell: string): string | null {
   return null;
 }
 
-export function getBattleFrontierCountsSummary(prefix: string = "Active Battle Frontier Data"): string {
+export function getBattleFrontierCountsSummary(prefix: string = "Active BF Data"): string {
   const glM = (BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"] || []).length;
   const glC = (BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"] || []).length;
   const spM = (BATTLE_FRONTIER_USAGE_MAP["Battle Frontier (Spectral)"] || []).length;
@@ -1211,7 +1211,7 @@ export async function syncBattleFrontierUsageAndCores(
     totalCoreEntries += cLen;
   }
 
-  const summary = getBattleFrontierCountsSummary("✅ Synced Battle Frontier Sheets");
+  const summary = getBattleFrontierCountsSummary("✅ Synced BF Sheets");
 
   return {
     usageCounts,
@@ -3996,7 +3996,7 @@ export function getLeagueAbbreviation(league: string): string {
   const upper = raw.toUpperCase();
   if (upper.includes("SPECTRAL")) return "BF-Spec";
   if (upper.includes("CAULDRON")) return "BF-Caul";
-  if (upper.includes("BATTLE FRONTIER") && upper.includes("MASTER")) return "BF-ML";
+  if ((upper.includes("BATTLE FRONTIER") || upper.startsWith("BF (") || upper === "BF MASTER") && upper.includes("MASTER")) return "BF-ML";
   if (upper === "MEGA MASTER LEAGUE") return "MML";
   if (upper === "GREAT LEAGUE") return "GL";
   if (upper === "ULTRA LEAGUE") return "UL";

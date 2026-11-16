@@ -43,16 +43,21 @@ export interface DvrReplayItem {
 type DvrCpTier = 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER';
 
 function stripDvrLeagueCpSuffix(raw?: string): string {
-  return String(raw || '')
+  const s = String(raw || '')
     .trim()
     .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, '')
     .trim();
+  const u = s.toUpperCase();
+  if (u === 'BATTLE FRONTIER (SPECTRAL)' || u === 'BF (SPECTRAL)') return 'BF (Spectral)';
+  if (u === 'BATTLE FRONTIER (CAULDRON)' || u === 'BF (CAULDRON)') return 'BF (Cauldron)';
+  if (u === 'BATTLE FRONTIER (MASTER)' || u === 'BF (MASTER)') return 'BF (Master)';
+  return s.replace(/\bBattle\s+Frontier\b/gi, 'BF');
 }
 
 function resolveDvrCpTier(rawLeague?: string): 'GREAT' | 'ULTRA' | 'MASTER' {
   const upper = String(rawLeague || '').trim().toUpperCase();
   if (!upper) return 'GREAT';
-  if (upper.includes('(10000)') || upper.includes('MASTER') || upper === 'BATTLE FRONTIER (MASTER)') {
+  if (upper.includes('(10000)') || upper.includes('MASTER') || upper === 'BATTLE FRONTIER (MASTER)' || upper === 'BF (MASTER)') {
     return 'MASTER';
   }
   if (upper.includes('(2500)') || upper.includes('ULTRA') || upper.includes('CAULDRON')) {
@@ -1168,7 +1173,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.42 • Latest Release
+                    v7.43 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1397,7 +1402,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.42)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.43)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -1982,7 +1987,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   Competitive Log-Only Stealth Mode <span className="text-emerald-400 font-mono text-lg font-bold">(v7.30)</span>
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Competing in official <strong>Play! Pokémon Regionals &amp; International Championships</strong> or grassroots <strong>Show 6 / Battle Frontier</strong> tournaments? SilphScope is engineered to comply 100% with strict tournament &amp; referee regulations. In <strong>Competitive Mode: Log-Only</strong>, the overlay is completely invisible (<code className="text-emerald-300 font-mono">View.GONE</code>), haptic vibrations are silenced, and zero turn alerts or floating toasts display during live play.
+                  Competing in official <strong>Play! Pokémon Regionals &amp; International Championships</strong> or grassroots <strong>Show 6 / BF</strong> tournaments? SilphScope is engineered to comply 100% with strict tournament &amp; referee regulations. In <strong>Competitive Mode: Log-Only</strong>, the overlay is completely invisible (<code className="text-emerald-300 font-mono">View.GONE</code>), haptic vibrations are silenced, and zero turn alerts or floating toasts display during live play.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs text-slate-200">
                   <div className="flex items-start gap-2.5 bg-slate-950/60 p-3.5 rounded-2xl border border-emerald-500/20">

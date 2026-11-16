@@ -5,6 +5,7 @@ import {
   type LeagueType,
   type CrowdEloMetaSnapshotWeb,
   normalizeLeagueName,
+  formatLeagueDisplayLabel,
   getLeagueCpCap,
   computeBlendedSeasonMeta,
   getCurrentUserEloWeb,
@@ -234,7 +235,7 @@ export function MetaTab(props: MetaTabProps) {
                     >
                       {availableMetaLeagues.map((lg) => (
                         <option key={lg} value={lg}>
-                          {lg}
+                          {formatLeagueDisplayLabel(lg)}
                         </option>
                       ))}
                     </select>
@@ -502,14 +503,14 @@ export function MetaTab(props: MetaTabProps) {
                       <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-extrabold text-amber-300">
-                            🏛️ Show 6 Battle Frontier Usage &amp; Cores Blend
+                            🏛️ Show 6 BF Usage &amp; Cores Blend
                           </span>
                           <span className="text-[10px] font-mono text-amber-200">
                             {show6UsageWeightPct}% Sheet / {100 - show6UsageWeightPct}% PvPoke
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400">
-                          Show 6 mode blends your Show 6 battle logs with imported Battle Frontier Google Spreadsheet Usage &amp; Most-Used Cores. (Limited Cup Same-CP Standard League Blend is a GBL Blind 3 setting.)
+                          Show 6 mode blends your Show 6 battle logs with imported BF Google Spreadsheet Usage &amp; Most-Used Cores. (Limited Cup Same-CP Standard League Blend is a GBL Blind 3 setting.)
                         </p>
                       </div>
                     )}

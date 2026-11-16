@@ -449,7 +449,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="🏛️ Show 6 Battle Frontier Hub (Teams of 6 &amp; Dual Team Builders)"
+                        android:text="🏛️ Show 6 BF Hub (Teams of 6 &amp; Dual Team Builders)"
                         android:textSize="14sp"
                         android:textStyle="bold"
                         android:textColor="#fbbf24" />
@@ -1321,7 +1321,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Pick a League and 0, 1, or 2 Featured Pokémon → Generates Best 5 ABB &amp; Best 5 ABC Teams. Tap any option to create &amp; open Edit Team."
+                                android:text="Pick League &amp; Cups (Multi-Select) and 0, 1, or 2 Featured Pokémon → Generates Best 5 ABB, 5 ABC &amp; 5 Duo-Core Teams. Tap any option to create &amp; open Edit Team."
                                 android:textSize="11sp"
                                 android:textColor="#94a3b8"
                                 android:layout_marginTop="2dp" />
@@ -1351,10 +1351,37 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="1. Select League:"
+                            android:text="1. Select Leagues &amp; Cups (Multi-Select):"
                             android:textSize="11sp"
                             android:textStyle="bold"
                             android:textColor="#cbd5e1" />
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:id="@+id/layout_antimeta_tier_chips"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal" />
+                        </HorizontalScrollView>
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="8dp"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:id="@+id/layout_antimeta_cup_chips"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal" />
+                        </HorizontalScrollView>
 
                         <Spinner
                             android:id="@+id/spinner_antimeta_league"
@@ -1363,7 +1390,8 @@
                             android:background="#0f172a"
                             android:paddingHorizontal="8dp"
                             android:layout_marginTop="3dp"
-                            android:layout_marginBottom="8dp" />
+                            android:layout_marginBottom="8dp"
+                            android:visibility="gone" />
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -1741,7 +1769,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🏛️ 0. App Combat Mode (Standard GBL vs. Show 6 Battle Frontier • v5.00)"
+                    android:text="🏛️ 0. App Combat Mode (Standard GBL vs. Show 6 BF • v5.00)"
                     android:textColor="#fbbf24"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1750,7 +1778,7 @@
                     android:id="@+id/tv_settings_combat_mode_desc"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Switch between Standard GBL (Blind 3 PvP) and Show 6 (Battle Frontier / Pick-3). Show 6 Mode stores independent Battle Logs, Teams of 6 &amp; Teams of 3, Dual Show 6 Team Builders, per-league persisted Whitelist/Banlist, and constrains live AI backline predictions to the known Opponent 6."
+                    android:text="Switch between Standard GBL (Blind 3 PvP) and Show 6 (BF / Pick-3). Show 6 Mode stores independent Battle Logs, Teams of 6 &amp; Teams of 3, Dual Show 6 Team Builders, per-league persisted Whitelist/Banlist, and constrains live AI backline predictions to the known Opponent 6."
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:lineSpacingExtra="1.5dp"
@@ -1779,7 +1807,7 @@
                         android:layout_width="0dp"
                         android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:text="🏛️ Show 6 (Battle Frontier)"
+                        android:text="🏛️ Show 6 (BF)"
                         android:textSize="10.5sp"
                         android:textStyle="bold"
                         android:backgroundTint="#334155"
@@ -5555,7 +5583,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="🌐 PvPoke GitHub Limited Metas Selector (GBL &amp; Battle Frontier)"
+                                android:text="🌐 PvPoke GitHub Limited Metas Selector (GBL &amp; BF)"
                                 android:textColor="#c084fc"
                                 android:textSize="12sp"
                                 android:textStyle="bold" />
@@ -5634,7 +5662,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="🏛️ Battle Frontier Meta Usage &amp; Most-Used Cores (Show 6)"
+                            android:text="🏛️ BF Meta Usage &amp; Most-Used Cores (Show 6)"
                             android:textColor="#fbbf24"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -5642,7 +5670,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Imports Pokémon Usage % (Week - All) and Most-Used Cores from Google Sheets. Editable for future Battle Frontier seasons."
+                            android:text="Imports Pokémon Usage % (Week - All) and Most-Used Cores from Google Sheets. Editable for future BF seasons."
                             android:textColor="#94a3b8"
                             android:textSize="10sp"
                             android:layout_marginTop="2dp"
@@ -5698,7 +5726,7 @@
                             android:textColor="#0f172a"
                             android:textSize="11sp"
                             android:textStyle="bold"
-                            android:text="📥 Save Links &amp; Import Battle Frontier Usage + Cores" />
+                            android:text="📥 Save Links &amp; Import BF Usage + Cores" />
 
                         <TextView
                             android:id="@+id/tv_bf_sheets_status"

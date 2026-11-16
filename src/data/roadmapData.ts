@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.43',
+    codename: 'BF Label Streamlining, 2-Row Multi-Cup Anti-Meta & IV Lab Cup Rankings + Overall W-L-T',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Upgrades Anti-Meta Team Builder and IV Lab with 2-row GL/UL/ML/ALL -> Open + Limited multi-cup filters with strict Row 2 pruning, adds Shadow-aware Cup #Rank and Overall (7-Shield / Even 3) W-L-T records + Combined Multi-Cup summaries, abbreviates Battle Frontier labels to BF everywhere, and streamlines workspace release verification.',
+    icon: '⚖️',
+    accentColor: '#06B6D4',
+    highlights: [
+      '2-row multi-select GL / UL / ML / ALL + Open & Limited Cup filters with strict Row 2 visibility pruning in both Anti-Meta Team Builder and IV Lab across Android and Web',
+      'Shadow-aware Cup #Rank (exact league lookup) and Overall (7-Shield / Even 3) W-L-T + ±ΔW vs R1 summary bars on every IV Lab candidate card plus Combined Multi-Cup Summary',
+      'Clean "BF" abbreviation (BF (Spectral), BF (Cauldron), BF (Master)) across Android APK, HUD, Web Simulator, Marketing site, and Cloudflare DVR while preserving canonical sync keys',
+      'Streamlined workspace docs, modular skills, archived pre-v7 changelog, and automated pre-commit release parity verification (npm run release:check)'
+    ]
+  },
+  {
     version: 'v7.42',
     codename: 'Mimikyu Disguise vs. Shield Latch, Post-Charge Lethal KO Sync, Early 3-2-1 Wake-Up & Clean League Labels',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Resolves Mimikyu Disguise vs. Protect Shield desyncs with a two-way ambiguous-block latch and refund safety net, adds post-charge lethal KO / replacement & Morpeko form-shift HP sync, wakes 3-2-1 countdowns at "3"/"2" on 3v3 Pokeballs or explicit-CP nameplates, updates nightly audit classifiers, and removes CP limit suffixes from league/cup labels across Android, Web, and DVR.',
     icon: '🛡️',
@@ -245,7 +259,7 @@ export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
     version: 'v6.00 – v6.51',
     codename: '4-Pillar AI Tactical Coach & Super Mega Plus Moves',
     date: 'Early Nov 2026',
-    summary: 'Ultra-compact 2-line in-game tactical recommendations, synchronized cadence haptics, and complete Battle Frontier / Show 6 mode support.',
+    summary: 'Ultra-compact 2-line in-game tactical recommendations, synchronized cadence haptics, and complete BF / Show 6 mode support.',
     icon: '🧠',
     accentColor: '#A78BFA',
     highlights: [
@@ -257,7 +271,7 @@ export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   },
   {
     version: 'v4.00 – v5.13',
-    codename: 'Shield Decision Overlay & Battle Frontier Show 6',
+    codename: 'Shield Decision Overlay & BF Show 6',
     date: 'Late Oct 2026',
     summary: 'Cutscene-gated "Attack incoming!" instant shield math, Show 6 tournament roster drafting, and 100E ceiling step latching.',
     icon: '🛡️',

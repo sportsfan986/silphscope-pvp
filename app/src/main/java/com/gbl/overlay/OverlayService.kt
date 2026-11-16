@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.42"
-        const val APP_VERSION_CODE = 1742
+        const val APP_VERSION = "7.43"
+        const val APP_VERSION_CODE = 1743
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -1069,6 +1069,7 @@ class OverlayService : LifecycleService() {
 
         fun isBattleFrontierFormatTitleStatic(titleOrKey: String, cupSlug: String = ""): Boolean {
             return titleOrKey.contains("Battle Frontier", ignoreCase = true) ||
+                Regex("^BF\\s*\\(", RegexOption.IGNORE_CASE).containsMatchIn(titleOrKey.trim()) ||
                 cupSlug.contains("battlefrontier", ignoreCase = true) ||
                 cupSlug.equals("spectral", ignoreCase = true) ||
                 cupSlug.equals("cauldron", ignoreCase = true)
@@ -1083,12 +1084,24 @@ class OverlayService : LifecycleService() {
                 t.contains("battle frontier (spectral)") ||
                 t.contains("battle frontier (cauldron)") ||
                 t.contains("battle frontier (master)") ||
+                t.contains("bf (spectral)") ||
+                t.contains("bf (cauldron)") ||
+                t.contains("bf (master)") ||
                 t == "spectral cup" ||
                 t == "cauldron cup"
         }
 
         fun stripLeagueCpSuffixStatic(raw: String): String =
             raw.trim().replace(Regex("\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$", RegexOption.IGNORE_CASE), "").trim()
+
+        fun formatLeagueDisplayLabelStatic(raw: String): String {
+            val stripped = stripLeagueCpSuffixStatic(raw)
+            val u = stripped.uppercase()
+            if (u == "BATTLE FRONTIER (SPECTRAL)" || u == "BF (SPECTRAL)") return "BF (Spectral)"
+            if (u == "BATTLE FRONTIER (CAULDRON)" || u == "BF (CAULDRON)") return "BF (Cauldron)"
+            if (u == "BATTLE FRONTIER (MASTER)" || u == "BF (MASTER)") return "BF (Master)"
+            return stripped.replace(Regex("\\bBattle\\s+Frontier\\b", RegexOption.IGNORE_CASE), "BF")
+        }
 
         fun formatCatalogLeagueKeyStatic(rawTitle: String, cp: Int, cupSlug: String = ""): String {
             val cleanNoCp = rawTitle.trim().replace(Regex("\\s*\\((500|1500|2500|10000)\\)\\s*$"), "").trim()
@@ -1225,7 +1238,7 @@ class OverlayService : LifecycleService() {
         fun resolveLeagueCpTierStatic(rawLeague: String, prefs: SharedPreferences? = null): String {
             val upper = rawLeague.trim().uppercase()
             if (upper.isEmpty()) return "GREAT"
-            if (upper.contains("(10000)") || upper.contains("MASTER") || upper == "BATTLE FRONTIER (MASTER)") {
+            if (upper.contains("(10000)") || upper.contains("MASTER") || upper == "BATTLE FRONTIER (MASTER)" || upper == "BF (MASTER)") {
                 return "MASTER"
             }
             if (upper.contains("(2500)") || upper.contains("ULTRA") || upper.contains("CAULDRON")) {
@@ -1292,8 +1305,8 @@ class OverlayService : LifecycleService() {
             if (upper == "MEGA GREAT LEAGUE" || upper == "GREAT LEAGUE (MEGA)") {
                 return "Mega Great League"
             }
-            if (upper.startsWith("BATTLE FRONTIER")) {
-                return upper
+            if (upper.startsWith("BATTLE FRONTIER") || upper.startsWith("BF (")) {
+                return upper.replace(Regex("^BF\\s*\\("), "BATTLE FRONTIER (")
             }
             if (isShow6) {
                 return when (upper) {
@@ -1430,7 +1443,7 @@ class OverlayService : LifecycleService() {
                 .find { it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true) }
             if (cat != null) return cat.allowsMega
             val u = trimmed.uppercase()
-            return u.contains("MEGA") || u.contains("CAULDRON") || u.contains("LAIC") || u == "BATTLE FRONTIER (MASTER)"
+            return u.contains("MEGA") || u.contains("CAULDRON") || u.contains("LAIC") || u == "BATTLE FRONTIER (MASTER)" || u == "BF (MASTER)"
         }
 
         val SUPER_MEGA_PLUS_MOVES: Map<String, String> get() = PokemonStaticData.SUPER_MEGA_PLUS_MOVES
@@ -2004,8 +2017,8 @@ class OverlayService : LifecycleService() {
                 upper.contains("CAULDRON") -> "BATTLE FRONTIER (CAULDRON)"
                 upper.contains("SPELLCRAFT") -> "BATTLE FRONTIER (SPELLCRAFT)"
                 upper.contains("LAGOON") -> "BATTLE FRONTIER (LAGOON)"
-                upper.contains("FRONTIER (UL)") -> "BATTLE FRONTIER (UL)"
-                upper.contains("FRONTIER") -> "BATTLE FRONTIER (MASTER)"
+                upper.contains("FRONTIER (UL)") || upper == "BF (UL)" -> "BATTLE FRONTIER (UL)"
+                upper.contains("FRONTIER") || upper.startsWith("BF (") || upper == "BF MASTER" -> "BATTLE FRONTIER (MASTER)"
                 upper.contains("MEGA GREAT") -> "MEGA GREAT LEAGUE"
                 upper.contains("MEGA ULTRA") -> "MEGA ULTRA LEAGUE"
                 upper.contains("MEGA") -> "MEGA MASTER LEAGUE"
@@ -2017,7 +2030,7 @@ class OverlayService : LifecycleService() {
 
         fun isBattleFrontierLeagueStatic(league: String): Boolean {
             val k = normalizeLeagueKeyStatic(league)
-            return k.startsWith("BATTLE FRONTIER") || (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).any { it.leagueKey.equals(league, ignoreCase = true) }
+            return k.startsWith("BATTLE FRONTIER") || k.startsWith("BF (") || (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).any { it.leagueKey.equals(league, ignoreCase = true) }
         }
 
         object FormResolver {

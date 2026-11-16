@@ -196,6 +196,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutAntiMetaResults: LinearLayout
     private var antiMetaJob: kotlinx.coroutines.Job? = null
     private var isAntiMetaBodyExpanded: Boolean = true
+    private var antiMetaSelectedCpTier: String = "GL"
+    private val antiMetaSelectedLeagues: MutableList<String> = mutableListOf("GREAT LEAGUE")
+    private var antiMetaLastResults: List<OverlayService.Companion.AntiMetaTeamBuilderResult> = emptyList()
+    private var antiMetaResultsFilterCup: String = "ALL"
     private lateinit var btnTrashBattleLog: Button
     private lateinit var spinnerAppTheme: Spinner
     private lateinit var ivThemePreviewEmblem: ImageView
@@ -779,6 +783,8 @@ class MainActivity : AppCompatActivity() {
             override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
                 val v = super.getView(position, convertView, parent)
                 if (v is TextView) {
+                    val raw = items.getOrNull(position) ?: v.text?.toString().orEmpty()
+                    v.text = OverlayService.formatLeagueDisplayLabelStatic(raw)
                     val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
                     v.setTextColor(theme.primaryTextColor)
                     v.textSize = 12.5f
@@ -789,6 +795,8 @@ class MainActivity : AppCompatActivity() {
             override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
                 val v = super.getDropDownView(position, convertView, parent)
                 if (v is TextView) {
+                    val raw = items.getOrNull(position) ?: v.text?.toString().orEmpty()
+                    v.text = OverlayService.formatLeagueDisplayLabelStatic(raw)
                     val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
                     v.setTextColor(theme.primaryTextColor)
                     v.setBackgroundColor(theme.surfaceColor)
@@ -5955,7 +5963,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun formatTier2CupChipLabel(leagueKey: String): String {
-        val clean = OverlayService.stripLeagueCpSuffixStatic(leagueKey)
+        val clean = OverlayService.formatLeagueDisplayLabelStatic(leagueKey)
         val u = clean.uppercase()
         return when {
             u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE" -> "Open / Standard"
@@ -6015,7 +6023,7 @@ class MainActivity : AppCompatActivity() {
             dynamicKeys.add("ALL")
             for (lg in sortCupsWithinTier(activeEnabledLeagues)) {
                 val c = allLogs.count { it.league.equals(lg, ignoreCase = true) }
-                dynamicLabels.add("${OverlayService.stripLeagueCpSuffixStatic(lg)} ($c)")
+                dynamicLabels.add("${OverlayService.formatLeagueDisplayLabelStatic(lg)} ($c)")
                 dynamicKeys.add(lg)
             }
             if (oldCupLogsCount > 0 || selectedLogLeagueFilter == "OLD_CUPS") {
@@ -7800,7 +7808,9 @@ class MainActivity : AppCompatActivity() {
                     val eloPart = entry.userElo?.takeIf { it in 300..3800 }?.let {
                         "🎯 ${String.format(java.util.Locale.US, "%,d", it)} • "
                     } ?: ""
-                    text = "$eloPart${entry.league.replace(" LEAGUE", "")} • ${timeFmt.format(java.util.Date(entry.timestampMs))}"
+                    val dispLg = OverlayService.formatLeagueDisplayLabelStatic(entry.league)
+                        .replace(" LEAGUE", "", ignoreCase = true)
+                    text = "$eloPart$dispLg • ${timeFmt.format(java.util.Date(entry.timestampMs))}"
                     setTextColor(0xFF94A3B8.toInt())
                     textSize = 10.5f
                     gravity = android.view.Gravity.END
@@ -10804,7 +10814,7 @@ class MainActivity : AppCompatActivity() {
             textArchetype?.text = if (preset.isArchetypeManual) "${preset.archetype}*" else preset.archetype
 
             val resolvedLeague = preset.league.ifBlank { "GREAT LEAGUE" }
-            textLeague.text = OverlayService.stripLeagueCpSuffixStatic(resolvedLeague)
+            textLeague.text = OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)
 
             val (leadTier, leadHex) = getMatchupTierCodeAndHex(preset.leadAggBr)
             val (machTier, machHex) = getMachineBrTierLabelAndHex(preset.machineAggBr)
@@ -11270,6 +11280,96 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun isAntiMetaLeagueUnlockedForTier(lg: String, tier: String): Boolean {
+        val norm = OverlayService.normalizeLeagueKeyStatic(lg)
+        val isGlOrMl = norm == "GREAT LEAGUE" || norm == "MASTER LEAGUE"
+        val isCore3 = isGlOrMl || norm == "ULTRA LEAGUE"
+        return when (tier) {
+            "free" -> isGlOrMl
+            "supporter" -> isCore3
+            else -> true
+        }
+    }
+
+    private fun getVisibleAntiMetaCups(cpTier: String): List<String> {
+        val targetCp = when (cpTier.uppercase()) {
+            "GL" -> "GREAT"
+            "UL" -> "ULTRA"
+            "ML" -> "MASTER"
+            else -> "ALL"
+        }
+        val openForTier = when (cpTier.uppercase()) {
+            "GL" -> listOf("GREAT LEAGUE")
+            "UL" -> listOf("ULTRA LEAGUE")
+            "ML" -> listOf("MASTER LEAGUE")
+            else -> listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
+        }
+        val modePool = if (isShow6CombatMode()) {
+            OverlayService.getEnabledShow6LeaguesStatic(prefs)
+        } else {
+            OverlayService.getEnabledGblLeaguesStatic(prefs)
+        }
+        val seen = LinkedHashMap<String, String>()
+        for (lg in openForTier + modePool) {
+            val norm = OverlayService.normalizeLeagueKeyStatic(lg)
+            if (!seen.containsKey(norm)) {
+                if (targetCp == "ALL" || OverlayService.resolveLeagueCpTierStatic(lg, prefs).equals(targetCp, ignoreCase = true)) {
+                    seen[norm] = lg
+                }
+            }
+        }
+        return seen.values.sortedWith(
+            compareBy<String> { x ->
+                val n = OverlayService.normalizeLeagueKeyStatic(x)
+                when {
+                    n == "GREAT LEAGUE" -> 0
+                    n == "ULTRA LEAGUE" -> 1
+                    n == "MASTER LEAGUE" -> 2
+                    n.contains("MEGA") -> 3
+                    else -> 4
+                }
+            }.thenBy { it }
+        )
+    }
+
+    private fun showAntiMetaTierUpgradeDialog(lg: String, tier: String) {
+        val displayLg = OverlayService.formatLeagueDisplayLabelStatic(lg)
+        val normLg = OverlayService.normalizeLeagueKeyStatic(lg)
+        if (tier == "free") {
+            AlertDialog.Builder(this)
+                .setTitle("🔒 Unlock $displayLg in Anti-Meta Generator")
+                .setMessage(
+                    "Free tier includes Open Great League & Master League (1 team per archetype).\n\n" +
+                        "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                        "• Legend Pro ($3 Intro / $6 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
+                )
+                .setPositiveButton("💳 Unlock via Stripe") { _, _ ->
+                    val url = if (normLg == "ULTRA LEAGUE") OverlayService.STRIPE_URL_SUPPORTER_3 else OverlayService.STRIPE_URL_PRO_INTRO_5
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                }
+                .setNeutralButton("☕ Buy Me a Coffee") { _, _ ->
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(DONATION_URL)))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("🏆 Legend Pro Required for $displayLg")
+                .setMessage(
+                    "Lifetime Supporter includes Core 3 Open Leagues (Great, Ultra & Master League).\n\n" +
+                        "Upgrade to Legend Pro ($3 First-Season Intro / $6 Season Pass) to unlock all Limited, Retro, Mega & BF Cups, Top 5 teams per archetype, and ⚡ Alternate Moveset Role Synthesis!"
+                )
+                .setPositiveButton("💳 Upgrade on Stripe") { _, _ ->
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
+                }
+                .setNeutralButton("☕ Buy Me a Coffee") { _, _ ->
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.BMC_URL_PRO_SEASON_10)))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
     private fun setupAntiMetaTeamBuilderUi() {
         if (!::spinnerAntiMetaLeague.isInitialized) return
         val leagues = if (isShow6CombatMode()) {
@@ -11279,8 +11379,26 @@ class MainActivity : AppCompatActivity() {
         }
         spinnerAntiMetaLeague.adapter = createThemedSpinnerAdapter(leagues)
 
+        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
+        val visibleCups = getVisibleAntiMetaCups(antiMetaSelectedCpTier)
+        antiMetaSelectedLeagues.retainAll { sel ->
+            visibleCups.any { it.equals(sel, ignoreCase = true) }
+        }
+        if (antiMetaSelectedLeagues.isEmpty()) {
+            val fallback = visibleCups.firstOrNull { isAntiMetaLeagueUnlockedForTier(it, tier) }
+                ?: visibleCups.firstOrNull()
+                ?: leagues.firstOrNull()
+                ?: "GREAT LEAGUE"
+            antiMetaSelectedLeagues.add(fallback)
+        }
+        val primaryLg = antiMetaSelectedLeagues.firstOrNull() ?: "GREAT LEAGUE"
+        val spinnerIdx = leagues.indexOfFirst { it.equals(primaryLg, ignoreCase = true) }
+        if (spinnerIdx >= 0) {
+            spinnerAntiMetaLeague.setSelection(spinnerIdx, false)
+        }
+
         val antiMetaLeagueProvider = {
-            spinnerAntiMetaLeague.selectedItem?.toString() ?: leagues.first()
+            antiMetaSelectedLeagues.firstOrNull() ?: leagues.firstOrNull() ?: "GREAT LEAGUE"
         }
 
         fun updateAntiMetaStatusDefaultName() {
@@ -11290,7 +11408,137 @@ class MainActivity : AppCompatActivity() {
             val f2 = editAntiMetaFeat2.text.toString().trim()
             val picks = listOf(f1, f2).filter { it.isNotEmpty() }
             val picksStr = if (picks.isEmpty()) "0 Featured Picks (Full Meta)" else "Featuring: ${picks.joinToString(" + ")}"
-            textAntiMetaStatus.text = "Default Team Name: \"$defaultTeamName\" • $picksStr • Tap Generate to rank Best 5 ABB, 5 ABC & 5 Duo-Core options."
+            val cupsStr = if (antiMetaSelectedLeagues.size > 1) {
+                "${antiMetaSelectedLeagues.size} Cups (${antiMetaSelectedLeagues.joinToString(", ") { OverlayService.formatLeagueDisplayLabelStatic(it) }}) • "
+            } else {
+                ""
+            }
+            textAntiMetaStatus.text = "${cupsStr}Default Team Name: \"$defaultTeamName\" • $picksStr • Tap Generate to rank Best 5 ABB, 5 ABC & 5 Duo-Core options."
+            val top3 = getLeagueTop3Defaults(lg)
+            editAntiMetaFeat1.hint = "Featured #1 or Rank Range (e.g. ${top3[0].name}, -10, 100-200, 200-)"
+            editAntiMetaFeat2.hint = "Featured #2 or Rank Range (e.g. ${top3[1].name}, -10, 100-200, 200-)"
+        }
+
+        val tierChipsContainer = findViewById<LinearLayout?>(R.id.layout_antimeta_tier_chips)
+        val cupChipsContainer = findViewById<LinearLayout?>(R.id.layout_antimeta_cup_chips)
+        val density = resources.displayMetrics.density
+        val isShow6 = isShow6CombatMode()
+
+        tierChipsContainer?.let { row ->
+            row.removeAllViews()
+            for (cpTier in listOf("GL", "UL", "ML", "ALL")) {
+                val active = antiMetaSelectedCpTier.equals(cpTier, ignoreCase = true)
+                row.addView(Button(this).apply {
+                    text = cpTier
+                    textSize = 9.5f
+                    isAllCaps = false
+                    minHeight = 0
+                    minimumHeight = 0
+                    minWidth = 0
+                    minimumWidth = 0
+                    val hPad = (10 * density).toInt()
+                    val vPad = (5 * density).toInt()
+                    setPadding(hPad, vPad, hPad, vPad)
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(
+                        if (active) (if (isShow6) 0xFFD97706.toInt() else 0xFF0284C7.toInt()) else 0xFF1E293B.toInt()
+                    )
+                    setTextColor(
+                        if (active) (if (isShow6) 0xFF0F172A.toInt() else 0xFFFFFFFF.toInt()) else 0xFFCBD5E1.toInt()
+                    )
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = (6 * density).toInt() }
+                    setOnClickListener {
+                        antiMetaSelectedCpTier = cpTier
+                        val nextVisible = getVisibleAntiMetaCups(cpTier)
+                        antiMetaSelectedLeagues.retainAll { sel ->
+                            nextVisible.any { it.equals(sel, ignoreCase = true) }
+                        }
+                        if (antiMetaSelectedLeagues.isEmpty()) {
+                            val firstUnlocked = nextVisible.firstOrNull { isAntiMetaLeagueUnlockedForTier(it, tier) }
+                                ?: nextVisible.firstOrNull()
+                                ?: "GREAT LEAGUE"
+                            antiMetaSelectedLeagues.add(firstUnlocked)
+                        }
+                        setupAntiMetaTeamBuilderUi()
+                        if (layoutAntiMetaResults.childCount > 0 &&
+                            antiMetaSelectedLeagues.all { isAntiMetaLeagueUnlockedForTier(it, tier) }
+                        ) {
+                            runAntiMetaTeamBuilderGeneration()
+                        }
+                    }
+                })
+            }
+        }
+
+        cupChipsContainer?.let { row ->
+            row.removeAllViews()
+            for (cupLg in visibleCups) {
+                val norm = OverlayService.normalizeLeagueKeyStatic(cupLg)
+                val shortLbl = when (norm) {
+                    "GREAT LEAGUE" -> "Open GL"
+                    "ULTRA LEAGUE" -> "Open UL"
+                    "MASTER LEAGUE" -> "Open ML"
+                    "MEGA MASTER LEAGUE" -> "Mega ML"
+                    else -> OverlayService.formatLeagueDisplayLabelStatic(cupLg)
+                }
+                val isSelected = antiMetaSelectedLeagues.any { it.equals(cupLg, ignoreCase = true) }
+                val isLocked = !isAntiMetaLeagueUnlockedForTier(cupLg, tier)
+                row.addView(Button(this).apply {
+                    text = when {
+                        isLocked -> "🔒 $shortLbl"
+                        isSelected -> "✓ $shortLbl"
+                        else -> shortLbl
+                    }
+                    textSize = 9.0f
+                    isAllCaps = false
+                    minHeight = 0
+                    minimumHeight = 0
+                    minWidth = 0
+                    minimumWidth = 0
+                    val hPad = (9 * density).toInt()
+                    val vPad = (4 * density).toInt()
+                    setPadding(hPad, vPad, hPad, vPad)
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(
+                        when {
+                            isSelected -> 0xFF7C3AED.toInt()
+                            isLocked -> 0xFF0F172A.toInt()
+                            else -> 0xFF1E293B.toInt()
+                        }
+                    )
+                    setTextColor(
+                        when {
+                            isSelected -> 0xFFFFFFFF.toInt()
+                            isLocked -> 0xFF64748B.toInt()
+                            else -> 0xFFCBD5E1.toInt()
+                        }
+                    )
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = (6 * density).toInt() }
+                    setOnClickListener {
+                        if (isLocked) {
+                            showAntiMetaTierUpgradeDialog(cupLg, tier)
+                            return@setOnClickListener
+                        }
+                        if (isSelected) {
+                            if (antiMetaSelectedLeagues.size <= 1) {
+                                Toast.makeText(this@MainActivity, "Keep at least 1 cup selected.", Toast.LENGTH_SHORT).show()
+                                return@setOnClickListener
+                            }
+                            antiMetaSelectedLeagues.removeAll { it.equals(cupLg, ignoreCase = true) }
+                        } else {
+                            antiMetaSelectedLeagues.add(cupLg)
+                        }
+                        setupAntiMetaTeamBuilderUi()
+                        if (layoutAntiMetaResults.childCount > 0) {
+                            runAntiMetaTeamBuilderGeneration()
+                        }
+                    }
+                })
+            }
         }
 
         val feat1Adapter = PokemonAutocompleteAdapter(antiMetaLeagueProvider)
@@ -11331,14 +11579,7 @@ class MainActivity : AppCompatActivity() {
 
         spinnerAntiMetaLeague.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                val lg = leagues.getOrElse(position) { "GREAT LEAGUE" }
-                val top3 = getLeagueTop3Defaults(lg)
-                editAntiMetaFeat1.hint = "Featured #1 or Rank Range (e.g. ${top3[0].name}, -10, 100-200, 200-)"
-                editAntiMetaFeat2.hint = "Featured #2 or Rank Range (e.g. ${top3[1].name}, -10, 100-200, 200-)"
                 updateAntiMetaStatusDefaultName()
-                if (layoutAntiMetaResults.childCount > 0) {
-                    runAntiMetaTeamBuilderGeneration()
-                }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
@@ -11376,6 +11617,11 @@ class MainActivity : AppCompatActivity() {
     private fun setAppCombatMode(nextMode: String) {
         val normalized = if (nextMode.equals("show6", ignoreCase = true)) "show6" else "gbl"
         prefs.edit().putString(OverlayService.PREFS_KEY_APP_COMBAT_MODE, normalized).apply()
+        antiMetaSelectedCpTier = "GL"
+        antiMetaSelectedLeagues.clear()
+        antiMetaSelectedLeagues.add(if (normalized == "show6") "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE")
+        antiMetaLastResults = emptyList()
+        antiMetaResultsFilterCup = "ALL"
         ensureDefaultPresets()
         updateSettingsCombatModeButtonsUi()
         syncOverlayRunningUiState()
@@ -12304,10 +12550,10 @@ class MainActivity : AppCompatActivity() {
             val s6Forced = OverlayService.getForcedShow6LeaguesStatic(prefs)
             val s6Pinned = OverlayService.getPinnedShow6LimitedMetasStatic(prefs)
             btnOpenGblMetas?.text = "🛡️ GBL Metas (${gblForced.size} Forced + ${gblPinned.size})"
-            btnOpenShow6Metas?.text = "🏛️ Frontier Metas (${s6Forced.size} Forced + ${s6Pinned.size})"
-            val gblStr = (gblForced + gblPinned).joinToString(", ")
-            val s6Str = (s6Forced + s6Pinned).joinToString(", ")
-            tvPinnedSummary?.text = "Active GBL (Blind 3): $gblStr\nActive Battle Frontier (Show 6): $s6Str"
+            btnOpenShow6Metas?.text = "🏛️ BF Metas (${s6Forced.size} Forced + ${s6Pinned.size})"
+            val gblStr = (gblForced + gblPinned).joinToString(", ") { OverlayService.formatLeagueDisplayLabelStatic(it) }
+            val s6Str = (s6Forced + s6Pinned).joinToString(", ") { OverlayService.formatLeagueDisplayLabelStatic(it) }
+            tvPinnedSummary?.text = "Active GBL (Blind 3): $gblStr\nActive BF (Show 6): $s6Str"
         }
 
         updateLimitedMetasSummaryLabels()
@@ -12361,7 +12607,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey.uppercase(),
-                            label = "🔒 [FORCED DEFAULT] ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey).uppercase()} (${m.cup})$megaTag",
+                            label = "🔒 [FORCED DEFAULT] ${OverlayService.formatLeagueDisplayLabelStatic(m.leagueKey).uppercase()} (${m.cup})$megaTag",
                             isForced = true
                         )
                     )
@@ -12372,7 +12618,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey,
-                            label = "🟢 [OPTIONAL OPEN] ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey)}",
+                            label = "🟢 [OPTIONAL OPEN] ${OverlayService.formatLeagueDisplayLabelStatic(m.leagueKey)}",
                             isForced = false
                         )
                     )
@@ -12397,7 +12643,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey,
-                            label = "$badge ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey)}$megaTag$expiredHint",
+                            label = "$badge ${OverlayService.formatLeagueDisplayLabelStatic(m.leagueKey)}$megaTag$expiredHint",
                             isForced = false
                         )
                     )
@@ -12427,7 +12673,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey,
-                            label = "$badge ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey)}$megaTag$expiredHint",
+                            label = "$badge ${OverlayService.formatLeagueDisplayLabelStatic(m.leagueKey)}$megaTag$expiredHint",
                             isForced = false
                         )
                     )
@@ -12441,7 +12687,7 @@ class MainActivity : AppCompatActivity() {
             }
             AlertDialog.Builder(this)
                 .setTitle(
-                    if (isShow6ModeSelector) "🏛️ Select Battle Frontier (Show 6) Limited Metas"
+                    if (isShow6ModeSelector) "🏛️ Select BF (Show 6) Limited Metas"
                     else "🛡️ Select GBL (Blind 3) Limited Metas"
                 )
                 .setMultiChoiceItems(labels, checked) { dialogInterface, which, isChecked ->
@@ -12451,7 +12697,7 @@ class MainActivity : AppCompatActivity() {
                         (dialogInterface as? AlertDialog)?.listView?.setItemChecked(which, true)
                         Toast.makeText(
                             this,
-                            "🔒 ${r.leagueKey} is a forced default league for ${if (isShow6ModeSelector) "Show 6" else "Blind 3 PvP"} mode.",
+                            "🔒 ${OverlayService.formatLeagueDisplayLabelStatic(r.leagueKey)} is a forced default league for ${if (isShow6ModeSelector) "Show 6" else "Blind 3 PvP"} mode.",
                             Toast.LENGTH_SHORT
                         ).show()
                         return@setMultiChoiceItems
@@ -12508,7 +12754,7 @@ class MainActivity : AppCompatActivity() {
             setAppCombatMode(nextMode)
             Toast.makeText(
                 this,
-                if (nextMode == "show6") "🏛️ Switched to Show 6 Mode (Battle Frontier)" else "🛡️ Switched to Standard GBL Mode (Blind 3 PvP)",
+                if (nextMode == "show6") "🏛️ Switched to Show 6 Mode (BF)" else "🛡️ Switched to Standard GBL Mode (Blind 3 PvP)",
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -12559,12 +12805,12 @@ class MainActivity : AppCompatActivity() {
             val uUrl = editBfUsageUrl?.text?.toString()?.trim().orEmpty().ifEmpty { OverlayService.DEFAULT_BF_USAGE_SHEET_URL }
             val cUrl = editBfCoresUrl?.text?.toString()?.trim().orEmpty().ifEmpty { OverlayService.DEFAULT_BF_CORES_SHEET_URL }
             btnSyncBfSheets.isEnabled = false
-            btnSyncBfSheets.text = "⏳ Importing Battle Frontier Usage & Cores..."
+            btnSyncBfSheets.text = "⏳ Importing BF Usage & Cores..."
             lifecycleScope.launch(Dispatchers.IO) {
                 val msg = OverlayService.syncBattleFrontierSheetsBlocking(prefs, uUrl, cUrl)
                 withContext(Dispatchers.Main) {
                     btnSyncBfSheets.isEnabled = true
-                    btnSyncBfSheets.text = "📥 Save Links & Import Battle Frontier Usage + Cores"
+                    btnSyncBfSheets.text = "📥 Save Links & Import BF Usage + Cores"
                     tvBfSheetsStatus?.text = msg
                     if (currentActivePage == "meta") {
                         refreshMetaTabDashboard()
@@ -13782,46 +14028,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runAntiMetaTeamBuilderGeneration() {
-        if (!::spinnerAntiMetaLeague.isInitialized) return
-        val lg = spinnerAntiMetaLeague.selectedItem?.toString() ?: "GREAT LEAGUE"
-        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
-        val normLg = lg.trim().uppercase()
-        val isGlOrMl = normLg == "GREAT LEAGUE" || normLg == "MASTER LEAGUE"
-        val isCore3 = isGlOrMl || normLg == "ULTRA LEAGUE"
-        if (tier == "free" && !isGlOrMl) {
-            AlertDialog.Builder(this)
-                .setTitle("🔒 Unlock $lg in Anti-Meta Generator")
-                .setMessage(
-                    "Free tier includes Open Great League & Master League (1 team per archetype).\n\n" +
-                        "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
-                        "• Legend Pro ($3 Intro / $6 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
-                )
-                .setPositiveButton("💳 Unlock via Stripe") { _, _ ->
-                    val url = if (normLg == "ULTRA LEAGUE") OverlayService.STRIPE_URL_SUPPORTER_3 else OverlayService.STRIPE_URL_PRO_INTRO_5
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                }
-                .setNeutralButton("☕ Buy Me a Coffee") { _, _ ->
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(DONATION_URL)))
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-            return
+        val visibleCups = getVisibleAntiMetaCups(antiMetaSelectedCpTier)
+        val rawSelected = antiMetaSelectedLeagues.ifEmpty {
+            listOf(spinnerAntiMetaLeague.selectedItem?.toString() ?: visibleCups.firstOrNull() ?: "GREAT LEAGUE")
         }
-        if (tier == "supporter" && !isCore3) {
-            AlertDialog.Builder(this)
-                .setTitle("🏆 Legend Pro Required for $lg")
-                .setMessage(
-                    "Lifetime Supporter includes Core 3 Open Leagues (Great, Ultra & Master League).\n\n" +
-                        "Upgrade to Legend Pro ($3 First-Season Intro / $6 Season Pass) to unlock all Limited, Retro, Mega & Battle Frontier Cups, Top 5 teams per archetype, and ⚡ Alternate Moveset Role Synthesis!"
-                )
-                .setPositiveButton("💳 Upgrade on Stripe") { _, _ ->
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
-                }
-                .setNeutralButton("☕ Buy Me a Coffee") { _, _ ->
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.BMC_URL_PRO_SEASON_10)))
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+        val targetLeagues = rawSelected.distinctBy { OverlayService.normalizeLeagueKeyStatic(it) }
+        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
+        val lockedLg = targetLeagues.firstOrNull { !isAntiMetaLeagueUnlockedForTier(it, tier) }
+        if (lockedLg != null) {
+            showAntiMetaTierUpgradeDialog(lockedLg, tier)
             return
         }
         val f1 = editAntiMetaFeat1.text.toString().trim()
@@ -13844,15 +14059,6 @@ class MainActivity : AppCompatActivity() {
 
         val featuredList = listOf(f1, f2).filter { it.isNotEmpty() }
         val preloadedLogs = loadBattleLogs()
-        val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedLogs)
-        val syncLogsForBuilder = OverlayService.loadSeasonSyncLogsForLeagueStatic(
-            prefs = prefs,
-            gson = gson,
-            league = lg,
-            isShow6 = false,
-            empiricalLimit = null
-        )
-        val defaultNamePreview = OverlayService.formatAntiMetaDefaultTeamNameStatic(lg)
 
         val maxPerArch = when (tier) {
             "pro", "vip" -> 5
@@ -13860,49 +14066,121 @@ class MainActivity : AppCompatActivity() {
             else -> 1
         }
         val allowAlt = tier == "pro" || tier == "vip"
+        val cupNamesPreview = targetLeagues.joinToString(", ") { OverlayService.formatLeagueDisplayLabelStatic(it) }
         btnGenerateAntiMetaTeams.isEnabled = false
-        btnGenerateAntiMetaTeams.text = "⏳ Generating Best $maxPerArch ABB, $maxPerArch ABC & $maxPerArch Duo-Core Teams..."
-        textAntiMetaStatus.text = "Simulating $lg Anti-Meta lineups (${if (featuredList.isEmpty()) "0 Featured" else featuredList.joinToString(" + ")})..."
+        btnGenerateAntiMetaTeams.text = "⏳ Generating Best $maxPerArch ABB, $maxPerArch ABC & $maxPerArch Duo-Core..."
+        textAntiMetaStatus.text = "Simulating $cupNamesPreview Anti-Meta lineups (${if (featuredList.isEmpty()) "0 Featured" else featuredList.joinToString(" + ")})..."
 
         antiMetaJob?.cancel()
         antiMetaJob = lifecycleScope.launch(Dispatchers.Default) {
-            val result = OverlayService.generateAntiMetaTeamOptionsStatic(
-                league = lg,
-                featuredPokemonNames = featuredList,
-                seasonLogs = seasonLogs,
-                maxTeamsPerArchetype = maxPerArch,
-                allowAltMovesets = allowAlt,
-                seasonSyncLogs = syncLogsForBuilder,
-                prefsForCrowd = prefs
-            )
+            val results: List<OverlayService.Companion.AntiMetaTeamBuilderResult> = targetLeagues.map { lg ->
+                val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedLogs)
+                val syncLogsForBuilder = OverlayService.loadSeasonSyncLogsForLeagueStatic(
+                    prefs = prefs,
+                    gson = gson,
+                    league = lg,
+                    isShow6 = false,
+                    empiricalLimit = null
+                )
+                OverlayService.generateAntiMetaTeamOptionsStatic(
+                    league = lg,
+                    featuredPokemonNames = featuredList,
+                    seasonLogs = seasonLogs,
+                    maxTeamsPerArchetype = maxPerArch,
+                    allowAltMovesets = allowAlt,
+                    seasonSyncLogs = syncLogsForBuilder,
+                    prefsForCrowd = prefs
+                )
+            }
             withContext(Dispatchers.Main) {
                 btnGenerateAntiMetaTeams.isEnabled = true
                 btnGenerateAntiMetaTeams.text = "⚡ Generate Best $maxPerArch ABB, $maxPerArch ABC & $maxPerArch Duo-Core Teams"
-                val featLabel = if (result.featuredPokemon.isEmpty()) {
-                    "0 Featured Picks (Full Meta)"
-                } else {
-                    "Featuring ${result.featuredPokemon.joinToString(" + ")}"
+                antiMetaLastResults = results
+                antiMetaResultsFilterCup = "ALL"
+                val firstRes = results.firstOrNull()
+                if (firstRes != null) {
+                    val featLabel = if (firstRes.featuredPokemon.isEmpty()) {
+                        "0 Featured Picks (Full Meta)"
+                    } else {
+                        "Featuring ${firstRes.featuredPokemon.joinToString(" + ")}"
+                    }
+                    val tierTag = when (tier) {
+                        "vip" -> "👑 VIP"
+                        "pro" -> "🏆 PRO"
+                        "supporter" -> "🏅 SUPPORTER (Top 2/Arch • Std Moves)"
+                        else -> "🆓 FREE (Top 1/Arch • GL/ML • Std Moves)"
+                    }
+                    val totalTrios = results.sumOf { it.candidatesEvaluated }
+                    val totalAltCombos = results.sumOf { it.movesetCombosSimulated }
+                    val totalMs = results.sumOf { it.elapsedMs }
+                    if (results.size > 1) {
+                        textAntiMetaStatus.text =
+                            "✅ [$tierTag] Generated across ${results.size} Cups ($cupNamesPreview) • $featLabel • $totalTrios trios + $totalAltCombos alt moveset sims in ${totalMs}ms"
+                    } else {
+                        val defaultNamePreview = OverlayService.formatAntiMetaDefaultTeamNameStatic(firstRes.league)
+                        textAntiMetaStatus.text =
+                            "✅ [$tierTag] Generated Top ${firstRes.top5AbbTeams.size} ABB, Top ${firstRes.top5AbcTeams.size} ABC & Top ${firstRes.top5DuoTeams.size} Duo-Core Teams ($featLabel • ${firstRes.candidatesEvaluated} trios + ${firstRes.movesetCombosSimulated} alt moveset sims in ${firstRes.elapsedMs}ms)\n• ${firstRes.metaSummaryLabel} • Default Name: \"$defaultNamePreview\""
+                    }
                 }
-                val tierTag = when (tier) {
-                    "vip" -> "👑 VIP"
-                    "pro" -> "🏆 PRO"
-                    "supporter" -> "🏅 SUPPORTER (Top 2/Arch • Std Moves)"
-                    else -> "🆓 FREE (Top 1/Arch • GL/ML • Std Moves)"
-                }
-                textAntiMetaStatus.text =
-                    "✅ [$tierTag] Generated Top ${result.top5AbbTeams.size} ABB, Top ${result.top5AbcTeams.size} ABC & Top ${result.top5DuoTeams.size} Duo-Core Teams ($featLabel • ${result.candidatesEvaluated} trios + ${result.movesetCombosSimulated} alt moveset sims in ${result.elapsedMs}ms)\n• ${result.metaSummaryLabel} • Default Name: \"$defaultNamePreview\""
-                renderAntiMetaBuilderResults(result)
+                renderAntiMetaBuilderResults(results)
             }
         }
     }
 
     private fun renderAntiMetaBuilderResults(result: OverlayService.Companion.AntiMetaTeamBuilderResult) {
+        renderAntiMetaBuilderResults(listOf(result))
+    }
+
+    private fun renderAntiMetaBuilderResults(results: List<OverlayService.Companion.AntiMetaTeamBuilderResult>) {
         layoutAntiMetaResults.removeAllViews()
+        if (results.isEmpty()) return
         val density = resources.displayMetrics.density
         val activeTheme = getActiveAppTheme()
-        val defaultTeamName = OverlayService.formatAntiMetaDefaultTeamNameStatic(result.league)
         val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
         val isProOrVip = tier == "pro" || tier == "vip"
+
+        if (results.size > 1) {
+            val filterScroll = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (6 * density).toInt() }
+            }
+            val filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val pills = listOf("ALL" to "🌐 All (${results.size} Cups)") + results.map { res ->
+                res.league to OverlayService.formatLeagueDisplayLabelStatic(res.league)
+            }
+            for ((fKey, fLbl) in pills) {
+                val active = antiMetaResultsFilterCup.equals(fKey, ignoreCase = true)
+                filterRow.addView(Button(this).apply {
+                    text = fLbl
+                    textSize = 9.5f
+                    isAllCaps = false
+                    minHeight = 0
+                    minimumHeight = 0
+                    minWidth = 0
+                    minimumWidth = 0
+                    val hPad = (9 * density).toInt()
+                    val vPad = (4 * density).toInt()
+                    setPadding(hPad, vPad, hPad, vPad)
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(
+                        if (active) 0xFF7C3AED.toInt() else 0xFF1E293B.toInt()
+                    )
+                    setTextColor(if (active) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = (6 * density).toInt() }
+                    setOnClickListener {
+                        antiMetaResultsFilterCup = fKey
+                        renderAntiMetaBuilderResults(antiMetaLastResults)
+                    }
+                })
+            }
+            filterScroll.addView(filterRow)
+            layoutAntiMetaResults.addView(filterScroll)
+        }
 
         fun addSectionHeader(title: String, subtitle: String, titleColor: Int) {
             val hdrBox = LinearLayout(this).apply {
@@ -13931,9 +14209,10 @@ class MainActivity : AppCompatActivity() {
             layoutAntiMetaResults.addView(hdrBox)
         }
 
-        fun addOptionCard(opt: OverlayService.Companion.AntiMetaTeamOption) {
+        fun addOptionCard(opt: OverlayService.Companion.AntiMetaTeamOption, cupLeague: String) {
             val isAbb = opt.archetype.equals("ABB", ignoreCase = true)
             val isDuo = opt.archetype.equals("DUO", ignoreCase = true)
+            val defaultTeamName = OverlayService.formatAntiMetaDefaultTeamNameStatic(opt.league)
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setBackgroundColor(activeTheme.innerCardColor)
@@ -14045,7 +14324,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     ""
                 }
-                val plusMove = OverlayService.resolveMegaPlusMoveStatic(m.name, result.league, prefs)
+                val plusMove = OverlayService.resolveMegaPlusMoveStatic(m.name, cupLeague, prefs)
                 val plusMoveStr = if (plusMove != null) " / <font color='#f472b6'>$plusMove [Mega4]</font>" else ""
                 "• <b>[$rLabel · $brStr]</b> ${m.name}$featBadge$altBadge (CP ${m.cp}) — <font color='$movesColor'><b>${m.fastMove} + ${m.chargedMove1} / ${m.chargedMove2}$plusMoveStr</b></font>$stdNote"
             }.joinToString("<br>")
@@ -14090,27 +14369,76 @@ class MainActivity : AppCompatActivity() {
             layoutAntiMetaResults.addView(card)
         }
 
-        addSectionHeader(
-            title = "🛡️ Best 5 ABB Anti-Meta Lineups (Bait & Sweep)",
-            subtitle = "Lead (A) covers shared backline weaknesses for Bait Swap (B1) & Sweeper (B2)",
-            titleColor = 0xFFFBBF24.toInt()
-        )
-        result.top5AbbTeams.forEach { addOptionCard(it) }
+        val visibleResults = if (antiMetaResultsFilterCup == "ALL") {
+            results
+        } else {
+            results.filter { it.league.equals(antiMetaResultsFilterCup, ignoreCase = true) }.ifEmpty { results }
+        }
 
-        addSectionHeader(
-            title = "⚔️ Best 5 ABC Anti-Meta Lineups (Balanced Core)",
-            subtitle = "Diversified Lead / Safe Swap / Closer anti-meta coverage",
-            titleColor = 0xFF38BDF8.toInt()
-        )
-        result.top5AbcTeams.forEach { addOptionCard(it) }
+        for (result in visibleResults) {
+            val dispCup = OverlayService.formatLeagueDisplayLabelStatic(result.league)
+            if (visibleResults.size > 1 || results.size > 1) {
+                addSectionHeader(
+                    title = "🏆 $dispCup Anti-Meta Lineups",
+                    subtitle = "Top ${result.top5AbbTeams.size} ABB • Top ${result.top5AbcTeams.size} ABC • Top ${result.top5DuoTeams.size} Duo-Core  |  Default Name: \"${OverlayService.formatAntiMetaDefaultTeamNameStatic(result.league)}\"",
+                    titleColor = 0xFFFDE68A.toInt()
+                )
+            }
 
-        if (result.top5DuoTeams.isNotEmpty()) {
             addSectionHeader(
-                title = "☯️ Best 5 Duo-Core Anti-Meta Lineups (Yin-Yang 1st ⇄ 3rd + Safe Swap Pivot)",
-                subtitle = "1st & 3rd perfectly cover each other's weaknesses (interchangeable 1⇄3 Lead/Closer); 2nd is Safe Swap Pivot",
-                titleColor = 0xFF34D399.toInt()
+                title = "🛡️ Best 5 ABB Anti-Meta Lineups ($dispCup · Bait & Sweep)",
+                subtitle = "Lead (A) covers shared backline weaknesses for Bait Swap (B1) & Sweeper (B2)",
+                titleColor = 0xFFFBBF24.toInt()
             )
-            result.top5DuoTeams.forEach { addOptionCard(it) }
+            result.top5AbbTeams.forEach { addOptionCard(it, result.league) }
+
+            addSectionHeader(
+                title = "⚔️ Best 5 ABC Anti-Meta Lineups ($dispCup · Balanced Core)",
+                subtitle = "Diversified Lead / Safe Swap / Closer anti-meta coverage",
+                titleColor = 0xFF38BDF8.toInt()
+            )
+            result.top5AbcTeams.forEach { addOptionCard(it, result.league) }
+
+            if (result.top5DuoTeams.isNotEmpty()) {
+                addSectionHeader(
+                    title = "☯️ Best 5 Duo-Core Anti-Meta Lineups ($dispCup · Yin-Yang 1st ⇄ 3rd + Safe Swap)",
+                    subtitle = "1st & 3rd perfectly cover each other's weaknesses (interchangeable 1⇄3 Lead/Closer); 2nd is Safe Swap Pivot",
+                    titleColor = 0xFF34D399.toInt()
+                )
+                result.top5DuoTeams.forEach { addOptionCard(it, result.league) }
+            }
+
+            val bottomMetaList = result.top50MetaList.ifEmpty { result.top25MetaList }
+            if (bottomMetaList.isNotEmpty()) {
+                addSectionHeader(
+                    title = "🎯 Top ${bottomMetaList.size} $dispCup Meta Determined by SilphScope (Meta BR in Parentheses • #1–#50 = /50 Audit Pool)",
+                    subtitle = "Teams are built & scored against the full Top-100 role-weighted synthetic meta + season logs",
+                    titleColor = 0xFFC4B5FD.toInt()
+                )
+                val metaCard = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setBackgroundColor(activeTheme.innerCardColor)
+                    val pad = (10 * density).toInt()
+                    setPadding(pad, pad, pad, pad)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = (8 * density).toInt()
+                    }
+                }
+                val top50Html = bottomMetaList.joinToString("  •  ") { entry ->
+                    val rankColor = if (entry.rank <= 25) "#38bdf8" else "#c4b5fd"
+                    "<b><font color='$rankColor'>#${entry.rank}</font> ${entry.name}</b> <font color='#94a3b8'>(${entry.metaBr} BR • ${String.format(java.util.Locale.US, "%.1f", entry.weightPct)}%)</font>"
+                }
+                val metaTv = TextView(this).apply {
+                    text = android.text.Html.fromHtml(top50Html, android.text.Html.FROM_HTML_MODE_LEGACY)
+                    textSize = 10.5f
+                    setTextColor(activeTheme.primaryTextColor)
+                }
+                metaCard.addView(metaTv)
+                layoutAntiMetaResults.addView(metaCard)
+            }
         }
 
         // Competitive Archetype Playbooks Card (Duo-Core, ABC, ABB)
@@ -14146,38 +14474,6 @@ class MainActivity : AppCompatActivity() {
         playbookCard.addView(playbookTv)
         layoutAntiMetaResults.addView(playbookCard)
 
-        val bottomMetaList = result.top50MetaList.ifEmpty { result.top25MetaList }
-        if (bottomMetaList.isNotEmpty()) {
-            addSectionHeader(
-                title = "🎯 Top ${bottomMetaList.size} ${result.league} Meta Determined by SilphScope (Meta Battle Ranking in Parentheses • #1–#50 = /50 Audit Pool)",
-                subtitle = "Teams are built & scored against the full Top-100 role-weighted synthetic meta + season logs",
-                titleColor = 0xFFC4B5FD.toInt()
-            )
-            val metaCard = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setBackgroundColor(activeTheme.innerCardColor)
-                val pad = (10 * density).toInt()
-                setPadding(pad, pad, pad, pad)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    bottomMargin = (8 * density).toInt()
-                }
-            }
-            val top50Html = bottomMetaList.joinToString("  •  ") { entry ->
-                val rankColor = if (entry.rank <= 25) "#38bdf8" else "#c4b5fd"
-                "<b><font color='$rankColor'>#${entry.rank}</font> ${entry.name}</b> <font color='#94a3b8'>(${entry.metaBr} BR • ${String.format(java.util.Locale.US, "%.1f", entry.weightPct)}%)</font>"
-            }
-            val metaTv = TextView(this).apply {
-                text = android.text.Html.fromHtml(top50Html, android.text.Html.FROM_HTML_MODE_LEGACY)
-                textSize = 10.5f
-                setTextColor(activeTheme.primaryTextColor)
-            }
-            metaCard.addView(metaTv)
-            layoutAntiMetaResults.addView(metaCard)
-        }
-
         if (!isProOrVip) {
             val upsellCard = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -14200,7 +14496,7 @@ class MainActivity : AppCompatActivity() {
             }
             val upsellBody = TextView(this).apply {
                 text = "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + Top 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
-                    "• Legend Pro ($3 Day 15+ Intro / $6 Season Pass): Unlocks ALL Limited/Mega Cups, Top 5 teams per archetype (15+ teams), ⚡ Alternate Moveset Role Synthesis (+BR Deltas), Nemesis Builder, and 50 Cloud Replay Vault slots!"
+                    "• Legend Pro ($3 Day 15+ Intro / $6 Season Pass): Unlocks ALL Limited, Retro, Mega & BF Cups, Top 5 teams per archetype (15+ teams), ⚡ Alternate Moveset Role Synthesis (+BR Deltas), Nemesis Builder, and 50 Cloud Replay Vault slots!"
                 textSize = 10.5f
                 setTextColor(0xFFE2E8F0.toInt())
                 setPadding(0, (4 * density).toInt(), 0, (8 * density).toInt())
@@ -16156,17 +16452,15 @@ class MainActivity : AppCompatActivity() {
                             startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
                         } else {
                             switchMainPage("teams")
-                            if (::spinnerAntiMetaLeague.isInitialized) {
-                                val adapter = spinnerAntiMetaLeague.adapter
-                                if (adapter != null) {
-                                    for (idx in 0 until adapter.count) {
-                                        if (adapter.getItem(idx)?.toString().equals(selectedLeague, ignoreCase = true)) {
-                                            spinnerAntiMetaLeague.setSelection(idx)
-                                            break
-                                        }
-                                    }
-                                }
+                            val mappedTier = when (OverlayService.resolveLeagueCpTierStatic(selectedLeague, prefs)) {
+                                "ULTRA" -> "UL"
+                                "MASTER" -> "ML"
+                                else -> "GL"
                             }
+                            antiMetaSelectedCpTier = mappedTier
+                            antiMetaSelectedLeagues.clear()
+                            antiMetaSelectedLeagues.add(selectedLeague)
+                            setupAntiMetaTeamBuilderUi()
                             runAntiMetaTeamBuilderGeneration()
                         }
                     }
@@ -17006,6 +17300,7 @@ class MainActivity : AppCompatActivity() {
 
     private var ivLabActiveSubTab: String = "matrix"
     private var ivLabSpeciesName: String = "Azumarill"
+    private var ivLabSelectedCpTier: String = "GL"
     private val ivLabSelectedLeagues: MutableList<String> = mutableListOf("GREAT LEAGUE")
     private var ivLabOppPoolMode: IvMatrixEngine.OppMetaPoolMode = IvMatrixEngine.OppMetaPoolMode.PVPOKE_TOP_100
     private var ivLabOppIvBaseline: IvMatrixEngine.OppIvBaselineMode = IvMatrixEngine.OppIvBaselineMode.PVPOKE_DEFAULT
@@ -17019,6 +17314,45 @@ class MainActivity : AppCompatActivity() {
     private var ivLabBuiltLeagueFilter: String = "ALL"
     private var ivLabBuiltSearchQuery: String = ""
     private var ivLabIsRunning: Boolean = false
+
+    private fun getVisibleIvLabCups(cpTier: String): List<String> {
+        val targetCp = when (cpTier.uppercase()) {
+            "GL" -> "GREAT"
+            "UL" -> "ULTRA"
+            "ML" -> "MASTER"
+            else -> "ALL"
+        }
+        val openForTier = when (cpTier.uppercase()) {
+            "GL" -> listOf("GREAT LEAGUE")
+            "UL" -> listOf("ULTRA LEAGUE")
+            "ML" -> listOf("MASTER LEAGUE")
+            else -> listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
+        }
+        val catalogCups = OverlayService.getLimitedMetaCatalogStatic(prefs)
+            .filter { !OverlayService.isExpiredLimitedMetaStatic(it) }
+            .map { it.leagueKey }
+        val seen = LinkedHashMap<String, String>()
+        for (lg in openForTier + catalogCups) {
+            val norm = OverlayService.normalizeLeagueKeyStatic(lg)
+            if (!seen.containsKey(norm)) {
+                if (targetCp == "ALL" || OverlayService.resolveLeagueCpTierStatic(lg, prefs).equals(targetCp, ignoreCase = true)) {
+                    seen[norm] = lg
+                }
+            }
+        }
+        return seen.values.sortedWith(
+            compareBy<String> { x ->
+                val n = OverlayService.normalizeLeagueKeyStatic(x)
+                when {
+                    n == "GREAT LEAGUE" -> 0
+                    n == "ULTRA LEAGUE" -> 1
+                    n == "MASTER LEAGUE" -> 2
+                    n.contains("MEGA") -> 3
+                    else -> 4
+                }
+            }.thenBy { it }
+        )
+    }
 
     private fun ensureIvLabDefaultCandidates() {
         if (ivLabCandidates.isNotEmpty()) return
@@ -17301,7 +17635,7 @@ class MainActivity : AppCompatActivity() {
         }
         container.addView(speciesCard)
 
-        // 2. Multi-Select Leagues & Meta Pool Config Card
+        // 2. 2-Row Multi-Select Leagues (GL | UL | ML | ALL -> Open + Limited Cups) & Selected Cup Rankings
         val cfgCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ivDp(12), ivDp(10), ivDp(12), ivDp(10))
@@ -17312,45 +17646,103 @@ class MainActivity : AppCompatActivity() {
             ).apply { setMargins(0, 0, 0, ivDp(10)) }
         }
         cfgCard.addView(TextView(this).apply {
-            text = "2️⃣ LEAGUES (MULTI-SELECT) & OPPONENT BASELINE"
+            text = "2️⃣ LEAGUES & CUPS (MULTI-SELECT) & OPPONENT BASELINE"
             textSize = 11f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(theme.accentColor)
         })
 
-        val coreLeagues = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
-        val cupItems = OverlayService.getLimitedMetaCatalogStatic(prefs)
-            .filter { !OverlayService.isExpiredLimitedMetaStatic(it) }
-            .map { it.leagueKey }
-            .filter { k -> coreLeagues.none { it.equals(k, ignoreCase = true) } }
-            .distinct()
-            .take(6)
+        val coreLeagues = setOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
+        val visibleIvCups = getVisibleIvLabCups(ivLabSelectedCpTier)
+        ivLabSelectedLeagues.retainAll { sel ->
+            visibleIvCups.any { it.equals(sel, ignoreCase = true) }
+        }
+        if (ivLabSelectedLeagues.isEmpty()) {
+            val fallbackLg = visibleIvCups.firstOrNull { lg ->
+                val isCup = OverlayService.normalizeLeagueKeyStatic(lg) !in coreLeagues
+                !(isCup && tier == "free")
+            } ?: visibleIvCups.firstOrNull() ?: "GREAT LEAGUE"
+            ivLabSelectedLeagues.add(fallbackLg)
+        }
 
-        val leagueScroll = HorizontalScrollView(this).apply {
+        // Row 1: GL | UL | ML | ALL
+        val tierScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { setMargins(0, ivDp(6), 0, 0) }
         }
+        val tierRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (cpTier in listOf("GL", "UL", "ML", "ALL")) {
+            val isTierSelected = ivLabSelectedCpTier.equals(cpTier, ignoreCase = true)
+            tierRow.addView(Button(this).apply {
+                text = cpTier
+                textSize = 10.5f
+                isAllCaps = false
+                setTypeface(null, if (isTierSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (isTierSelected) theme.buttonAccentColor else theme.elevatedColor
+                )
+                setTextColor(if (isTierSelected) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setPadding(ivDp(12), ivDp(3), ivDp(12), ivDp(3))
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = 0
+                minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ivDp(30)
+                ).apply { setMargins(0, 0, ivDp(6), 0) }
+                setOnClickListener {
+                    ivLabSelectedCpTier = cpTier
+                    val nextVisible = getVisibleIvLabCups(cpTier)
+                    ivLabSelectedLeagues.retainAll { sel ->
+                        nextVisible.any { it.equals(sel, ignoreCase = true) }
+                    }
+                    if (ivLabSelectedLeagues.isEmpty()) {
+                        val fallback = nextVisible.firstOrNull { lg ->
+                            val isCup = OverlayService.normalizeLeagueKeyStatic(lg) !in coreLeagues
+                            !(isCup && tier == "free")
+                        } ?: nextVisible.firstOrNull() ?: "GREAT LEAGUE"
+                        ivLabSelectedLeagues.add(fallback)
+                    }
+                    ivLabLastResult = null
+                    refreshIvLabPageUi()
+                }
+            })
+        }
+        tierScroll.addView(tierRow)
+        cfgCard.addView(tierScroll)
+
+        // Row 2: Visible Open + Limited Cups (Multi-Select)
+        val leagueScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, ivDp(5), 0, 0) }
+        }
         val leagueRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (lg in coreLeagues + cupItems) {
-            val isCup = coreLeagues.none { it.equals(lg, ignoreCase = true) }
+        for (lg in visibleIvCups) {
+            val normLg = OverlayService.normalizeLeagueKeyStatic(lg)
+            val isCup = normLg !in coreLeagues
             val locked = isCup && tier == "free"
             val isSelected = ivLabSelectedLeagues.any { it.equals(lg, ignoreCase = true) }
-            val shortName = when (lg) {
-                "GREAT LEAGUE" -> "GL"
-                "ULTRA LEAGUE" -> "UL"
-                "MASTER LEAGUE" -> "ML"
-                else -> OverlayService.stripLeagueCpSuffixStatic(lg)
+            val shortName = when (normLg) {
+                "GREAT LEAGUE" -> "Open GL"
+                "ULTRA LEAGUE" -> "Open UL"
+                "MASTER LEAGUE" -> "Open ML"
+                "MEGA MASTER LEAGUE" -> "Mega ML"
+                else -> OverlayService.formatLeagueDisplayLabelStatic(lg)
             }
             leagueRow.addView(Button(this).apply {
                 text = (if (locked) "🔒 " else if (isSelected) "✓ " else "") + shortName
-                textSize = 10.5f
+                textSize = 10f
                 isAllCaps = false
                 setTypeface(null, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
                 backgroundTintList = android.content.res.ColorStateList.valueOf(
-                    if (isSelected) theme.buttonAccentColor else theme.elevatedColor
+                    if (isSelected) 0xFF7C3AED.toInt() else theme.elevatedColor
                 )
                 setTextColor(if (isSelected) android.graphics.Color.WHITE else theme.secondaryTextColor)
                 setPadding(ivDp(10), ivDp(3), ivDp(10), ivDp(3))
@@ -17360,7 +17752,7 @@ class MainActivity : AppCompatActivity() {
                 minimumHeight = 0
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
-                    ivDp(32)
+                    ivDp(30)
                 ).apply { setMargins(0, 0, ivDp(6), 0) }
                 setOnClickListener {
                     if (locked) {
@@ -17387,6 +17779,26 @@ class MainActivity : AppCompatActivity() {
         }
         leagueScroll.addView(leagueRow)
         cfgCard.addView(leagueScroll)
+
+        // Live Selected Cup Ranking Strip (Shadow-aware, per selected league)
+        val (rankCleanSp, rankIsSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(ivLabSpeciesName)
+        val cupRankSummaryText = ivLabSelectedLeagues.joinToString("   •   ") { lg ->
+            val info = IvMatrixEngine.getSpeciesCupRankInfo(rankCleanSp, rankIsSh, lg)
+            val dispLg = OverlayService.formatLeagueDisplayLabelStatic(lg)
+            if (info.rank != null) {
+                val scorePart = info.score?.let { " (${String.format(java.util.Locale.US, "%.1f", it)})" } ?: ""
+                "$dispLg: #${info.rank}$scorePart"
+            } else {
+                "$dispLg: Unranked"
+            }
+        }
+        cfgCard.addView(TextView(this).apply {
+            text = "🏅 Selected Cup Rankings ($ivLabSpeciesName): $cupRankSummaryText"
+            textSize = 10.5f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(0xFFFDE68A.toInt())
+            setPadding(ivDp(6), ivDp(6), ivDp(6), ivDp(4))
+        })
 
         // Opponent Meta Pool
         cfgCard.addView(TextView(this).apply {
@@ -17848,8 +18260,78 @@ class MainActivity : AppCompatActivity() {
         val tierW = OverlayService.activeTierWMin
         val tierL = OverlayService.activeTierLMax
         val tierSl = OverlayService.activeTierSlMax
+        val activeOverallScopeLabel =
+            if (ivLabShieldScope == IvMatrixEngine.ShieldScopeMode.EVEN_3) "Even 3" else "7-Shield"
+
+        if (simRes.leagues.size > 1) {
+            val multiCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(ivDp(12), ivDp(10), ivDp(12), ivDp(10))
+                background = makeIvCardBg(theme.elevatedColor, theme.accentColor, radiusDp = 10, strokeDp = 2)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, ivDp(4), 0, ivDp(10)) }
+            }
+            multiCard.addView(TextView(this).apply {
+                text = "🌐 COMBINED MULTI-CUP SUMMARY (${simRes.leagues.size} CUPS • $activeOverallScopeLabel OVERALL)"
+                textSize = 11.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(theme.accentColor)
+            })
+            val firstCands = simRes.leagues.firstOrNull()?.candidateResults.orEmpty()
+            for (candTemplate in firstCands) {
+                var sumW = 0
+                var sumL = 0
+                var sumT = 0
+                var sumBr = 0
+                var sumDeltaW = 0
+                var countCups = 0
+                val rankBits = mutableListOf<String>()
+                for (lgM in simRes.leagues) {
+                    val match = lgM.candidateResults.firstOrNull {
+                        it.candidateId == candTemplate.candidateId || it.label == candTemplate.label
+                    } ?: continue
+                    val ov = if (ivLabShieldScope == IvMatrixEngine.ShieldScopeMode.EVEN_3) {
+                        match.overallEven3
+                    } else {
+                        match.overallRealistic7
+                    }
+                    val dW = if (ivLabShieldScope == IvMatrixEngine.ShieldScopeMode.EVEN_3) {
+                        match.deltaOverallEven3WinsVsRank1
+                    } else {
+                        match.deltaOverallRealistic7WinsVsRank1
+                    }
+                    sumW += ov.wins
+                    sumL += ov.losses
+                    sumT += ov.ties
+                    sumBr += ov.avgBr
+                    sumDeltaW += dW
+                    countCups++
+                    val dispLg = OverlayService.formatLeagueDisplayLabelStatic(lgM.league)
+                    val rkStr = match.cupRank?.let { "#$it" } ?: "Unranked"
+                    rankBits.add("$dispLg: $rkStr")
+                }
+                if (countCups > 0) {
+                    val avgMeanBr = Math.round(sumBr.toDouble() / countCups).toInt()
+                    val candTitle = candTemplate.label.ifBlank { candTemplate.displayName }
+                    val deltaPart = if (!candTemplate.isPinnedRank1) {
+                        val sgn = if (sumDeltaW > 0) "+" else ""
+                        " ($sgn${sumDeltaW}W vs R1)"
+                    } else ""
+                    multiCard.addView(TextView(this).apply {
+                        text = "• $candTitle: $sumW-$sumL-$sumT$deltaPart • Mean BR $avgMeanBr\n   ${rankBits.joinToString("  •  ")}"
+                        textSize = 10.5f
+                        setTextColor(theme.primaryTextColor)
+                        setPadding(0, ivDp(4), 0, 0)
+                    })
+                }
+            }
+            container.addView(multiCard)
+        }
 
         for (leagueRes in simRes.leagues) {
+            val dispLeagueName = OverlayService.formatLeagueDisplayLabelStatic(leagueRes.league)
             val secHead = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(ivDp(10), ivDp(8), ivDp(10), ivDp(8))
@@ -17860,7 +18342,7 @@ class MainActivity : AppCompatActivity() {
                 ).apply { setMargins(0, ivDp(4), 0, ivDp(6)) }
             }
             secHead.addView(TextView(this).apply {
-                text = "📊 ${leagueRes.league}  •  ${leagueRes.opponentCount} Opponents"
+                text = "📊 $dispLeagueName  •  ${leagueRes.opponentCount} Opponents"
                 textSize = 13f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setTextColor(theme.primaryTextColor)
@@ -17909,8 +18391,12 @@ class MainActivity : AppCompatActivity() {
                 })
                 val bbTag = if (candRes.isBestBuddy) " 🎀BB" else ""
                 val shTag = if (candRes.isShadow) "🟣 Shadow " else ""
+                val cupRankTag = candRes.cupRank?.let { rk ->
+                    val sc = candRes.cupScore?.let { s -> " (${String.format(java.util.Locale.US, "%.1f", s)})" } ?: ""
+                    "  •  🏅 Cup #$rk$sc"
+                } ?: "  •  🏅 Unranked"
                 resCard.addView(TextView(this).apply {
-                    text = "${shTag}IVs ${candRes.ivs}  •  CP ${candRes.cp}  •  Lv ${formatIvLevelStr(candRes.level)}$bbTag  •  Rank #${candRes.rank} (${String.format(java.util.Locale.US, "%.1f%%", candRes.pctOfRank1)})"
+                    text = "${shTag}IVs ${candRes.ivs}  •  CP ${candRes.cp}  •  Lv ${formatIvLevelStr(candRes.level)}$bbTag  •  Stat #${candRes.rank} (${String.format(java.util.Locale.US, "%.1f%%", candRes.pctOfRank1)})$cupRankTag"
                     textSize = 11.5f
                     setTextColor(theme.primaryTextColor)
                     setPadding(0, ivDp(2), 0, ivDp(2))
@@ -17919,6 +18405,33 @@ class MainActivity : AppCompatActivity() {
                     text = "Moves: ${candRes.fastMove} / ${candRes.chargedMove1} + ${candRes.chargedMove2}  •  Atk ${String.format(java.util.Locale.US, "%.1f", candRes.effAtk)}"
                     textSize = 10.5f
                     setTextColor(theme.secondaryTextColor)
+                })
+
+                val activeOv = if (ivLabShieldScope == IvMatrixEngine.ShieldScopeMode.EVEN_3) {
+                    candRes.overallEven3
+                } else {
+                    candRes.overallRealistic7
+                }
+                val activeOvDeltaW = if (ivLabShieldScope == IvMatrixEngine.ShieldScopeMode.EVEN_3) {
+                    candRes.deltaOverallEven3WinsVsRank1
+                } else {
+                    candRes.deltaOverallRealistic7WinsVsRank1
+                }
+                val ovDeltaStr = if (!candRes.isPinnedRank1) {
+                    val sgn = if (activeOvDeltaW > 0) "+" else ""
+                    "  ($sgn${activeOvDeltaW}W vs R1)"
+                } else ""
+                resCard.addView(TextView(this).apply {
+                    text = "Overall ($activeOverallScopeLabel): ${activeOv.wins}-${activeOv.losses}-${activeOv.ties}$ovDeltaStr  •  Avg BR ${activeOv.avgBr} (${String.format(java.util.Locale.US, "%.0f%%", activeOv.weightedWinPct)})"
+                    textSize = 11.5f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(0xFF67E8F9.toInt())
+                    setPadding(ivDp(8), ivDp(5), ivDp(8), ivDp(5))
+                    background = makeIvCardBg(theme.bgColor, theme.accentColor, radiusDp = 7)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, ivDp(5), 0, ivDp(2)) }
                 })
 
                 // 0v0 | 1v1 | 2v2 summary grid
@@ -18633,8 +19146,9 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(theme.primaryTextColor)
             })
             val rankStr = entry.statProductRank?.let { "  •  R#$it (${String.format(java.util.Locale.US, "%.1f%%", entry.statProductPct ?: 100.0)})" } ?: ""
+            val dispBuiltLg = OverlayService.formatLeagueDisplayLabelStatic(entry.league)
             card.addView(TextView(this).apply {
-                text = "${entry.league}  •  IVs ${entry.ivs}  •  CP ${entry.cp}  •  Lv ${formatIvLevelStr(entry.level)}$rankStr"
+                text = "$dispBuiltLg  •  IVs ${entry.ivs}  •  CP ${entry.cp}  •  Lv ${formatIvLevelStr(entry.level)}$rankStr"
                 textSize = 11.5f
                 setTextColor(theme.accentColor)
                 setPadding(0, ivDp(2), 0, ivDp(2))
@@ -18664,6 +19178,11 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1.1f).apply { setMargins(0, 0, ivDp(4), 0) }
                 setOnClickListener {
                     ivLabSpeciesName = IvMatrixEngine.formatSpeciesDisplayName(entry.speciesName, entry.isShadow)
+                    ivLabSelectedCpTier = when (OverlayService.resolveLeagueCpTierStatic(entry.league, prefs)) {
+                        "ULTRA" -> "UL"
+                        "MASTER" -> "ML"
+                        else -> "GL"
+                    }
                     ivLabSelectedLeagues.clear()
                     ivLabSelectedLeagues.add(entry.league)
                     ivLabCandidates.clear()
@@ -18737,7 +19256,7 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("Delete Built Pokémon?")
-                        .setMessage("Remove $displaySp (${entry.ivs}, ${entry.league}) from your Built Roster and Cloud Sync Vault?")
+                        .setMessage("Remove $displaySp (${entry.ivs}, ${OverlayService.formatLeagueDisplayLabelStatic(entry.league)}) from your Built Roster and Cloud Sync Vault?")
                         .setPositiveButton("Delete") { _, _ ->
                             deleteBuiltPokemonEntry(entry.id, triggerSync = true)
                             refreshIvLabPageUi()

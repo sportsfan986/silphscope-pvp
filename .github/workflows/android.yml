@@ -64,9 +64,9 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          NOTES=$(awk -v tag="$TAG" '$0 ~ "^## " tag " " {flag=1} flag{if(/^---$/){exit} print}' CHANGELOG.md)
+          NOTES=$(awk -v tag="$TAG" '$0 ~ "^## (\\[" tag "\\]|" tag ")([[:space:]]|$)" {flag=1} flag{if(/^---$/){exit} print}' CHANGELOG.md)
           if [ -z "$NOTES" ]; then
-            NOTES=$(awk '/^## v[0-9]/{if(found) exit; found=1} found{if(/^---$/){exit} print}' CHANGELOG.md)
+            NOTES=$(awk '/^## \[?v[0-9]/{if(found) exit; found=1} found{if(/^---$/){exit} print}' CHANGELOG.md)
           fi
           {
             if [ -n "$NOTES" ]; then
@@ -76,7 +76,7 @@ jobs:
             fi
             echo ""
             echo "### Live Web Simulator & Download"
-            echo "- **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)"
+            echo "- **Live Web Simulator**: [https://silphscopepvp.com](https://silphscopepvp.com)"
             echo "- **Full Release History**: [CHANGELOG.md](https://github.com/sportsfan986/silphscope-pvp/blob/main/CHANGELOG.md)"
             echo "- **Android APK**: Download **\`silphscope-pvp-${TAG}.apk\`** from the **Assets** section below and install on your Android device."
           } > release_notes.md

@@ -993,7 +993,7 @@ internal fun OverlayService.Companion.isLimitedCupFormatStatic(league: String): 
     val u = league.trim().uppercase()
     if (u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE") return false
     if (u == "GREAT LEAGUE (1500)" || u == "ULTRA LEAGUE (2500)" || u == "MASTER LEAGUE (10000)") return false
-    if (u.startsWith("BATTLE FRONTIER")) return false
+    if (u.startsWith("BATTLE FRONTIER") || u.startsWith("BF (")) return false
     return true
 }
 
@@ -3660,7 +3660,7 @@ internal fun OverlayService.Companion.getLeagueAbbreviationStatic(league: String
     return when {
         league.contains("SPECTRAL", ignoreCase = true) -> "BF-Spec"
         league.contains("CAULDRON", ignoreCase = true) -> "BF-Caul"
-        league.contains("FRONTIER", ignoreCase = true) -> "BF-ML"
+        league.contains("FRONTIER", ignoreCase = true) || league.startsWith("BF (", ignoreCase = true) -> "BF-ML"
         league.contains("MEGA", ignoreCase = true) -> "MML"
         league.contains("GREAT", ignoreCase = true) -> "GL"
         league.contains("ULTRA", ignoreCase = true) -> "UL"

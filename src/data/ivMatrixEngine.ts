@@ -1,6 +1,7 @@
 import {
   type BuiltPokemonEntry,
   type IvSpreadEvalDetails,
+  type SpeciesCupRankInfo,
   type TeamMember,
   calculateChargedDamage,
   calculateFastDamage,
@@ -9,9 +10,11 @@ import {
   getLeagueCpCap,
   getPresetIvSpread,
   getRecommendedMovesForPokemon,
+  getSpeciesCupRankInfo,
   normalizeLeagueName,
   parseIvTriplet
 } from "./pokemonDb";
+export { getSpeciesCupRankInfo, type SpeciesCupRankInfo };
 import {
   DEFAULT_MATCHUP_TIER_THRESHOLDS,
   type MatchupTierThresholds,
@@ -145,17 +148,23 @@ export interface IvCandidateLeagueResult {
   statProduct: number;
   rank: number;
   pctOfRank1: number;
+  cupRank: number | null;
+  cupScore: number | null;
   league: string;
   fastMove: string;
   chargedMove1: string;
   chargedMove2: string;
   records: Record<ShieldScenarioKey, ShieldRecordSummary>;
+  overallEven3: ShieldRecordSummary;
+  overallRealistic7: ShieldRecordSummary;
   deltaVsRank1: {
     br0v0: number;
     br1v1: number;
     br2v2: number;
     wins1v1: number;
     netFlips1v1: number;
+    overallEven3Wins: number;
+    overallRealistic7Wins: number;
   };
   deltaVsBaseline: {
     br0v0: number;
@@ -552,6 +561,46 @@ function summarizeRecord(
   };
 }
 
+function summarizeOverallRecord(
+  opponents: IvOpponentBreakdown[],
+  weights: number[],
+  keys: readonly ShieldScenarioKey[]
+): ShieldRecordSummary {
+  let wins = 0;
+  let losses = 0;
+  let ties = 0;
+  let sumBr = 0;
+  let weightedWin = 0;
+  const scCount = Math.max(1, keys.length);
+
+  for (let i = 0; i < opponents.length; i++) {
+    const opp = opponents[i];
+    const w = (weights[i] ?? 0) / scCount;
+    for (const key of keys) {
+      const br = opp.brByShield[key] ?? opp.br1v1;
+      sumBr += br;
+      if (br > 500) {
+        wins += 1;
+        weightedWin += w;
+      } else if (br < 500) {
+        losses += 1;
+      } else {
+        ties += 1;
+        weightedWin += 0.5 * w;
+      }
+    }
+  }
+
+  const count = Math.max(1, opponents.length * scCount);
+  return {
+    wins,
+    losses,
+    ties,
+    avgBr: Math.round(sumBr / count),
+    weightedWinPct: Number((weightedWin * 100).toFixed(1))
+  };
+}
+
 interface RawCandEval {
   config: IvCandidateConfig;
   details: IvSpreadEvalDetails;
@@ -866,6 +915,13 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
       for (const sc of REALISTIC_7_SHIELD_KEYS) {
         records[sc] = summarizeRecord(oppBreakdowns, weights, sc);
       }
+      const overallEven3 = summarizeOverallRecord(oppBreakdowns, weights, EVEN_3_SHIELD_KEYS);
+      const overallRealistic7 = summarizeOverallRecord(oppBreakdowns, weights, REALISTIC_7_SHIELD_KEYS);
+      const cupInfo = getSpeciesCupRankInfo(
+        ev.config.speciesName || ev.member.name,
+        Boolean(ev.config.isShadow),
+        league
+      );
       const rec1v1 = records["1v1"];
 
       return {
@@ -888,17 +944,23 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
         statProduct: ev.details.statProduct,
         rank: ev.details.rank,
         pctOfRank1: ev.details.pctOfRank1,
+        cupRank: cupInfo.rank,
+        cupScore: cupInfo.score,
         league,
         fastMove: ev.resolved.fastMove.name,
         chargedMove1: ev.resolved.chargedMoves[0]?.name || "",
         chargedMove2: ev.resolved.chargedMoves[1]?.name || "",
         records,
+        overallEven3,
+        overallRealistic7,
         deltaVsRank1: {
           br0v0: 0,
           br1v1: 0,
           br2v2: 0,
           wins1v1: rec1v1.wins - rank1Wins1v1,
-          netFlips1v1: netFlipsVsRank11v1
+          netFlips1v1: netFlipsVsRank11v1,
+          overallEven3Wins: 0,
+          overallRealistic7Wins: 0
         },
         deltaVsBaseline: {
           br0v0: 0,
@@ -930,7 +992,9 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
           br1v1: res.records["1v1"].avgBr - rank1Res.records["1v1"].avgBr,
           br2v2: res.records["2v2"].avgBr - rank1Res.records["2v2"].avgBr,
           wins1v1: res.records["1v1"].wins - rank1Res.records["1v1"].wins,
-          netFlips1v1: res.deltaVsRank1.netFlips1v1
+          netFlips1v1: res.deltaVsRank1.netFlips1v1,
+          overallEven3Wins: res.overallEven3.wins - rank1Res.overallEven3.wins,
+          overallRealistic7Wins: res.overallRealistic7.wins - rank1Res.overallRealistic7.wins
         };
       }
       if (baseRes) {

@@ -19,6 +19,7 @@ import {
   evaluateIvSpreadDetails,
   findPokemonByName,
   formatFlipCode,
+  formatLeagueDisplayLabel,
   formatSpeciesDisplayName,
   getAvailableMovePoolForPokemon,
   getLeagueCpCap,
@@ -27,8 +28,10 @@ import {
   getPokemonAutocompleteSuggestions,
   getPresetIvSpread,
   getRecommendedMovesForPokemon,
+  getSpeciesCupRankInfo,
   getStoredMatchupTierThresholds,
   normalizeLeagueName,
+  resolveLeagueCpTier,
   PINNED_RANK1_CANDIDATE_ID,
   REALISTIC_7_SHIELD_KEYS,
   runMultiIvMatrixEvaluation,
@@ -65,6 +68,17 @@ const OPEN_CORE_LEAGUES = new Set([
   "ULTRA LEAGUE",
   "MASTER LEAGUE"
 ]);
+
+function formatMatrixCupChipLabel(lg: string): string {
+  const norm = normalizeLeagueName(lg).toUpperCase();
+  if (norm === "GREAT LEAGUE") return "Open GL";
+  if (norm === "ULTRA LEAGUE") return "Open UL";
+  if (norm === "MASTER LEAGUE") return "Open ML";
+  if (norm === "MEGA MASTER LEAGUE") return "Mega ML";
+  if (norm === "MEGA GREAT LEAGUE") return "Mega GL";
+  if (norm === "MEGA ULTRA LEAGUE") return "Mega UL";
+  return formatLeagueDisplayLabel(lg);
+}
 
 function makeDefaultCandidates(speciesName: string, league: string): IvCandidateConfig[] {
   const { cleanName, isShadow } = cleanSpeciesNameWithoutShadow(speciesName);
@@ -130,6 +144,7 @@ export function IvLabTab({
   const [committedSpecies, setCommittedSpecies] = useState<string>("Feraligatr");
   const [showSpeciesSuggestions, setShowSpeciesSuggestions] = useState<boolean>(false);
 
+  const [selectedCpTier, setSelectedCpTier] = useState<"GL" | "UL" | "ML" | "ALL">("GL");
   const [selectedLeagues, setSelectedLeagues] = useState<LeagueType[]>(["GREAT LEAGUE"]);
   const [oppMetaPool, setOppMetaPool] = useState<OppMetaPoolMode>("PVPOKE_TOP_100");
   const [oppIvBaseline, setOppIvBaseline] = useState<OppIvBaselineMode>("PVPOKE_DEFAULT");
@@ -156,16 +171,72 @@ export function IvLabTab({
   const availableLeaguesList = useMemo(() => {
     const raw =
       appCombatMode === "show6" ? enabledShow6Leagues : enabledGblLeagues;
-    const merged = Array.from(
-      new Set<LeagueType>([
-        "GREAT LEAGUE",
-        "ULTRA LEAGUE",
-        "MASTER LEAGUE",
-        ...(raw || [])
-      ])
-    );
+    const merged: LeagueType[] = [];
+    const seen = new Set<string>();
+    for (const lg of ["GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", ...(raw || [])] as LeagueType[]) {
+      const key = normalizeLeagueName(lg).toUpperCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(lg);
+      }
+    }
     return merged;
   }, [appCombatMode, enabledGblLeagues, enabledShow6Leagues]);
+
+  const visibleRow2Leagues = useMemo(() => {
+    const tierKey =
+      selectedCpTier === "GL"
+        ? "GREAT"
+        : selectedCpTier === "UL"
+        ? "ULTRA"
+        : selectedCpTier === "ML"
+        ? "MASTER"
+        : "ALL";
+    const filtered = availableLeaguesList.filter(
+      (lg) => tierKey === "ALL" || resolveLeagueCpTier(lg) === tierKey
+    );
+    const rankOrder = (lg: string) => {
+      const u = normalizeLeagueName(lg).toUpperCase();
+      if (u === "GREAT LEAGUE" || u === "ULTRA LEAGUE" || u === "MASTER LEAGUE") return 0;
+      if (u.includes("MEGA")) return 1;
+      return 2;
+    };
+    return [...filtered].sort((a, b) => rankOrder(a) - rankOrder(b) || a.localeCompare(b));
+  }, [availableLeaguesList, selectedCpTier]);
+
+  const handleSelectCpTier = (nextTier: "GL" | "UL" | "ML" | "ALL") => {
+    setSelectedCpTier(nextTier);
+    const tierKey =
+      nextTier === "GL"
+        ? "GREAT"
+        : nextTier === "UL"
+        ? "ULTRA"
+        : nextTier === "ML"
+        ? "MASTER"
+        : "ALL";
+    const nextVisible = availableLeaguesList.filter(
+      (lg) => tierKey === "ALL" || resolveLeagueCpTier(lg) === tierKey
+    );
+    setSelectedLeagues((prev) => {
+      const pruned = prev.filter((s) =>
+        nextVisible.some((v) => normalizeLeagueName(v) === normalizeLeagueName(s))
+      );
+      if (pruned.length > 0) return pruned;
+      const fallback =
+        nextVisible.find((v) => !isFree || OPEN_CORE_LEAGUES.has(normalizeLeagueName(v))) ||
+        nextVisible[0] ||
+        "GREAT LEAGUE";
+      return [fallback];
+    });
+  };
+
+  const selectedCupRanks = useMemo(() => {
+    const activeShadow = candidates[0]?.isShadow ?? false;
+    return selectedLeagues.map((lg) => ({
+      ...getSpeciesCupRankInfo(committedSpecies, activeShadow, lg),
+      label: formatMatrixCupChipLabel(lg)
+    }));
+  }, [selectedLeagues, committedSpecies, candidates]);
 
   const speciesSuggestions = useMemo<PokemonAutocompleteOption[]>(() => {
     if (!showSpeciesSuggestions) return [];
@@ -271,7 +342,11 @@ export function IvLabTab({
       const matchingLg = availableLeaguesList.find(
         (l) => getLeagueCpCap(l) === entry.cpCap
       );
-      if (matchingLg) setSelectedLeagues([matchingLg]);
+      if (matchingLg) {
+        const tierKey = resolveLeagueCpTier(matchingLg);
+        setSelectedCpTier(tierKey === "GREAT" ? "GL" : tierKey === "ULTRA" ? "UL" : "ML");
+        setSelectedLeagues([matchingLg]);
+      }
       setCandidates([
         {
           id: newId,
@@ -699,13 +774,37 @@ export function IvLabTab({
               </div>
             </div>
 
-            {/* Multi-Select Leagues */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Multi-Select Leagues to Evaluate (Run GL + UL + ML Side-by-Side)
-              </label>
+            {/* 2-Row Multi-Select Leagues (Row 1: GL | UL | ML | ALL, Row 2: Open + Limited Metas) */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Multi-Select Leagues &amp; Cups (Row 1: Tier • Row 2: Visible Cups)
+                </label>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {selectedLeagues.length} Selected
+                </span>
+              </div>
               <div className="flex flex-wrap gap-1.5">
-                {availableLeaguesList.map((lg) => {
+                {(["GL", "UL", "ML", "ALL"] as const).map((tierBtn) => {
+                  const active = selectedCpTier === tierBtn;
+                  return (
+                    <button
+                      key={`iv-tier-${tierBtn}`}
+                      type="button"
+                      onClick={() => handleSelectCpTier(tierBtn)}
+                      className={`px-3 py-1 rounded-lg border text-[11px] font-extrabold transition ${
+                        active
+                          ? "border-sky-400 bg-sky-500/25 text-sky-100 shadow"
+                          : "border-slate-700 bg-slate-950 text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {tierBtn}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {visibleRow2Leagues.map((lg) => {
                   const norm = normalizeLeagueName(lg);
                   const isActive = selectedLeagues.some(
                     (s) => normalizeLeagueName(s) === norm
@@ -722,12 +821,30 @@ export function IvLabTab({
                           ? "border-emerald-400/70 bg-emerald-500/20 text-emerald-100"
                           : "border-slate-700 bg-slate-950 text-slate-400 hover:text-slate-200"
                       }`}
+                      title={formatLeagueDisplayLabel(lg)}
                     >
                       {locked && <Lock className="w-3 h-3 text-amber-400" />}
-                      <span>{isActive ? "✓ " : ""}{lg}</span>
+                      <span>{isActive ? "✓ " : ""}{formatMatrixCupChipLabel(lg)}</span>
                     </button>
                   );
                 })}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10.5px]">
+                <span className="font-bold text-amber-300">🏅 Cup Ranking:</span>
+                {selectedCupRanks.map((info) => (
+                  <span
+                    key={`rank-pill-${info.league}`}
+                    className="px-2 py-0.5 rounded-md border border-slate-700 bg-slate-950 font-mono text-slate-200"
+                  >
+                    {info.label}:{" "}
+                    <strong className={info.rank ? "text-amber-300" : "text-slate-500"}>
+                      {info.rank ? `#${info.rank}` : "Unranked"}
+                    </strong>
+                    {info.score !== null ? (
+                      <span className="text-cyan-300"> ({info.score.toFixed(1)})</span>
+                    ) : null}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -891,6 +1008,117 @@ export function IvLabTab({
             </div>
           </div>
 
+          {/* Combined Multi-Cup Overall W-L-T + Cup Rankings Summary */}
+          {matrixResult && matrixResult.leagues.length > 1 && (() => {
+            const firstLg = matrixResult.leagues[0];
+            const scopeLabel = shieldScopeMode === "REALISTIC_7" ? "7-Shield" : "Even 3";
+            const candIds = firstLg.candidateResults.map((c) => c.candidateId);
+            const combinedCards = candIds.map((cid) => {
+              const perLg = matrixResult.leagues
+                .map((lm) => ({
+                  league: lm.league,
+                  res: lm.candidateResults.find((c) => c.candidateId === cid)
+                }))
+                .filter((x): x is { league: string; res: IvCandidateLeagueResult } => Boolean(x.res));
+              const sample = perLg[0]?.res;
+              let totalW = 0;
+              let totalL = 0;
+              let totalT = 0;
+              let sumBr = 0;
+              let totalWeightCount = 0;
+              for (const item of perLg) {
+                const ov =
+                  shieldScopeMode === "REALISTIC_7"
+                    ? item.res.overallRealistic7
+                    : item.res.overallEven3;
+                totalW += ov.wins;
+                totalL += ov.losses;
+                totalT += ov.ties;
+                sumBr += ov.avgBr;
+                totalWeightCount += 1;
+              }
+              const totalMatches = Math.max(1, totalW + totalL + totalT);
+              const winPct = ((totalW + 0.5 * totalT) / totalMatches) * 100;
+              const avgBr = Math.round(sumBr / Math.max(1, totalWeightCount));
+              return { cid, sample, perLg, totalW, totalL, totalT, winPct, avgBr };
+            });
+            const r1CombinedWins = combinedCards[0]?.totalW ?? 0;
+
+            return (
+              <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-4 space-y-3 shadow-xl">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-cyan-200 flex items-center gap-2">
+                      <span>🌐 Combined Multi-Cup Summary ({matrixResult.leagues.length} Cups • {scopeLabel})</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Aggregate Overall W-L-T across all selected cups alongside each cup&apos;s PvPoke / Meta ranking.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                  {combinedCards.map((card) => {
+                    if (!card.sample) return null;
+                    const deltaW = card.totalW - r1CombinedWins;
+                    return (
+                      <div
+                        key={`comb-${card.cid}`}
+                        className={`rounded-xl border p-3 space-y-2 ${
+                          card.sample.isPinnedRank1
+                            ? "border-amber-500/50 bg-amber-950/15"
+                            : "border-slate-800 bg-slate-950/80"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-extrabold text-white truncate">
+                            {card.sample.label}
+                          </span>
+                          {!card.sample.isPinnedRank1 && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                deltaW > 0
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : deltaW < 0
+                                  ? "bg-rose-500/20 text-rose-300"
+                                  : "bg-slate-800 text-slate-300"
+                              }`}
+                            >
+                              {deltaW >= 0 ? "+" : ""}{deltaW}W vs R1
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline justify-between bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                          <span className="text-[10.5px] font-bold text-slate-400">
+                            Combined Overall
+                          </span>
+                          <span className="text-xs font-mono font-extrabold text-white">
+                            {card.totalW}-{card.totalL}-{card.totalT}{" "}
+                            <span className="text-cyan-300 font-semibold">
+                              ({card.winPct.toFixed(1)}% • BR {card.avgBr})
+                            </span>
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {card.perLg.map((item) => (
+                            <span
+                              key={`comb-rank-${card.cid}-${item.league}`}
+                              className="px-1.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-[10px] font-mono text-slate-300"
+                            >
+                              {formatMatrixCupChipLabel(item.league)}:{" "}
+                              <strong className={item.res.cupRank ? "text-amber-300" : "text-slate-500"}>
+                                {item.res.cupRank ? `#${item.res.cupRank}` : "Unranked"}
+                              </strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Matrix Results Per League */}
           {matrixResult &&
             matrixResult.leagues.map((lgMatrix) => {
@@ -1002,7 +1230,7 @@ export function IvLabTab({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                     <div>
                       <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                        <span>{lgMatrix.league}</span>
+                        <span>{formatLeagueDisplayLabel(lgMatrix.league)}</span>
                         <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300">
                           {lgMatrix.opponentCount} Meta Opponents • Opp IVs: {lgMatrix.oppIvBaseline}
                         </span>
@@ -1056,6 +1284,16 @@ export function IvLabTab({
                                 tierThresholds
                               ).length > 0
                           ).length;
+                      const overallScopeLabel =
+                        shieldScopeMode === "REALISTIC_7" ? "7-Shield" : "Even 3";
+                      const activeOverall =
+                        shieldScopeMode === "REALISTIC_7"
+                          ? res.overallRealistic7
+                          : res.overallEven3;
+                      const activeOverallDeltaWins =
+                        shieldScopeMode === "REALISTIC_7"
+                          ? res.deltaVsRank1.overallRealistic7Wins
+                          : res.deltaVsRank1.overallEven3Wins;
 
                       return (
                         <div
@@ -1085,9 +1323,23 @@ export function IvLabTab({
                                     🎀 Lv51
                                   </span>
                                 )}
+                                <span
+                                  className={`rounded border px-1.5 py-0.5 text-[9px] font-mono font-bold ${
+                                    res.cupRank != null
+                                      ? "border-amber-400/45 bg-amber-500/15 text-amber-200"
+                                      : "border-slate-700 bg-slate-900 text-slate-400"
+                                  }`}
+                                >
+                                  {res.cupRank != null
+                                    ? `🏅 Cup #${res.cupRank}${
+                                        res.cupScore != null ? ` (${res.cupScore.toFixed(1)})` : ""
+                                      }`
+                                    : "🏅 Unranked"}
+                                </span>
                               </div>
                               <div className="text-[11px] font-mono text-cyan-300 mt-0.5">
-                                {res.ivs} • CP {res.cp} • Lv {res.level} • #{res.rank} ({res.pctOfRank1.toFixed(1)}%)
+                                {res.ivs} • CP {res.cp} • Lv {res.level} • Stat #{res.rank} (
+                                {res.pctOfRank1.toFixed(1)}%)
                               </div>
                               <div className="text-[10px] font-mono text-slate-400">
                                 Atk {res.effAtk.toFixed(1)} • Def {res.effDef.toFixed(1)} • HP {res.effHp}
@@ -1109,6 +1361,42 @@ export function IvLabTab({
                                 ? "✅ Saved"
                                 : "💾 Save"}
                             </button>
+                          </div>
+
+                          {/* Overall Multi-Shield Record Bar */}
+                          <div className="rounded-lg border border-cyan-500/35 bg-gradient-to-r from-cyan-950/35 to-slate-900/90 px-2.5 py-1.5 flex items-center justify-between gap-2">
+                            <div>
+                              <div className="text-[9px] font-bold uppercase tracking-wider text-cyan-300">
+                                Overall ({overallScopeLabel})
+                              </div>
+                              <div className="text-xs font-mono font-extrabold text-white">
+                                {activeOverall.wins}-{activeOverall.losses}-{activeOverall.ties}
+                                {!isBase && (
+                                  <span
+                                    className={`ml-1.5 text-[10px] font-bold ${
+                                      activeOverallDeltaWins > 0
+                                        ? "text-emerald-300"
+                                        : activeOverallDeltaWins < 0
+                                        ? "text-rose-300"
+                                        : "text-slate-400"
+                                    }`}
+                                  >
+                                    ({activeOverallDeltaWins >= 0 ? "+" : ""}
+                                    {activeOverallDeltaWins}W vs R1)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right font-mono text-[10px]">
+                              <div className="text-cyan-200 font-bold">
+                                Avg BR {activeOverall.avgBr}
+                              </div>
+                              {lgMatrix.oppMetaPool === "BLENDED_ELO_META" && (
+                                <div className="text-[9.5px] text-emerald-300">
+                                  {activeOverall.weightedWinPct}% wtd
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           {/* 0v0 / 1v1 / 2v2 Record Grid */}
@@ -1727,7 +2015,7 @@ export function IvLabTab({
                   >
                     {availableLeaguesList.map((lg) => (
                       <option key={lg} value={lg}>
-                        {lg}
+                        {formatLeagueDisplayLabel(lg)}
                       </option>
                     ))}
                   </select>
@@ -1909,7 +2197,7 @@ export function IvLabTab({
                         )}
                       </div>
                       <div className="text-[11px] font-mono text-cyan-300 mt-0.5">
-                        {item.league} • CP {item.cp} • Lv {item.level}
+                        {formatLeagueDisplayLabel(item.league)} • CP {item.cp} • Lv {item.level}
                       </div>
                       <div className="text-[11px] font-mono text-slate-300">
                         IVs: <strong className="text-white">{item.ivs}</strong>

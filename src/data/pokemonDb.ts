@@ -114,6 +114,15 @@ export function stripLeagueCpSuffix(raw: string | undefined): string {
     .trim();
 }
 
+export function formatLeagueDisplayLabel(raw: string | undefined): string {
+  const stripped = stripLeagueCpSuffix(raw);
+  const u = stripped.toUpperCase();
+  if (u === "BATTLE FRONTIER (SPECTRAL)" || u === "BF (SPECTRAL)") return "BF (Spectral)";
+  if (u === "BATTLE FRONTIER (CAULDRON)" || u === "BF (CAULDRON)") return "BF (Cauldron)";
+  if (u === "BATTLE FRONTIER (MASTER)" || u === "BF (MASTER)") return "BF (Master)";
+  return stripped.replace(/\bBattle\s+Frontier\b/gi, "BF");
+}
+
 export type CoreLeagueType =
   | "MEGA MASTER LEAGUE"
   | "Mega Master League"
@@ -556,7 +565,7 @@ export function isCurrentBattleFrontierCup(rawTitleOrLabel: string, cupSlug = ""
 export function resolveLeagueCpTier(league: string | undefined): "GREAT" | "ULTRA" | "MASTER" {
   const trimmed = (league || "").trim();
   const u = trimmed.toUpperCase();
-  if (u === "MASTER LEAGUE" || u === "MEGA MASTER LEAGUE" || u === "BATTLE FRONTIER (MASTER)") return "MASTER";
+  if (u === "MASTER LEAGUE" || u === "MEGA MASTER LEAGUE" || u === "BATTLE FRONTIER (MASTER)" || u === "BF (MASTER)") return "MASTER";
   if (u === "ULTRA LEAGUE" || u === "BATTLE FRONTIER (CAULDRON)") return "ULTRA";
   if (u === "GREAT LEAGUE" || u === "BATTLE FRONTIER (SPECTRAL)") return "GREAT";
 
@@ -1014,9 +1023,11 @@ export function normalizeLeagueName(league: string | undefined): LeagueType {
   if (u === "MEGA MASTER LEAGUE" || u === "MASTER LEAGUE (MEGA)") return "Mega Master League";
   if (u.includes("SPECTRAL")) return "BATTLE FRONTIER (SPECTRAL)";
   if (u.includes("CAULDRON")) return "BATTLE FRONTIER (CAULDRON)";
-  if (u.includes("BATTLE FRONTIER") && u.includes("MASTER")) return "BATTLE FRONTIER (MASTER)";
-  if (u.includes("BATTLE FRONTIER")) {
-    return stripped.toUpperCase();
+  if ((u.includes("BATTLE FRONTIER") || u.startsWith("BF (") || u === "BF MASTER") && u.includes("MASTER")) {
+    return "BATTLE FRONTIER (MASTER)";
+  }
+  if (u.includes("BATTLE FRONTIER") || u.startsWith("BF (")) {
+    return stripped.toUpperCase().replace(/^BF\s*\(/, "BATTLE FRONTIER (");
   }
 
   const catalogMatch = DYNAMIC_LIMITED_META_CATALOG.find(
@@ -1061,6 +1072,7 @@ export interface RankingMoves {
 export interface PokemonRankingEntry {
   speciesId: string;
   score: number;
+  rank?: number;
   moves: RankingMoves;
   moveCount?: number[];
   moveset?: string[];
@@ -3591,6 +3603,98 @@ export function getLiveRankingsForLeague(league: LeagueType, limit: number = 20)
   return (PVPOKE_TOP_OPPONENTS[normLeague] || PVPOKE_TOP_OPPONENTS["GREAT LEAGUE"]).slice(0, limit);
 }
 
+export interface SpeciesCupRankInfo {
+  league: string;
+  rank: number | null;
+  score: number | null;
+  totalRanked: number;
+}
+
+export function getSpeciesCupRankInfo(
+  speciesName: string,
+  isShadow: boolean,
+  league: string
+): SpeciesCupRankInfo {
+  const rawTrimmed = (speciesName || "").trim();
+  const hasShadowText = /^Shadow\s+/i.test(rawTrimmed) || rawTrimmed.toLowerCase().includes("(shadow)");
+  const effectiveShadow = Boolean(isShadow) || hasShadowText;
+  const cleanName = rawTrimmed.replace(/^Shadow\s+/i, "").replace(/\s*\(Shadow\)/gi, "").trim();
+  if (!cleanName) {
+    return { league, rank: null, score: null, totalRanked: 0 };
+  }
+
+  const dbMatch =
+    POKEMON_DATABASE[cleanName] ||
+    Object.values(POKEMON_DATABASE).find(
+      (p) =>
+        p.name.toLowerCase() === cleanName.toLowerCase() ||
+        p.speciesId.toLowerCase() === cleanName.replace(/\s+/g, "_").toLowerCase()
+    );
+  const baseId = (dbMatch?.speciesId || cleanName.replace(/\s+/g, "_")).toLowerCase().replace(/_shadow$/, "");
+  const targetId = effectiveShadow ? `${baseId}_shadow` : baseId;
+
+  const norm = normalizeLeagueName(league);
+  const rawLg = (league || "").trim();
+  const withoutCp = stripLeagueCpSuffix(norm).toUpperCase();
+  const map =
+    (LIVE_RANKINGS_MAP[norm] && LIVE_RANKINGS_MAP[norm].size > 0 ? LIVE_RANKINGS_MAP[norm] : undefined) ||
+    (LIVE_RANKINGS_MAP[rawLg] && LIVE_RANKINGS_MAP[rawLg].size > 0 ? LIVE_RANKINGS_MAP[rawLg] : undefined) ||
+    (LIVE_RANKINGS_MAP[rawLg.toUpperCase()] && LIVE_RANKINGS_MAP[rawLg.toUpperCase()].size > 0 ? LIVE_RANKINGS_MAP[rawLg.toUpperCase()] : undefined) ||
+    (LIVE_RANKINGS_MAP[withoutCp] && LIVE_RANKINGS_MAP[withoutCp].size > 0 ? LIVE_RANKINGS_MAP[withoutCp] : undefined);
+
+  if (map) {
+    const entry = map.get(targetId);
+    if (entry) {
+      let resolvedRank: number | null = typeof entry.rank === "number" ? entry.rank : null;
+      if (resolvedRank === null) {
+        const list =
+          LIVE_RANKINGS_LIST[norm] ||
+          LIVE_RANKINGS_LIST[rawLg] ||
+          LIVE_RANKINGS_LIST[withoutCp];
+        if (Array.isArray(list) && list.length > 0) {
+          const idx = list.findIndex((it) => it.speciesId.toLowerCase() === targetId);
+          if (idx >= 0) resolvedRank = idx + 1;
+        }
+        if (resolvedRank === null) {
+          let i = 1;
+          for (const k of map.keys()) {
+            if (k === targetId) {
+              resolvedRank = i;
+              break;
+            }
+            i += 1;
+          }
+        }
+      }
+      return {
+        league,
+        rank: resolvedRank,
+        score: typeof entry.score === "number" ? entry.score : null,
+        totalRanked: map.size
+      };
+    }
+    return { league, rank: null, score: null, totalRanked: map.size };
+  }
+
+  const staticPool =
+    PVPOKE_TOP_OPPONENTS[norm] ||
+    PVPOKE_TOP_OPPONENTS[rawLg] ||
+    undefined;
+  if (staticPool && staticPool.length > 0) {
+    const targetName = (effectiveShadow ? `Shadow ${dbMatch?.name || cleanName}` : dbMatch?.name || cleanName).toLowerCase();
+    const hit = staticPool.find((p) => p.name.toLowerCase() === targetName);
+    if (hit) {
+      return {
+        league,
+        rank: hit.rank,
+        score: typeof hit.score === "number" ? hit.score : null,
+        totalRanked: staticPool.length
+      };
+    }
+  }
+  return { league, rank: null, score: null, totalRanked: 0 };
+}
+
 export function getAvailableFormsForPokemon(name: string): string[] {
   const stats = POKEMON_DATABASE[name];
   const base = stats?.baseSpecies || name.split(" ")[0].toLowerCase();
@@ -4738,11 +4842,14 @@ export const LIVE_RANKINGS_MAP: Record<string, Map<string, PokemonRankingEntry>>
           for (const [lgKey, arr] of Object.entries(parsed)) {
             if (Array.isArray(arr) && arr.length > 0) {
               const map = new Map<string, PokemonRankingEntry>();
-              for (const item of arr as PokemonRankingEntry[]) {
+              (arr as PokemonRankingEntry[]).forEach((item, idx) => {
                 if (item && typeof item.speciesId === "string") {
-                  map.set(item.speciesId.toLowerCase(), item);
+                  map.set(item.speciesId.toLowerCase(), {
+                    ...item,
+                    rank: typeof item.rank === "number" ? item.rank : idx + 1
+                  });
                 }
-              }
+              });
               base[lgKey] = map;
               base[lgKey.toUpperCase()] = map;
             }
@@ -4768,8 +4875,11 @@ export const LIVE_RANKINGS_MAP: Record<string, Map<string, PokemonRankingEntry>>
     "Battle Frontier (Master)"
   ] as const
 ).forEach((lg) => {
-  LIVE_RANKINGS_LIST[lg].forEach((entry) => {
-    LIVE_RANKINGS_MAP[lg].set(entry.speciesId.toLowerCase(), entry);
+  LIVE_RANKINGS_LIST[lg].forEach((entry, idx) => {
+    LIVE_RANKINGS_MAP[lg].set(entry.speciesId.toLowerCase(), {
+      ...entry,
+      rank: typeof entry.rank === "number" ? entry.rank : idx + 1
+    });
   });
   LIVE_RANKINGS_MAP[lg.toUpperCase()] = LIVE_RANKINGS_MAP[lg];
   (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[lg.toUpperCase()] = LIVE_RANKINGS_LIST[lg];
@@ -5838,6 +5948,7 @@ export function parseRankingsJsonArray(rawJson: unknown): PokemonRankingEntry[] 
     entries.push({
       speciesId,
       score,
+      rank: entries.length + 1,
       moves: { fastMoves, chargedMoves },
       moveCount: Array.isArray(obj.moveCount) ? (obj.moveCount as number[]) : undefined,
       moveset
@@ -6017,8 +6128,11 @@ export async function syncPvPokeDataAndRankings(): Promise<{
     }
     const map = LIVE_RANKINGS_MAP[leagueKey];
     map.clear();
-    list.forEach((entry) => {
-      map.set(entry.speciesId.toLowerCase(), entry);
+    list.forEach((entry, idx) => {
+      map.set(entry.speciesId.toLowerCase(), {
+        ...entry,
+        rank: typeof entry.rank === "number" ? entry.rank : idx + 1
+      });
     });
     const upperKey = leagueKey.toUpperCase();
     if (upperKey !== leagueKey) {

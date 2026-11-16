@@ -15,10 +15,15 @@
 import { OVERLAY_HTML, COMPACT_PVP_DB } from './overlay-asset.mjs';
 
 function cleanDvrLeagueName(raw) {
-  return String(raw || '')
+  const s = String(raw || '')
     .trim()
     .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, '')
     .trim();
+  const u = s.toUpperCase();
+  if (u === 'BATTLE FRONTIER (SPECTRAL)' || u === 'BF (SPECTRAL)') return 'BF (Spectral)';
+  if (u === 'BATTLE FRONTIER (CAULDRON)' || u === 'BF (CAULDRON)') return 'BF (Cauldron)';
+  if (u === 'BATTLE FRONTIER (MASTER)' || u === 'BF (MASTER)') return 'BF (Master)';
+  return s.replace(/\bBattle\s+Frontier\b/gi, 'BF');
 }
 
 const RESERVED_SCREEN_NAMES = new Set([
@@ -4300,7 +4305,12 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     const PVP_DB = ${safeJsonForScript(COMPACT_PVP_DB)};
     const SHARE_LEAGUE = ${safeJsonForScript(cleanDvrLeagueName(shareInfo.league || 'GREAT LEAGUE'))};
     function cleanWatchLg(s) {
-      return String(s || '').trim().replace(/\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$/i, '').trim();
+      const stripped = String(s || '').trim().replace(/\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$/i, '').trim();
+      const u = stripped.toUpperCase();
+      if (u === 'BATTLE FRONTIER (SPECTRAL)' || u === 'BF (SPECTRAL)') return 'BF (Spectral)';
+      if (u === 'BATTLE FRONTIER (CAULDRON)' || u === 'BF (CAULDRON)') return 'BF (Cauldron)';
+      if (u === 'BATTLE FRONTIER (MASTER)' || u === 'BF (MASTER)') return 'BF (Master)';
+      return stripped.replace(/\\bBattle\\s+Frontier\\b/gi, 'BF');
     }
     const SHARE_MATCHUP = ${safeJsonForScript(shareInfo.matchup || '')};
     const SHARE_DURATION_SEC = Number(${safeJsonForScript(Number(shareInfo.durationSec) || 0)}) || 0;
@@ -7156,12 +7166,17 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     let cpTierFilter = 'ALL'; // 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'
     let cupFilter = 'ALL'; // 'ALL' | specific cup string
     function cleanLg(s) {
-      return String(s || '').trim().replace(/\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$/i, '').trim();
+      const stripped = String(s || '').trim().replace(/\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$/i, '').trim();
+      const u = stripped.toUpperCase();
+      if (u === 'BATTLE FRONTIER (SPECTRAL)' || u === 'BF (SPECTRAL)') return 'BF (Spectral)';
+      if (u === 'BATTLE FRONTIER (CAULDRON)' || u === 'BF (CAULDRON)') return 'BF (Cauldron)';
+      if (u === 'BATTLE FRONTIER (MASTER)' || u === 'BF (MASTER)') return 'BF (Master)';
+      return stripped.replace(/\\bBattle\\s+Frontier\\b/gi, 'BF');
     }
     function resolveCpTier(rawLeague) {
       const upper = String(rawLeague || '').trim().toUpperCase();
       if (!upper) return 'GREAT';
-      if (upper.indexOf('(10000)') >= 0 || upper.indexOf('MASTER') >= 0 || upper === 'BATTLE FRONTIER (MASTER)') return 'MASTER';
+      if (upper.indexOf('(10000)') >= 0 || upper.indexOf('MASTER') >= 0 || upper === 'BATTLE FRONTIER (MASTER)' || upper === 'BF (MASTER)') return 'MASTER';
       if (upper.indexOf('(2500)') >= 0 || upper.indexOf('ULTRA') >= 0 || upper.indexOf('CAULDRON') >= 0) return 'ULTRA';
       return 'GREAT';
     }
@@ -8154,7 +8169,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.42',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.43',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;

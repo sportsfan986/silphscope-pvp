@@ -718,7 +718,7 @@ internal fun OverlayService.Companion.hasMultipleMegasStatic(names: List<String>
     return countMegaOrPrimalInListStatic(names) > 1
 }
 
-internal fun OverlayService.Companion.getBattleFrontierLeagueCountsSummaryStatic(prefix: String = "Battle Frontier Data"): String {
+internal fun OverlayService.Companion.getBattleFrontierLeagueCountsSummaryStatic(prefix: String = "BF Data"): String {
     val glM = BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"]?.size ?: 0
     val glC = BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"]?.size ?: 0
     val spM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (SPECTRAL)"]?.size ?: 0
@@ -955,7 +955,7 @@ internal fun OverlayService.Companion.syncBattleFrontierSheetsBlocking(
     simulationCacheEpoch++
     clearTeamAndMetaCachesStatic()
 
-    return getBattleFrontierLeagueCountsSummaryStatic("✅ Synced Battle Frontier Sheets")
+    return getBattleFrontierLeagueCountsSummaryStatic("✅ Synced BF Sheets")
 }
 
 internal fun OverlayService.Companion.getShow6UsagePctStatic(league: String, speciesName: String): Double {
