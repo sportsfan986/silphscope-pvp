@@ -5955,11 +5955,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun formatTier2CupChipLabel(leagueKey: String): String {
-        val u = leagueKey.trim().uppercase()
+        val clean = OverlayService.stripLeagueCpSuffixStatic(leagueKey)
+        val u = clean.uppercase()
         return when {
             u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE" -> "Open / Standard"
-            u.contains("MEGA") -> "Mega ($leagueKey)"
-            else -> leagueKey
+            u.startsWith("MEGA ") -> clean
+            u.contains("MEGA") -> "Mega ($clean)"
+            else -> clean
         }
     }
 
@@ -5989,13 +5991,13 @@ class MainActivity : AppCompatActivity() {
 
         val allLogs = loadBattleLogs()
 
-        // Tier 1: CP Range (All, Great <=1500, Ultra 2500, Master 10000)
+        // Tier 1: League Tier (All Leagues, Great, Ultra, Master)
         val cpTierKeys = listOf("ALL", "GREAT", "ULTRA", "MASTER")
         val cpTierLabels = listOf(
-            "All CP (${allLogs.size})",
-            "Great ≤1500 (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
-            "Ultra 2500 (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
-            "Master 10000 (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
+            "All Leagues (${allLogs.size})",
+            "Great (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
+            "Ultra (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
+            "Master (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
         )
         spinnerLogFilterCpTier.adapter = createThemedSpinnerAdapter(cpTierLabels)
         val cpTierIdx = cpTierKeys.indexOfFirst { it.equals(selectedLogCpTierFilter, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
@@ -6013,7 +6015,7 @@ class MainActivity : AppCompatActivity() {
             dynamicKeys.add("ALL")
             for (lg in sortCupsWithinTier(activeEnabledLeagues)) {
                 val c = allLogs.count { it.league.equals(lg, ignoreCase = true) }
-                dynamicLabels.add("$lg ($c)")
+                dynamicLabels.add("${OverlayService.stripLeagueCpSuffixStatic(lg)} ($c)")
                 dynamicKeys.add(lg)
             }
             if (oldCupLogsCount > 0 || selectedLogLeagueFilter == "OLD_CUPS") {
@@ -10632,18 +10634,18 @@ class MainActivity : AppCompatActivity() {
 
         val cpTierTabs = listOf(
             "ALL" to "All (${allPresets.size})",
-            "GREAT" to "Great ≤1500 (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
-            "ULTRA" to "Ultra 2500 (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
-            "MASTER" to "Master 10000 (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
+            "GREAT" to "Great (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
+            "ULTRA" to "Ultra (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
+            "MASTER" to "Master (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
         )
         if (cpTierTabs.none { it.first.equals(selectedPresetsCpTierFilter, ignoreCase = true) }) {
             selectedPresetsCpTierFilter = "ALL"
         }
 
         filterTitleTv?.text = if (isShow6) {
-            "🗂️ Filter Show 6 Teams by CP Tier & Cup (${allPresets.size} Total)"
+            "🗂️ Filter Show 6 Teams by League & Cup (${allPresets.size} Total)"
         } else {
-            "🗂️ Filter GBL Blind 3 Teams by CP Tier & Cup (${allPresets.size} Total)"
+            "🗂️ Filter GBL Blind 3 Teams by League & Cup (${allPresets.size} Total)"
         }
 
         val density = resources.displayMetrics.density
@@ -10802,7 +10804,7 @@ class MainActivity : AppCompatActivity() {
             textArchetype?.text = if (preset.isArchetypeManual) "${preset.archetype}*" else preset.archetype
 
             val resolvedLeague = preset.league.ifBlank { "GREAT LEAGUE" }
-            textLeague.text = resolvedLeague
+            textLeague.text = OverlayService.stripLeagueCpSuffixStatic(resolvedLeague)
 
             val (leadTier, leadHex) = getMatchupTierCodeAndHex(preset.leadAggBr)
             val (machTier, machHex) = getMachineBrTierLabelAndHex(preset.machineAggBr)
@@ -11415,19 +11417,19 @@ class MainActivity : AppCompatActivity() {
         val defaults = listOf(
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-spectral-default",
-                name = "BF Spectral Core (1500 CP)",
+                name = "BF Spectral Core",
                 league = "BATTLE FRONTIER (SPECTRAL)",
                 pokemon = listOf("Murkrow", "Drifblim", "Turtonator", "Ninetales (Alolan)", "Golisopod", "Rotom (Wash)")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-cauldron-default",
-                name = "BF Cauldron Core (2500 CP)",
+                name = "BF Cauldron Core",
                 league = "BATTLE FRONTIER (CAULDRON)",
                 pokemon = listOf("Skeledirge", "Malamar", "Torterra", "Walrein", "Poliwrath", "Dragalge")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-bfmaster-default",
-                name = "BF Master Core (Uncapped CP)",
+                name = "BF Master Core",
                 league = "BATTLE FRONTIER (MASTER)",
                 pokemon = listOf("Zacian (Crowned Sword)", "Palkia (Origin)", "Metagross", "Groudon", "Kyurem (Black)", "Gyarados (Mega)")
             )
@@ -11504,7 +11506,7 @@ class MainActivity : AppCompatActivity() {
             "GREAT LEAGUE" to emptyList<String>(),
             "ULTRA LEAGUE" to emptyList<String>(),
             "MASTER LEAGUE" to emptyList<String>(),
-            "Mega Master League (10000)" to emptyList<String>()
+            "Mega Master League" to emptyList<String>()
         )
         if (!raw.isNullOrBlank()) {
             try {
@@ -12359,7 +12361,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey.uppercase(),
-                            label = "🔒 [FORCED DEFAULT] ${m.leagueKey.uppercase()} • ${m.cp} CP (${m.cup})$megaTag",
+                            label = "🔒 [FORCED DEFAULT] ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey).uppercase()} (${m.cup})$megaTag",
                             isForced = true
                         )
                     )
@@ -12370,7 +12372,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey,
-                            label = "🟢 [OPTIONAL OPEN] ${m.leagueKey} • ${m.cp} CP (${m.cup})",
+                            label = "🟢 [OPTIONAL OPEN] ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey)}",
                             isForced = false
                         )
                     )
@@ -12395,7 +12397,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey,
-                            label = "$badge ${m.leagueKey} • ${m.cp} CP (${m.cup})$megaTag$expiredHint",
+                            label = "$badge ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey)}$megaTag$expiredHint",
                             isForced = false
                         )
                     )
@@ -12403,11 +12405,11 @@ class MainActivity : AppCompatActivity() {
             } else {
                 // Blind 3 PvP Mode:
                 // 1. Forced top items: Standard GREAT LEAGUE, ULTRA LEAGUE, MASTER LEAGUE (ALL CAPS)
-                rows.add(SelectorRow("GREAT LEAGUE", "🔒 [FORCED DEFAULT] GREAT LEAGUE • 1500 CP (all)", true))
-                rows.add(SelectorRow("ULTRA LEAGUE", "🔒 [FORCED DEFAULT] ULTRA LEAGUE • 2500 CP (all)", true))
-                rows.add(SelectorRow("MASTER LEAGUE", "🔒 [FORCED DEFAULT] MASTER LEAGUE • 10000 CP (all)", true))
+                rows.add(SelectorRow("GREAT LEAGUE", "🔒 [FORCED DEFAULT] GREAT LEAGUE", true))
+                rows.add(SelectorRow("ULTRA LEAGUE", "🔒 [FORCED DEFAULT] ULTRA LEAGUE", true))
+                rows.add(SelectorRow("MASTER LEAGUE", "🔒 [FORCED DEFAULT] MASTER LEAGUE", true))
 
-                // 2. Optional user-selectable limited metas (including data-driven Mega Master League (10000) + Title Case cups)
+                // 2. Optional user-selectable limited metas (including data-driven Mega Master League + Title Case cups)
                 val optionalGbl = catalog.filter { it.category != "standard_open" }
                 for (m in optionalGbl) {
                     val isExpired = OverlayService.isExpiredLimitedMetaStatic(m, nowMs)
@@ -12425,7 +12427,7 @@ class MainActivity : AppCompatActivity() {
                     rows.add(
                         SelectorRow(
                             leagueKey = m.leagueKey,
-                            label = "$badge ${m.leagueKey} • ${m.cp} CP (${m.cup})$megaTag$expiredHint",
+                            label = "$badge ${OverlayService.stripLeagueCpSuffixStatic(m.leagueKey)}$megaTag$expiredHint",
                             isForced = false
                         )
                     )
@@ -17337,10 +17339,10 @@ class MainActivity : AppCompatActivity() {
             val locked = isCup && tier == "free"
             val isSelected = ivLabSelectedLeagues.any { it.equals(lg, ignoreCase = true) }
             val shortName = when (lg) {
-                "GREAT LEAGUE" -> "GL (≤1500)"
-                "ULTRA LEAGUE" -> "UL (≤2500)"
-                "MASTER LEAGUE" -> "ML (Open)"
-                else -> lg
+                "GREAT LEAGUE" -> "GL"
+                "ULTRA LEAGUE" -> "UL"
+                "MASTER LEAGUE" -> "ML"
+                else -> OverlayService.stripLeagueCpSuffixStatic(lg)
             }
             leagueRow.addView(Button(this).apply {
                 text = (if (locked) "🔒 " else if (isSelected) "✓ " else "") + shortName
@@ -18534,9 +18536,9 @@ class MainActivity : AppCompatActivity() {
         }
         for ((fKey, fLabel) in listOf(
             "ALL" to "All (${roster.size})",
-            "GREAT LEAGUE" to "GL (≤1500)",
-            "ULTRA LEAGUE" to "UL (≤2500)",
-            "MASTER LEAGUE" to "ML (Open)"
+            "GREAT LEAGUE" to "GL",
+            "ULTRA LEAGUE" to "UL",
+            "MASTER LEAGUE" to "ML"
         )) {
             val active = ivLabBuiltLeagueFilter == fKey
             filterRow.addView(Button(this).apply {

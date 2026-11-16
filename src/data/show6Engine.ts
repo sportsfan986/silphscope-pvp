@@ -2137,13 +2137,13 @@ export function getMostLikelyMetaOpponent6ForFormat(
   const normLeague = normalizeLeagueName(league || "Battle Frontier (Spectral)");
   const shortLabel =
     normLeague === "Battle Frontier (Spectral)"
-      ? "BF Spectral (1500)"
+      ? "BF Spectral"
       : normLeague === "Battle Frontier (Cauldron)"
-      ? "BF Cauldron (2500)"
+      ? "BF Cauldron"
       : normLeague === "Battle Frontier (Master)"
-      ? "BF Master (Uncapped)"
+      ? "BF Master"
       : normLeague === "GREAT LEAGUE"
-      ? "Open GL (1500)"
+      ? "Open GL"
       : normLeague;
 
   const cores = getShow6CoresForLeague(normLeague);
@@ -2480,7 +2480,7 @@ export async function syncLimitedMetaRankings(
           parsed.forEach((entry) => map.set(entry.speciesId.toLowerCase(), entry));
           LIVE_RANKINGS_MAP[fmt.label.toUpperCase()] = map;
           (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[fmt.label] = parsed;
-          if (fmt.label === "Mega Master League (10000)") {
+          if (fmt.label === "Mega Master League" || fmt.label === "Mega Master League (10000)") {
             LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"] = map;
             (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["MEGA MASTER LEAGUE"] = parsed;
           }
@@ -2655,7 +2655,7 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
         const cleanTitle = isBF
           ? rawTitle.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase()
           : toPvPokeTitleCase(rawTitle);
-        const label = isBF ? cleanTitle : `${cleanTitle} (${cp})`;
+        const label = cleanTitle;
         const prev = previousByLabel.get(label);
         const commitMs = (await fetchCupLastCommitMs(cup)) ?? prev?.lastSeenAt ?? nowMs - 21 * 86400_000;
         const ageMs = nowMs - commitMs;
@@ -2681,7 +2681,7 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
         const cleanTitle = isBF
           ? cand.title.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase()
           : toPvPokeTitleCase(cand.title);
-        const label = isBF ? cleanTitle : `${cleanTitle} (${cand.cp})`;
+        const label = cleanTitle;
         const rankingsUrl =
           cand.rankingsUrl ||
           `https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/${cand.cup}/overall/rankings-${cand.cp}.json`;
@@ -2717,7 +2717,7 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
             parsed.forEach((e) => map.set(e.speciesId.toLowerCase(), e));
             LIVE_RANKINGS_MAP[label.toUpperCase()] = map;
             (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[label] = parsed;
-            if (label === "Mega Master League (10000)") {
+            if (label === "Mega Master League" || label === "Mega Master League (10000)") {
               LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"] = map;
               (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["MEGA MASTER LEAGUE"] = parsed;
             }

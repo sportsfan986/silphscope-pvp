@@ -146,25 +146,25 @@ internal object PokemonStaticData {
         LimitedMetaFormat("battlefrontiermaster_10000", "BATTLE FRONTIER (MASTER)", "battlefrontiermaster", 10000, "BATTLE FRONTIER (MASTER)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json", "master", 1793491200000L, true),
         LimitedMetaFormat("spectral_1500", "BATTLE FRONTIER (SPECTRAL)", "spectral", 1500, "BATTLE FRONTIER (SPECTRAL)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json", "spectral", 1793491200000L, false),
         // Optional Standard Open Leagues (User-selectable in Show 6 mode; forced as GREAT/ULTRA/MASTER LEAGUE in Blind 3 mode)
-        LimitedMetaFormat("all_1500", "Great League", "all", 1500, "Great League (1500)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json", "great", 1793491200000L, false),
-        LimitedMetaFormat("all_2500", "Ultra League", "all", 2500, "Ultra League (2500)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json", "ultra", 1793491200000L, false),
-        LimitedMetaFormat("all_10000", "Master League", "all", 10000, "Master League (10000)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json", "master", 1793491200000L, false),
+        LimitedMetaFormat("all_1500", "Great League", "all", 1500, "Great League", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json", "great", 1793491200000L, false),
+        LimitedMetaFormat("all_2500", "Ultra League", "all", 2500, "Ultra League", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json", "ultra", 1793491200000L, false),
+        LimitedMetaFormat("all_10000", "Master League", "all", 10000, "Master League", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json", "master", 1793491200000L, false),
         // CURRENT (Live in PvPoke gamemaster.json["formats"])
-        LimitedMetaFormat("mega_10000", "Mega Master League", "mega", 10000, "Mega Master League (10000)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json", "mega", 1793491200000L, true),
-        LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League (1500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json", "megagreat", 1793491200000L, true),
-        LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League (2500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json", "megaultra", 1793491200000L, true),
-        LimitedMetaFormat("laic2027_1500", "LAIC 2027 Championship Series Cup", "laic2027", 1500, "LAIC 2027 Championship Series Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json", "laic2027", 1793491200000L, true),
-        LimitedMetaFormat("halloweenmega_1500", "Mega Halloween Cup", "halloweenmega", 1500, "Mega Halloween Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json", "halloweenmega", 1793491200000L, true),
-        LimitedMetaFormat("fantasy_1500", "Fantasy Cup", "fantasy", 1500, "Fantasy Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json", "fantasy", 1793491200000L, false),
-        LimitedMetaFormat("trail_1500", "Devon Trail Cup", "trail", 1500, "Devon Trail Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json", "trail", 1793491200000L, false),
-        LimitedMetaFormat("fable_1500", "Devon Fable Cup", "fable", 1500, "Devon Fable Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json", "fable", 1793491200000L, false),
-        LimitedMetaFormat("gymbreakers_1500", "Gymbreakers Invitational Season 7", "gymbreakers", 1500, "Gymbreakers Invitational Season 7 (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json", "gymbreakers", 1793491200000L, false),
+        LimitedMetaFormat("mega_10000", "Mega Master League", "mega", 10000, "Mega Master League", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json", "mega", 1793491200000L, true),
+        LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json", "megagreat", 1793491200000L, true),
+        LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json", "megaultra", 1793491200000L, true),
+        LimitedMetaFormat("laic2027_1500", "LAIC 2027 Championship Series Cup", "laic2027", 1500, "LAIC 2027 Championship Series Cup", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json", "laic2027", 1793491200000L, true),
+        LimitedMetaFormat("halloweenmega_1500", "Mega Halloween Cup", "halloweenmega", 1500, "Mega Halloween Cup", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json", "halloweenmega", 1793491200000L, true),
+        LimitedMetaFormat("fantasy_1500", "Fantasy Cup", "fantasy", 1500, "Fantasy Cup", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json", "fantasy", 1793491200000L, false),
+        LimitedMetaFormat("trail_1500", "Devon Trail Cup", "trail", 1500, "Devon Trail Cup", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json", "trail", 1793491200000L, false),
+        LimitedMetaFormat("fable_1500", "Devon Fable Cup", "fable", 1500, "Devon Fable Cup", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json", "fable", 1793491200000L, false),
+        LimitedMetaFormat("gymbreakers_1500", "Gymbreakers Invitational Season 7", "gymbreakers", 1500, "Gymbreakers Invitational Season 7", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json", "gymbreakers", 1793491200000L, false),
         // RECENT (Within 4-week window by default)
-        LimitedMetaFormat("colormega_1500", "Mega Color Cup", "colormega", 1500, "Mega Color Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json", "colormega", System.currentTimeMillis() - 14L * 86400_000L, true),
-        LimitedMetaFormat("halloween_1500", "Halloween Cup", "halloween", 1500, "Halloween Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json", "halloween", System.currentTimeMillis() - 7L * 86400_000L, false),
-        LimitedMetaFormat("sunshine_1500", "Sunshine Cup", "sunshine", 1500, "Sunshine Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json", "sunshine", System.currentTimeMillis() - 18L * 86400_000L, false),
-        LimitedMetaFormat("little_500", "Little Cup", "little", 500, "Little Cup (500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json", "little", System.currentTimeMillis() - 12L * 86400_000L, false),
-        LimitedMetaFormat("premier_10000", "Master League Premier", "premier", 10000, "Master League Premier (10000)", "premier_mega", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json", "premier", System.currentTimeMillis() - 10L * 86400_000L, false)
+        LimitedMetaFormat("colormega_1500", "Mega Color Cup", "colormega", 1500, "Mega Color Cup", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json", "colormega", System.currentTimeMillis() - 14L * 86400_000L, true),
+        LimitedMetaFormat("halloween_1500", "Halloween Cup", "halloween", 1500, "Halloween Cup", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json", "halloween", System.currentTimeMillis() - 7L * 86400_000L, false),
+        LimitedMetaFormat("sunshine_1500", "Sunshine Cup", "sunshine", 1500, "Sunshine Cup", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json", "sunshine", System.currentTimeMillis() - 18L * 86400_000L, false),
+        LimitedMetaFormat("little_500", "Little Cup", "little", 500, "Little Cup", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json", "little", System.currentTimeMillis() - 12L * 86400_000L, false),
+        LimitedMetaFormat("premier_10000", "Master League Premier", "premier", 10000, "Master League Premier", "premier_mega", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json", "premier", System.currentTimeMillis() - 10L * 86400_000L, false)
     )
 
     val BASELINE_MOVE_BUFF_EFFECTS: Map<String, MoveBuffEffect> = mapOf(
@@ -2189,7 +2189,7 @@ internal fun OverlayService.Companion.formatShortSelectedLeagueLabelStatic(leagu
         upper.contains("BATTLE FRONTIER") && upper.contains("SPECTRAL") -> "BF (Spectral)"
         upper.contains("BATTLE FRONTIER") && upper.contains("CAULDRON") -> "BF (Cauldron)"
         upper.contains("BATTLE FRONTIER") && upper.contains("MASTER") -> "BF (Master)"
-        else -> leagueKey.trim()
+        else -> OverlayService.stripLeagueCpSuffixStatic(leagueKey)
     }
 }
 
@@ -2332,6 +2332,8 @@ internal fun OverlayService.Companion.parseRankingsJsonStatic(leagueKey: String,
         }
         val upperKey = leagueKey.uppercase()
         LIVE_RANKINGS_MAP[upperKey] = leagueMap
+        val withoutCp = upperKey.replace(Regex("\\s*\\(\\d+\\)\\s*$"), "").trim()
+        if (withoutCp.isNotEmpty()) LIVE_RANKINGS_MAP[withoutCp] = leagueMap
         when (upperKey) {
             "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> {
                 LIVE_RANKINGS_MAP["GREAT LEAGUE"] = leagueMap
@@ -2344,6 +2346,14 @@ internal fun OverlayService.Companion.parseRankingsJsonStatic(leagueKey: String,
             "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> {
                 LIVE_RANKINGS_MAP["MASTER LEAGUE"] = leagueMap
                 LIVE_RANKINGS_MAP["MASTER LEAGUE (10000)"] = leagueMap
+            }
+            "MEGA GREAT LEAGUE", "MEGA GREAT LEAGUE (1500)" -> {
+                LIVE_RANKINGS_MAP["MEGA GREAT LEAGUE"] = leagueMap
+                LIVE_RANKINGS_MAP["MEGA GREAT LEAGUE (1500)"] = leagueMap
+            }
+            "MEGA ULTRA LEAGUE", "MEGA ULTRA LEAGUE (2500)" -> {
+                LIVE_RANKINGS_MAP["MEGA ULTRA LEAGUE"] = leagueMap
+                LIVE_RANKINGS_MAP["MEGA ULTRA LEAGUE (2500)"] = leagueMap
             }
             "MEGA MASTER LEAGUE", "MEGA MASTER LEAGUE (10000)", "MASTER LEAGUE (MEGA) (10000)" -> {
                 LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"] = leagueMap

@@ -41,6 +41,7 @@ import {
   SHOW6_LEAGUES,
   isBattleFrontierLeague,
   normalizeLeagueName,
+  stripLeagueCpSuffix,
   calculateTurnAlignment,
   resolveFastMove,
   resolveChargedMove,
@@ -1905,10 +1906,7 @@ export default function App() {
         .filter((p) => p && p.combatMode !== 'show6' && !String(p.id || '').startsWith('show6-preset3-'))
         .map((p) => ({
           ...p,
-          league:
-            String(p.league || '').trim().toUpperCase() === 'MEGA MASTER LEAGUE'
-              ? 'Mega Master League (10000)'
-              : normalizeLeagueName(p.league),
+          league: normalizeLeagueName(p.league),
           combatMode: 'gbl' as const
         }));
     try {
@@ -1946,10 +1944,7 @@ export default function App() {
     }
     return INITIAL_PRESETS.map((p) => ({
       ...p,
-      league:
-        String(p.league || '').trim().toUpperCase() === 'MEGA MASTER LEAGUE'
-          ? 'Mega Master League (10000)'
-          : normalizeLeagueName(p.league),
+      league: normalizeLeagueName(p.league),
       combatMode: 'gbl' as const
     }));
   });
@@ -9381,7 +9376,7 @@ export default function App() {
                           >
                             {enabledShow6Leagues.map((lg) => (
                               <option key={lg} value={lg}>
-                                {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped CP' : `${getLeagueCpCap(lg)} CP`})
+                                {stripLeagueCpSuffix(lg)}
                               </option>
                             ))}
                           </select>
@@ -9987,7 +9982,7 @@ export default function App() {
                           >
                             {enabledShow6Leagues.map((lg) => (
                               <option key={lg} value={lg}>
-                                {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped CP' : `${getLeagueCpCap(lg)} CP`})
+                                {stripLeagueCpSuffix(lg)}
                               </option>
                             ))}
                           </select>
@@ -10571,22 +10566,23 @@ export default function App() {
                       </label>
                       <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
                         {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lgId) => {
+                          const cleanLg = stripLeagueCpSuffix(lgId);
                           const shortLbl =
-                            lgId === 'GREAT LEAGUE'
-                              ? 'Great (1500)'
-                              : lgId === 'ULTRA LEAGUE'
-                              ? 'Ultra (2500)'
-                              : lgId === 'MASTER LEAGUE'
-                              ? 'Master (ML)'
-                              : lgId === 'MEGA MASTER LEAGUE'
+                            cleanLg === 'GREAT LEAGUE'
+                              ? 'Great'
+                              : cleanLg === 'ULTRA LEAGUE'
+                              ? 'Ultra'
+                              : cleanLg === 'MASTER LEAGUE'
+                              ? 'Master'
+                              : cleanLg.toUpperCase() === 'MEGA MASTER LEAGUE'
                               ? 'Mega ML'
-                              : lgId === 'Battle Frontier (Spectral)'
-                              ? 'Spectral (1500)'
-                              : lgId === 'Battle Frontier (Cauldron)'
-                              ? 'Cauldron (2500)'
-                              : lgId === 'Battle Frontier (Master)'
+                              : cleanLg === 'Battle Frontier (Spectral)'
+                              ? 'Spectral'
+                              : cleanLg === 'Battle Frontier (Cauldron)'
+                              ? 'Cauldron'
+                              : cleanLg === 'Battle Frontier (Master)'
                               ? 'BF Master'
-                              : lgId;
+                              : cleanLg;
                           return (
                             <button
                               key={lgId}
@@ -11125,20 +11121,20 @@ export default function App() {
                 });
 
               const tier1Options: Array<{ key: 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'; label: string; count: number }> = [
-                { key: 'ALL', label: 'All CP Tiers', count: presets.length },
+                { key: 'ALL', label: 'All Leagues', count: presets.length },
                 {
                   key: 'GREAT',
-                  label: 'Great (≤1500)',
+                  label: 'Great',
                   count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'GREAT').length
                 },
                 {
                   key: 'ULTRA',
-                  label: 'Ultra (2500)',
+                  label: 'Ultra',
                   count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'ULTRA').length
                 },
                 {
                   key: 'MASTER',
-                  label: 'Master (10000)',
+                  label: 'Master',
                   count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'MASTER').length
                 }
               ];
@@ -11167,7 +11163,7 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">
-                        {appCombatMode === 'show6' ? '🏛️ Tier 1 — CP Range:' : '🛡️ Tier 1 — CP Range:'}
+                        {appCombatMode === 'show6' ? '🏛️ Tier 1 — League:' : '🛡️ Tier 1 — League:'}
                       </span>
                       {tier1Options.map((t1) => {
                         const isSelected = activeTeamsCpTierFilter === t1.key;
@@ -11637,7 +11633,7 @@ export default function App() {
                         >
                           {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lg) => (
                             <option key={lg} value={lg}>
-                              {lg} ({getLeagueCpCap(lg) >= 10000 ? 'No CP Limit' : `Max ${getLeagueCpCap(lg)} CP`})
+                              {stripLeagueCpSuffix(lg)}
                             </option>
                           ))}
                         </select>
@@ -11664,7 +11660,7 @@ export default function App() {
                           >
                             {allEnabledLeaguesCombined.map((lg) => (
                               <option key={lg} value={lg}>
-                                {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped' : `${getLeagueCpCap(lg)} CP`})
+                                {stripLeagueCpSuffix(lg)}
                               </option>
                             ))}
                           </select>
@@ -13524,12 +13520,12 @@ export default function App() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="font-extrabold text-xs text-white truncate" title={fmt.id}>
-                                  {fmt.id}
+                                <div className="font-extrabold text-xs text-white truncate" title={stripLeagueCpSuffix(fmt.id)}>
+                                  {stripLeagueCpSuffix(fmt.id)}
                                 </div>
                                 <div className="text-[10px] font-mono text-slate-400">
-                                  cup: <span className="text-purple-300">{fmt.cupKey}</span> • Max CP:{' '}
-                                  <span className="text-sky-300">{fmt.cp >= 10000 ? 'Uncapped' : fmt.cp}</span>
+                                  cup: <span className="text-purple-300">{fmt.cupKey}</span> • tier:{' '}
+                                  <span className="text-sky-300">{fmt.cp <= 500 ? 'Little' : fmt.cp <= 1500 ? 'GL' : fmt.cp <= 2500 ? 'UL' : 'ML'}</span>
                                   {fmt.allowMegas ? ' • 🧬 Max 1 Mega/Primal' : ''}
                                   {fmt.lifecycle === 'RECENT' && !isExpired4w ? ` • 🕒 ${daysAgo}d ago` : ''}
                                 </div>
@@ -15768,7 +15764,7 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                   <div>
                     <label className="block text-[10px] font-bold uppercase text-sky-400 mb-1">
-                      Tier 1 — CP Range
+                      Tier 1 — League
                     </label>
                     <select
                       value={logFilterCpTier}
@@ -15780,15 +15776,15 @@ export default function App() {
                       }}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold"
                     >
-                      <option value="ALL">All CP Tiers ({battleLogs.length})</option>
+                      <option value="ALL">All Leagues ({battleLogs.length})</option>
                       <option value="GREAT">
-                        Great ≤1500 ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'GREAT').length})
+                        Great ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'GREAT').length})
                       </option>
                       <option value="ULTRA">
-                        Ultra 2500 ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'ULTRA').length})
+                        Ultra ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'ULTRA').length})
                       </option>
                       <option value="MASTER">
-                        Master 10000 ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'MASTER').length})
+                        Master ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'MASTER').length})
                       </option>
                     </select>
                   </div>
@@ -15814,7 +15810,7 @@ export default function App() {
                               const c = battleLogs.filter((b) => b.league.toLowerCase() === lg.toLowerCase()).length;
                               return (
                                 <option key={lg} value={lg}>
-                                  {lg} ({c})
+                                  {stripLeagueCpSuffix(lg)} ({c})
                                 </option>
                               );
                             })}
@@ -17539,7 +17535,7 @@ export default function App() {
                   >
                     {enabledShow6Leagues.map((lg) => (
                       <option key={lg} value={lg}>
-                        {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped CP' : `${getLeagueCpCap(lg)} CP`})
+                        {stripLeagueCpSuffix(lg)}
                       </option>
                     ))}
                   </select>

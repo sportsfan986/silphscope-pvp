@@ -14,6 +14,13 @@
 
 import { OVERLAY_HTML, COMPACT_PVP_DB } from './overlay-asset.mjs';
 
+function cleanDvrLeagueName(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, '')
+    .trim();
+}
+
 const RESERVED_SCREEN_NAMES = new Set([
   'anonymous',
   'anon',
@@ -3759,7 +3766,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   const shareId = escapeHtml(shareInfo.shareId || '');
   const hideNamesDefault = Boolean(shareInfo.hideNames);
   const trainerDisplay = hideNamesDefault ? 'Trainer' : escapeHtml(shareInfo.screenName || 'Trainer');
-  const league = escapeHtml(shareInfo.league || 'GBL');
+  const league = escapeHtml(cleanDvrLeagueName(shareInfo.league || 'GBL'));
   const result = escapeHtml(shareInfo.result || 'BATTLE');
   const matchup = escapeHtml(shareInfo.matchupSummary || 'Pokémon GO PvP Replay');
   const videoUrl = `${origin}/v1/replays/stream/${encodeURIComponent(shareInfo.shareId)}/video.mp4`;
@@ -4291,7 +4298,10 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     const SHARE_ID = ${safeJsonForScript(shareInfo.shareId || '')};
     const SHARE_BATTLE_ID = ${safeJsonForScript(shareInfo.battleId || '')};
     const PVP_DB = ${safeJsonForScript(COMPACT_PVP_DB)};
-    const SHARE_LEAGUE = ${safeJsonForScript(shareInfo.league || 'GREAT LEAGUE')};
+    const SHARE_LEAGUE = ${safeJsonForScript(cleanDvrLeagueName(shareInfo.league || 'GREAT LEAGUE'))};
+    function cleanWatchLg(s) {
+      return String(s || '').trim().replace(/\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$/i, '').trim();
+    }
     const SHARE_MATCHUP = ${safeJsonForScript(shareInfo.matchup || '')};
     const SHARE_DURATION_SEC = Number(${safeJsonForScript(Number(shareInfo.durationSec) || 0)}) || 0;
     const SHARE_USER_TIER = ${safeJsonForScript(shareInfo.userTier || 'pro')};
@@ -4892,7 +4902,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     }
 
     function getResolvedUserSpecs() {
-      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const lg = cleanWatchLg((summaryHeader && summaryHeader.league) || SHARE_LEAGUE);
       const rawSpecs = (summaryHeader && Array.isArray(summaryHeader.userTeamSpecs) && summaryHeader.userTeamSpecs.length > 0)
         ? summaryHeader.userTeamSpecs
         : [];
@@ -4976,7 +4986,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     }
 
     function getAllResolvedOppSpecs() {
-      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const lg = cleanWatchLg((summaryHeader && summaryHeader.league) || SHARE_LEAGUE);
       const rawSpecs = (summaryHeader && Array.isArray(summaryHeader.oppTeamSpecs) && summaryHeader.oppTeamSpecs.length > 0)
         ? summaryHeader.oppTeamSpecs
         : [];
@@ -5008,7 +5018,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
 
     // v7.10: Progressive Opponent Reveal — only return opponents revealed on the field up to frameArrayIdx
     function getRevealedOppSpecsAtFrame(frameArrayIdx) {
-      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const lg = cleanWatchLg((summaryHeader && summaryHeader.league) || SHARE_LEAGUE);
       const allSpecs = getAllResolvedOppSpecs();
       const targetFrame = frames[frameArrayIdx];
       const revealedRawNames = [];
@@ -5092,7 +5102,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     }
 
     function buildReplayOverlayPayload(f) {
-      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const lg = cleanWatchLg((summaryHeader && summaryHeader.league) || SHARE_LEAGUE);
       const uSpecs = getResolvedUserSpecs();
       const frameArrayIdx = Math.max(0, frames.indexOf(f));
       const oSpecs = getRevealedOppSpecsAtFrame(frameArrayIdx);
@@ -7145,6 +7155,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     let currentFilter = 'all'; // 'all' | 'starred'
     let cpTierFilter = 'ALL'; // 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'
     let cupFilter = 'ALL'; // 'ALL' | specific cup string
+    function cleanLg(s) {
+      return String(s || '').trim().replace(/\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$/i, '').trim();
+    }
     function resolveCpTier(rawLeague) {
       const upper = String(rawLeague || '').trim().toUpperCase();
       if (!upper) return 'GREAT';
@@ -7153,10 +7166,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       return 'GREAT';
     }
     function formatCupLabel(lg, tier) {
-      const u = String(lg || '').trim().toUpperCase();
+      const clean = cleanLg(lg);
+      const u = clean.toUpperCase();
       if (tier !== 'ALL' && (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE')) return 'Open / Standard';
-      if (tier !== 'ALL' && u.indexOf('MEGA') >= 0) return 'Mega (' + lg + ')';
-      return lg;
+      if (tier !== 'ALL' && u.indexOf('MEGA ') === 0) return clean;
+      if (tier !== 'ALL' && u.indexOf('MEGA') >= 0) return 'Mega (' + clean + ')';
+      return clean;
     }
     function setCpTierFilter(t) { cpTierFilter = t; cupFilter = 'ALL'; renderReplayGrid(); }
     function setCupFilter(c) { cupFilter = c; renderReplayGrid(); }
@@ -7533,7 +7548,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           if (u.indexOf('MEGA') >= 0) return 1;
           return 2;
         };
-        const cupNames = Array.from(new Set(tierScoped.map(i => String(i.league || '').trim()).filter(Boolean)))
+        const cupNames = Array.from(new Set(tierScoped.map(i => cleanLg(i.league)).filter(Boolean)))
           .sort((a, b) => cupRank(a) - cupRank(b) || a.localeCompare(b));
         const tierAllLabel = cpTierFilter === 'ALL'
           ? 'All Cups (' + tierScoped.length + ')'
@@ -7543,20 +7558,21 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
               ? 'All Ultra Cups (' + tierScoped.length + ')'
               : 'All Master Cups (' + tierScoped.length + ')';
         const tierBtn = (k, lbl) => '<button class="tab-btn ' + (cpTierFilter === k ? 'active' : '') + '" onclick="setCpTierFilter(\\'' + k + '\\')">' + lbl + '</button>';
-        const activeCup = cupNames.some(c => c.toUpperCase() === cupFilter.toUpperCase()) ? cupFilter : 'ALL';
+        const cleanCupFilter = cleanLg(cupFilter);
+        const activeCup = cupNames.some(c => c.toUpperCase() === cleanCupFilter.toUpperCase()) ? cleanCupFilter : 'ALL';
         const cupOptions = '<option value="ALL"' + (activeCup === 'ALL' ? ' selected' : '') + '>' + esc(tierAllLabel) + '</option>' +
           cupNames.map(c => {
-            const cnt = tierScoped.filter(i => String(i.league || '').trim().toUpperCase() === c.toUpperCase()).length;
+            const cnt = tierScoped.filter(i => cleanLg(i.league).toUpperCase() === c.toUpperCase()).length;
             return '<option value="' + esc(c) + '"' + (activeCup.toUpperCase() === c.toUpperCase() ? ' selected' : '') + '>' + esc(formatCupLabel(c, cpTierFilter) + ' (' + cnt + ')') + '</option>';
           }).join('');
         const tierHtml =
           '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;width:100%;padding-top:6px;border-top:1px solid #19304e">' +
             '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
               '<span style="font-size:11px;color:#94a3b8;font-weight:700">🏆 League:</span>' +
-              tierBtn('ALL', 'All CP (' + tierCounts.ALL + ')') +
-              tierBtn('GREAT', 'Great ≤1500 (' + tierCounts.GREAT + ')') +
-              tierBtn('ULTRA', 'Ultra 2500 (' + tierCounts.ULTRA + ')') +
-              tierBtn('MASTER', 'Master 10000 (' + tierCounts.MASTER + ')') +
+              tierBtn('ALL', 'All Leagues (' + tierCounts.ALL + ')') +
+              tierBtn('GREAT', 'Great (' + tierCounts.GREAT + ')') +
+              tierBtn('ULTRA', 'Ultra (' + tierCounts.ULTRA + ')') +
+              tierBtn('MASTER', 'Master (' + tierCounts.MASTER + ')') +
             '</div>' +
             '<div style="display:flex;gap:6px;align-items:center">' +
               '<span style="font-size:11px;color:#94a3b8;font-weight:700">🏅 Cup:</span>' +
@@ -7572,7 +7588,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         items = items.filter(i => resolveCpTier(i.league) === cpTierFilter);
       }
       if (cupFilter !== 'ALL') {
-        items = items.filter(i => String(i.league || '').trim().toUpperCase() === cupFilter.trim().toUpperCase());
+        items = items.filter(i => cleanLg(i.league).toUpperCase() === cleanLg(cupFilter).toUpperCase());
       }
       if (currentFilter === 'starred') {
         items = items.filter(i => i.isPinned);
@@ -7614,7 +7630,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           : '';
         const isItemFlagged = Boolean(item.manuallyFlagged || item.userIssueNote);
         const safeIssueNoteJs = escJsArg(item.userIssueNote || '');
-        const safeLeagueJs = escJsArg(item.league || 'GBL');
+        const safeLeagueJs = escJsArg(cleanLg(item.league || 'GBL'));
         const safeMatchupJs = escJsArg(item.matchupSummary || '');
         const issueBannerHtml = isItemFlagged
           ? '<div style="background:rgba(250,204,21,0.14);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:6px 9px;font-size:11.5px;color:#fef3c7;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
@@ -7629,7 +7645,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
             : '');
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
-            '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + esc(item.result || 'BATTLE') + ' • ' + esc(item.league || 'GBL') + '</span>' +
+            '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + esc(item.result || 'BATTLE') + ' • ' + esc(cleanLg(item.league || 'GBL')) + '</span>' +
             '<span style="font-size:11px;color:#99f6e4">' + esc(mb) + ' MB • ' + esc(Number(item.durationSec) || 0) + 's</span>' +
           '</div>' +
           '<div style="font-weight:800;font-size:14px;color:#ecfeff">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
@@ -8785,7 +8801,7 @@ self.addEventListener('fetch', (e) => {
         );
         const appVersion = String(metadata.appVersion || 'unknown').slice(0, 32);
         const versionCode = Number(metadata.versionCode) || 0;
-        const league = String(metadata.league || 'Unknown League').slice(0, 64);
+        const league = cleanDvrLeagueName(metadata.league || 'Unknown League').slice(0, 64);
         const result = String(metadata.result || 'UNKNOWN').slice(0, 32);
         const matchupSummary = String(resolveFullTeamMatchupSummary(metadata, deepTraceText) || '').slice(0, 180);
         const frameCount = Math.max(0, Math.min(20000, Number(metadata.frameCount) || 0));
@@ -9124,7 +9140,7 @@ self.addEventListener('fetch', (e) => {
       }
 
       const battleId = rawTargetId || (lookupItem && lookupItem.battleId) || `web_${Date.now()}`;
-      const league = String(body.league || (lookupItem && lookupItem.league) || 'GBL').slice(0, 48);
+      const league = cleanDvrLeagueName(body.league || (lookupItem && lookupItem.league) || 'GBL').slice(0, 48);
       const result = String(body.result || (lookupItem && lookupItem.result) || '').slice(0, 16);
       const matchupSummary = String(body.matchupSummary || (lookupItem && lookupItem.matchupSummary) || '').slice(0, 140);
       const nowIso = new Date().toISOString();
@@ -10410,7 +10426,7 @@ self.addEventListener('fetch', (e) => {
 
         const videoKey = `replays/${screenName}/${battleId}_video.mp4`;
         const traceKey = `replays/${screenName}/${battleId}_deep_trace.jsonl`;
-        const league = String(metadata.league || 'GBL').slice(0, 64);
+        const league = cleanDvrLeagueName(metadata.league || 'GBL').slice(0, 64);
         const result = String(metadata.result || 'BATTLE').slice(0, 32);
         const matchupSummary = String(resolveFullTeamMatchupSummary(metadata, deepTraceText) || '').slice(0, 180);
         const frameCount = Math.max(0, Math.min(20000, Number(metadata.frameCount) || 0));
@@ -11410,6 +11426,7 @@ self.addEventListener('fetch', (e) => {
           totalPublicCount: featItems.length,
           items: featItems.map((item) => ({
             ...item,
+            league: cleanDvrLeagueName(item.league || 'GBL'),
             isPinned: true,
             isPublic: true,
             shareUrl: `${url.origin}/watch/${item.shareId}`,
@@ -11444,6 +11461,7 @@ self.addEventListener('fetch', (e) => {
 
       const formatReplayItemForClient = (item) => ({
         ...item,
+        league: cleanDvrLeagueName(item.league || 'GBL'),
         isPinned: Boolean(item.isPinned),
         isPublic: Boolean(item.isPublic),
         shareUrl: `${url.origin}/watch/${item.shareId}`,

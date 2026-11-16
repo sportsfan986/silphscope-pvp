@@ -107,8 +107,16 @@ export interface BuiltPokemonEntry {
   updatedAt: number;
 }
 
+export function stripLeagueCpSuffix(raw: string | undefined): string {
+  return String(raw || "")
+    .trim()
+    .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, "")
+    .trim();
+}
+
 export type CoreLeagueType =
   | "MEGA MASTER LEAGUE"
+  | "Mega Master League"
   | "Mega Master League (10000)"
   | "MASTER LEAGUE"
   | "ULTRA LEAGUE"
@@ -202,12 +210,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
   },
   // Mega Master League from PvPoke catalog data (PvPoke Title Case + CP)
   {
-    id: "Mega Master League (10000)",
+    id: "Mega Master League",
     cup: "mega",
     cupKey: "mega",
     cp: 10000,
     title: "Mega Master League",
-    label: "Mega Master League (10000)",
+    label: "Mega Master League",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json",
@@ -216,36 +224,36 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
   },
   // Optional Standard Open Leagues (available to download/pin in Show 6 if desired)
   {
-    id: "Great League (1500)",
+    id: "Great League",
     cup: "all",
     cupKey: "all",
     cp: 1500,
     title: "Great League",
-    label: "Great League (1500)",
+    label: "Great League",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json",
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Ultra League (2500)",
+    id: "Ultra League",
     cup: "all",
     cupKey: "all",
     cp: 2500,
     title: "Ultra League",
-    label: "Ultra League (2500)",
+    label: "Ultra League",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json",
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Master League (10000)",
+    id: "Master League",
     cup: "all",
     cupKey: "all",
     cp: 10000,
     title: "Master League",
-    label: "Master League (10000)",
+    label: "Master League",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json",
@@ -253,12 +261,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
   },
   // CURRENT (Live in PvPoke gamemaster.json["formats"])
   {
-    id: "LAIC 2027 Championship Series Cup (1500)",
+    id: "LAIC 2027 Championship Series Cup",
     cup: "laic2027",
     cupKey: "laic2027",
     cp: 1500,
     title: "LAIC 2027 Championship Series Cup",
-    label: "LAIC 2027 Championship Series Cup (1500)",
+    label: "LAIC 2027 Championship Series Cup",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json",
@@ -267,12 +275,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Mega Halloween Cup (1500)",
+    id: "Mega Halloween Cup",
     cup: "halloweenmega",
     cupKey: "halloweenmega",
     cp: 1500,
     title: "Mega Halloween Cup",
-    label: "Mega Halloween Cup (1500)",
+    label: "Mega Halloween Cup",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json",
@@ -280,12 +288,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Fantasy Cup (1500)",
+    id: "Fantasy Cup",
     cup: "fantasy",
     cupKey: "fantasy",
     cp: 1500,
     title: "Fantasy Cup",
-    label: "Fantasy Cup (1500)",
+    label: "Fantasy Cup",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json",
@@ -293,12 +301,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Mega Great League (1500)",
+    id: "Mega Great League",
     cup: "mega",
     cupKey: "mega",
     cp: 1500,
     title: "Mega Great League",
-    label: "Mega Great League (1500)",
+    label: "Mega Great League",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json",
@@ -306,12 +314,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Mega Ultra League (2500)",
+    id: "Mega Ultra League",
     cup: "mega",
     cupKey: "mega",
     cp: 2500,
     title: "Mega Ultra League",
-    label: "Mega Ultra League (2500)",
+    label: "Mega Ultra League",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json",
@@ -319,12 +327,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Devon Trail Cup (1500)",
+    id: "Devon Trail Cup",
     cup: "trail",
     cupKey: "trail",
     cp: 1500,
     title: "Devon Trail Cup",
-    label: "Devon Trail Cup (1500)",
+    label: "Devon Trail Cup",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json",
@@ -333,12 +341,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Devon Fable Cup (1500)",
+    id: "Devon Fable Cup",
     cup: "fable",
     cupKey: "fable",
     cp: 1500,
     title: "Devon Fable Cup",
-    label: "Devon Fable Cup (1500)",
+    label: "Devon Fable Cup",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json",
@@ -347,12 +355,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "Gymbreakers Invitational Season 7 (1500)",
+    id: "Gymbreakers Invitational Season 7",
     cup: "gymbreakers",
     cupKey: "gymbreakers",
     cp: 1500,
     title: "Gymbreakers Invitational Season 7",
-    label: "Gymbreakers Invitational Season 7 (1500)",
+    label: "Gymbreakers Invitational Season 7",
     status: "CURRENT",
     lifecycle: "CURRENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json",
@@ -362,12 +370,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
   },
   // RECENT (Within 4-week window by default)
   {
-    id: "Mega Color Cup (1500)",
+    id: "Mega Color Cup",
     cup: "colormega",
     cupKey: "colormega",
     cp: 1500,
     title: "Mega Color Cup",
-    label: "Mega Color Cup (1500)",
+    label: "Mega Color Cup",
     status: "RECENT",
     lifecycle: "RECENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json",
@@ -375,12 +383,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS - 14 * 86400_000
   },
   {
-    id: "Halloween Cup (1500)",
+    id: "Halloween Cup",
     cup: "halloween",
     cupKey: "halloween",
     cp: 1500,
     title: "Halloween Cup",
-    label: "Halloween Cup (1500)",
+    label: "Halloween Cup",
     status: "RECENT",
     lifecycle: "RECENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json",
@@ -388,12 +396,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS - 7 * 86400_000
   },
   {
-    id: "Sunshine Cup (1500)",
+    id: "Sunshine Cup",
     cup: "sunshine",
     cupKey: "sunshine",
     cp: 1500,
     title: "Sunshine Cup",
-    label: "Sunshine Cup (1500)",
+    label: "Sunshine Cup",
     status: "RECENT",
     lifecycle: "RECENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json",
@@ -401,12 +409,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS - 18 * 86400_000
   },
   {
-    id: "Little Cup (500)",
+    id: "Little Cup",
     cup: "little",
     cupKey: "little",
     cp: 500,
     title: "Little Cup",
-    label: "Little Cup (500)",
+    label: "Little Cup",
     status: "RECENT",
     lifecycle: "RECENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json",
@@ -414,12 +422,12 @@ export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
     lastSeenAt: NOW_INIT_MS - 12 * 86400_000
   },
   {
-    id: "Master League Premier (10000)",
+    id: "Master League Premier",
     cup: "premier",
     cupKey: "premier",
     cp: 10000,
     title: "Master League Premier",
-    label: "Master League Premier (10000)",
+    label: "Master League Premier",
     status: "RECENT",
     lifecycle: "RECENT",
     rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json",
@@ -438,8 +446,8 @@ export function normalizeMetaFormatEntry(raw: Partial<LimitedMetaFormat>): Limit
   const cp: 500 | 1500 | 2500 | 10000 =
     raw.cp === 500 || raw.cp === 1500 || raw.cp === 2500 || raw.cp === 10000 ? raw.cp : 1500;
   const cup = (raw.cup || raw.cupKey || "custom").trim().toLowerCase();
-  const title = (raw.title || cup).trim();
-  const label = (raw.label || raw.id || `${title} (${cp})`).trim();
+  const title = stripLeagueCpSuffix(raw.title || cup) || cup;
+  const label = stripLeagueCpSuffix(raw.label || raw.id || title) || title;
   const status: LimitedMetaLifecycleStatus =
     raw.status || raw.lifecycle || "RECENT";
   return {
@@ -583,7 +591,7 @@ export function matchesTwoTierLeagueFilter(
   if (cpTierFilter === "ALL") {
     if (!cupSubFilter || cupSubFilter === "ALL" || cupSubFilter === "ALL LEAGUES") return true;
     if (cupSubFilter === "OLD_CUPS") return isOldCupForMode(entryLeague, mode);
-    return (entryLeague || "").trim().toLowerCase() === cupSubFilter.trim().toLowerCase();
+    return stripLeagueCpSuffix(entryLeague).toLowerCase() === stripLeagueCpSuffix(cupSubFilter).toLowerCase();
   }
   const entryTier = resolveLeagueCpTier(entryLeague);
   if (entryTier !== cpTierFilter) return false;
@@ -591,7 +599,7 @@ export function matchesTwoTierLeagueFilter(
   if (cupSubFilter === "OLD_CUPS" || cupSubFilter.startsWith("OLD_CUPS:")) {
     return isOldCupForMode(entryLeague, mode);
   }
-  return (entryLeague || "").trim().toLowerCase() === cupSubFilter.trim().toLowerCase();
+  return stripLeagueCpSuffix(entryLeague).toLowerCase() === stripLeagueCpSuffix(cupSubFilter).toLowerCase();
 }
 
 export function getForcedGblLeagues(): LeagueType[] {
@@ -631,7 +639,10 @@ export function getPinnedGblLimitedMetas(): string[] {
         if (Array.isArray(parsed)) {
           return parsed
             .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
-            .map((x) => (x.trim().toUpperCase() === "MEGA MASTER LEAGUE" ? "Mega Master League (10000)" : x.trim()));
+            .map((x) => {
+              const s = stripLeagueCpSuffix(x);
+              return s.toUpperCase() === "MEGA MASTER LEAGUE" ? "Mega Master League" : s;
+            });
         }
       }
     }
@@ -648,7 +659,9 @@ export function getPinnedShow6LimitedMetas(): string[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+          return parsed
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .map((x) => stripLeagueCpSuffix(x));
         }
       }
     }
@@ -735,18 +748,16 @@ export function getEnabledGblLeagues(): LeagueType[] {
   const pinned = getPinnedGblLimitedMetas();
   const out: LeagueType[] = [...forced];
   for (const p of pinned) {
-    const u = p.trim().toUpperCase();
+    const clean = stripLeagueCpSuffix(p);
+    const u = clean.toUpperCase();
     if (
       u === "GREAT LEAGUE" ||
-      u === "GREAT LEAGUE (1500)" ||
       u === "ULTRA LEAGUE" ||
-      u === "ULTRA LEAGUE (2500)" ||
-      u === "MASTER LEAGUE" ||
-      u === "MASTER LEAGUE (10000)"
+      u === "MASTER LEAGUE"
     ) {
       continue;
     }
-    const norm = u === "MEGA MASTER LEAGUE" ? "Mega Master League (10000)" : p.trim();
+    const norm = u === "MEGA MASTER LEAGUE" ? "Mega Master League" : clean;
     if (!out.some((x) => x.toLowerCase() === norm.toLowerCase())) {
       out.push(norm);
     }
@@ -761,7 +772,7 @@ export function getEnabledShow6Leagues(): LeagueType[] {
   for (const p of pinned) {
     const norm = isBattleFrontierCupTitle(p)
       ? p.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase()
-      : p.trim();
+      : stripLeagueCpSuffix(p);
     if (!out.some((x) => x.toLowerCase() === norm.toLowerCase())) {
       out.push(norm);
     }
@@ -770,17 +781,17 @@ export function getEnabledShow6Leagues(): LeagueType[] {
 }
 
 export function isOldCupForMode(league: string | undefined, mode: "gbl" | "show6"): boolean {
-  const trimmed = (league || "").trim();
+  const trimmed = stripLeagueCpSuffix(league);
   if (!trimmed) return false;
   const forcedLeagues = mode === "show6" ? getForcedShow6Leagues() : getForcedGblLeagues();
   if (forcedLeagues.some((b) => b.toLowerCase() === trimmed.toLowerCase())) return false;
 
   const pinned = mode === "show6" ? getPinnedShow6LimitedMetas() : getPinnedGblLimitedMetas();
-  const isCurrentlyPinned = pinned.some((p) => p.toLowerCase() === trimmed.toLowerCase());
+  const isCurrentlyPinned = pinned.some((p) => stripLeagueCpSuffix(p).toLowerCase() === trimmed.toLowerCase());
   if (!isCurrentlyPinned) return true;
 
   const catEntry = DYNAMIC_LIMITED_META_CATALOG.find(
-    (m) => m.label.toLowerCase() === trimmed.toLowerCase() || m.id.toLowerCase() === trimmed.toLowerCase()
+    (m) => stripLeagueCpSuffix(m.label).toLowerCase() === trimmed.toLowerCase() || stripLeagueCpSuffix(m.id).toLowerCase() === trimmed.toLowerCase()
   );
   if (catEntry && isExpiredLimitedMeta(catEntry)) {
     return true;
@@ -826,8 +837,11 @@ export function setLimitedMetaSheetAlias(metaLabel: string, aliasKeyword: string
 
 export function getLeagueCpCap(league: string | undefined): 500 | 1500 | 2500 | 10000 {
   const raw = (league || "GREAT LEAGUE").trim();
+  const clean = stripLeagueCpSuffix(raw);
   const catMatch = DYNAMIC_LIMITED_META_CATALOG.find(
-    (m) => m.label.toLowerCase() === raw.toLowerCase() || m.id.toLowerCase() === raw.toLowerCase()
+    (m) =>
+      stripLeagueCpSuffix(m.label).toLowerCase() === clean.toLowerCase() ||
+      stripLeagueCpSuffix(m.id).toLowerCase() === clean.toLowerCase()
   );
   if (catMatch) return catMatch.cp;
   const cpParen = raw.match(/\((\d{3,5})\)/);
@@ -992,41 +1006,43 @@ export function isShow6EligibleLeague(league: string | undefined): boolean {
 export function normalizeLeagueName(league: string | undefined): LeagueType {
   const raw = (league || "GREAT LEAGUE").trim();
   if (!raw) return "GREAT LEAGUE";
-  const u = raw.toUpperCase();
+  const stripped = stripLeagueCpSuffix(raw);
+  const u = stripped.toUpperCase();
   if (u === "GREAT LEAGUE") return "GREAT LEAGUE";
   if (u === "ULTRA LEAGUE") return "ULTRA LEAGUE";
   if (u === "MASTER LEAGUE") return "MASTER LEAGUE";
-  if (u === "MEGA MASTER LEAGUE" || u === "MEGA MASTER LEAGUE (10000)") return "Mega Master League (10000)";
+  if (u === "MEGA MASTER LEAGUE" || u === "MASTER LEAGUE (MEGA)") return "Mega Master League";
   if (u.includes("SPECTRAL")) return "BATTLE FRONTIER (SPECTRAL)";
   if (u.includes("CAULDRON")) return "BATTLE FRONTIER (CAULDRON)";
   if (u.includes("BATTLE FRONTIER") && u.includes("MASTER")) return "BATTLE FRONTIER (MASTER)";
   if (u.includes("BATTLE FRONTIER")) {
-    return raw.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase();
+    return stripped.toUpperCase();
   }
 
   const catalogMatch = DYNAMIC_LIMITED_META_CATALOG.find(
     (m) =>
-      m.label.toLowerCase() === raw.toLowerCase() ||
-      m.title.toLowerCase() === raw.toLowerCase() ||
-      m.id.toLowerCase() === raw.toLowerCase()
+      stripLeagueCpSuffix(m.label).toLowerCase() === stripped.toLowerCase() ||
+      stripLeagueCpSuffix(m.title).toLowerCase() === stripped.toLowerCase() ||
+      stripLeagueCpSuffix(m.id).toLowerCase() === stripped.toLowerCase()
   );
   if (catalogMatch) return catalogMatch.label;
 
   const allPinned = [...getPinnedGblLimitedMetas(), ...getPinnedShow6LimitedMetas()];
-  const pinnedMatch = allPinned.find((p) => p.toLowerCase() === raw.toLowerCase());
-  if (pinnedMatch) return pinnedMatch;
+  const pinnedMatch = allPinned.find((p) => stripLeagueCpSuffix(p).toLowerCase() === stripped.toLowerCase());
+  if (pinnedMatch) return stripLeagueCpSuffix(pinnedMatch);
 
   const cpMatch = raw.match(/^(.*?)\s*\((\d{3,5})\)\s*$/);
   if (cpMatch) {
     const titlePart = cpMatch[1].trim();
-    const cpPart = cpMatch[2];
     if (isBattleFrontierCupTitle(titlePart)) {
       return titlePart.toUpperCase();
     }
-    return `${toPvPokeTitleCase(titlePart)} (${cpPart})`;
+    return toPvPokeTitleCase(titlePart);
   }
 
-  if (u.includes("MEGA")) return "Mega Master League (10000)";
+  if (u.includes("MEGA GREAT")) return "Mega Great League";
+  if (u.includes("MEGA ULTRA")) return "Mega Ultra League";
+  if (u.includes("MEGA")) return "Mega Master League";
   if (u.includes("GREAT")) return "GREAT LEAGUE";
   if (u.includes("ULTRA")) return "ULTRA LEAGUE";
   return "MASTER LEAGUE";
@@ -2824,9 +2840,13 @@ export const PVPOKE_TOP_OPPONENTS: Record<string, TopOpponentInfo[]> = {
 PVPOKE_TOP_OPPONENTS["BATTLE FRONTIER (SPECTRAL)"] = PVPOKE_TOP_OPPONENTS["Battle Frontier (Spectral)"];
 PVPOKE_TOP_OPPONENTS["BATTLE FRONTIER (CAULDRON)"] = PVPOKE_TOP_OPPONENTS["Battle Frontier (Cauldron)"];
 PVPOKE_TOP_OPPONENTS["BATTLE FRONTIER (MASTER)"] = PVPOKE_TOP_OPPONENTS["Battle Frontier (Master)"];
+PVPOKE_TOP_OPPONENTS["Mega Master League"] = PVPOKE_TOP_OPPONENTS["MEGA MASTER LEAGUE"];
 PVPOKE_TOP_OPPONENTS["Mega Master League (10000)"] = PVPOKE_TOP_OPPONENTS["MEGA MASTER LEAGUE"];
+PVPOKE_TOP_OPPONENTS["Great League"] = PVPOKE_TOP_OPPONENTS["GREAT LEAGUE"];
 PVPOKE_TOP_OPPONENTS["Great League (1500)"] = PVPOKE_TOP_OPPONENTS["GREAT LEAGUE"];
+PVPOKE_TOP_OPPONENTS["Ultra League"] = PVPOKE_TOP_OPPONENTS["ULTRA LEAGUE"];
 PVPOKE_TOP_OPPONENTS["Ultra League (2500)"] = PVPOKE_TOP_OPPONENTS["ULTRA LEAGUE"];
+PVPOKE_TOP_OPPONENTS["Master League"] = PVPOKE_TOP_OPPONENTS["MASTER LEAGUE"];
 PVPOKE_TOP_OPPONENTS["Master League (10000)"] = PVPOKE_TOP_OPPONENTS["MASTER LEAGUE"];
 
 
@@ -4754,12 +4774,20 @@ export const LIVE_RANKINGS_MAP: Record<string, Map<string, PokemonRankingEntry>>
   LIVE_RANKINGS_MAP[lg.toUpperCase()] = LIVE_RANKINGS_MAP[lg];
   (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[lg.toUpperCase()] = LIVE_RANKINGS_LIST[lg];
 });
+LIVE_RANKINGS_MAP["Mega Master League"] = LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"];
+(LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Mega Master League"] = LIVE_RANKINGS_LIST["MEGA MASTER LEAGUE"];
 LIVE_RANKINGS_MAP["Mega Master League (10000)"] = LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"];
 (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Mega Master League (10000)"] = LIVE_RANKINGS_LIST["MEGA MASTER LEAGUE"];
+LIVE_RANKINGS_MAP["Great League"] = LIVE_RANKINGS_MAP["GREAT LEAGUE"];
+(LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Great League"] = LIVE_RANKINGS_LIST["GREAT LEAGUE"];
 LIVE_RANKINGS_MAP["Great League (1500)"] = LIVE_RANKINGS_MAP["GREAT LEAGUE"];
 (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Great League (1500)"] = LIVE_RANKINGS_LIST["GREAT LEAGUE"];
+LIVE_RANKINGS_MAP["Ultra League"] = LIVE_RANKINGS_MAP["ULTRA LEAGUE"];
+(LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Ultra League"] = LIVE_RANKINGS_LIST["ULTRA LEAGUE"];
 LIVE_RANKINGS_MAP["Ultra League (2500)"] = LIVE_RANKINGS_MAP["ULTRA LEAGUE"];
 (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Ultra League (2500)"] = LIVE_RANKINGS_LIST["ULTRA LEAGUE"];
+LIVE_RANKINGS_MAP["Master League"] = LIVE_RANKINGS_MAP["MASTER LEAGUE"];
+(LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Master League"] = LIVE_RANKINGS_LIST["MASTER LEAGUE"];
 LIVE_RANKINGS_MAP["Master League (10000)"] = LIVE_RANKINGS_MAP["MASTER LEAGUE"];
 (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Master League (10000)"] = LIVE_RANKINGS_LIST["MASTER LEAGUE"];
 
@@ -5999,12 +6027,16 @@ export async function syncPvPokeDataAndRankings(): Promise<{
   };
 
   storeLeagueRankings("GREAT LEAGUE", glEntries);
+  storeLeagueRankings("Great League", glEntries);
   storeLeagueRankings("Great League (1500)", glEntries);
   storeLeagueRankings("ULTRA LEAGUE", ulEntries);
+  storeLeagueRankings("Ultra League", ulEntries);
   storeLeagueRankings("Ultra League (2500)", ulEntries);
   storeLeagueRankings("MASTER LEAGUE", mlEntries);
+  storeLeagueRankings("Master League", mlEntries);
   storeLeagueRankings("Master League (10000)", mlEntries);
   storeLeagueRankings("MEGA MASTER LEAGUE", megaEntries);
+  storeLeagueRankings("Mega Master League", megaEntries);
   storeLeagueRankings("Mega Master League (10000)", megaEntries);
   storeLeagueRankings("Battle Frontier (Spectral)", bfSpecEntries);
   storeLeagueRankings("BATTLE FRONTIER (SPECTRAL)", bfSpecEntries);
@@ -6015,18 +6047,22 @@ export async function syncPvPokeDataAndRankings(): Promise<{
 
   if (glEntries.length > 0) {
     LIVE_RANKINGS_LIST["GREAT LEAGUE"] = glEntries;
+    (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Great League"] = glEntries;
     (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Great League (1500)"] = glEntries;
   }
   if (ulEntries.length > 0) {
     LIVE_RANKINGS_LIST["ULTRA LEAGUE"] = ulEntries;
+    (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Ultra League"] = ulEntries;
     (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Ultra League (2500)"] = ulEntries;
   }
   if (mlEntries.length > 0) {
     LIVE_RANKINGS_LIST["MASTER LEAGUE"] = mlEntries;
+    (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Master League"] = mlEntries;
     (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Master League (10000)"] = mlEntries;
   }
   if (megaEntries.length > 0) {
     LIVE_RANKINGS_LIST["MEGA MASTER LEAGUE"] = megaEntries;
+    (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Mega Master League"] = megaEntries;
     (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)["Mega Master League (10000)"] = megaEntries;
   }
   if (bfSpecEntries.length > 0) {
@@ -6057,9 +6093,13 @@ export async function syncPvPokeDataAndRankings(): Promise<{
     PVPOKE_TOP_OPPONENTS[lg] = top20;
     PVPOKE_TOP_OPPONENTS[lg.toUpperCase()] = top20;
   });
+  PVPOKE_TOP_OPPONENTS["Mega Master League"] = PVPOKE_TOP_OPPONENTS["MEGA MASTER LEAGUE"];
   PVPOKE_TOP_OPPONENTS["Mega Master League (10000)"] = PVPOKE_TOP_OPPONENTS["MEGA MASTER LEAGUE"];
+  PVPOKE_TOP_OPPONENTS["Great League"] = PVPOKE_TOP_OPPONENTS["GREAT LEAGUE"];
   PVPOKE_TOP_OPPONENTS["Great League (1500)"] = PVPOKE_TOP_OPPONENTS["GREAT LEAGUE"];
+  PVPOKE_TOP_OPPONENTS["Ultra League"] = PVPOKE_TOP_OPPONENTS["ULTRA LEAGUE"];
   PVPOKE_TOP_OPPONENTS["Ultra League (2500)"] = PVPOKE_TOP_OPPONENTS["ULTRA LEAGUE"];
+  PVPOKE_TOP_OPPONENTS["Master League"] = PVPOKE_TOP_OPPONENTS["MASTER LEAGUE"];
   PVPOKE_TOP_OPPONENTS["Master League (10000)"] = PVPOKE_TOP_OPPONENTS["MASTER LEAGUE"];
 
   // Dynamically ingest species from gamemaster.json so all base, alternate, mega, and shadow forms are available in Team Builder
@@ -6310,14 +6350,14 @@ export async function syncPvPokeDataAndRankings(): Promise<{
 
 export function formatShortSelectedLeagueLabel(leagueKey: string): string {
   const upper = (leagueKey || "").trim().toUpperCase();
-  if (upper === "GREAT LEAGUE" || upper === "GREAT LEAGUE (1500)") return "GL (1500)";
-  if (upper === "ULTRA LEAGUE" || upper === "ULTRA LEAGUE (2500)") return "UL (2500)";
-  if (upper === "MASTER LEAGUE" || upper === "MASTER LEAGUE (10000)") return "ML (10000)";
+  if (upper === "GREAT LEAGUE" || upper === "GREAT LEAGUE (1500)") return "GL";
+  if (upper === "ULTRA LEAGUE" || upper === "ULTRA LEAGUE (2500)") return "UL";
+  if (upper === "MASTER LEAGUE" || upper === "MASTER LEAGUE (10000)") return "ML";
   if (upper.includes("MEGA MASTER") || upper === "MASTER LEAGUE (MEGA) (10000)") return "Mega ML";
   if (upper.includes("BATTLE FRONTIER") && upper.includes("SPECTRAL")) return "BF (Spectral)";
   if (upper.includes("BATTLE FRONTIER") && upper.includes("CAULDRON")) return "BF (Cauldron)";
   if (upper.includes("BATTLE FRONTIER") && upper.includes("MASTER")) return "BF (Master)";
-  return (leagueKey || "").trim();
+  return stripLeagueCpSuffix(leagueKey);
 }
 
 export function getPvPokeDatabaseTelemetry(): {

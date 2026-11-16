@@ -3474,12 +3474,16 @@ export const AEGISLASH_DOUBLE_BONUS_AUDIT: AegislashAuditReport = {
 
 export const TOP_5_LEAGUE_SPECIES: Record<LeagueType, string[]> = {
   "GREAT LEAGUE": ["Melmetal", "Clodsire", "Feraligatr", "Mandibuzz", "Azumarill", "Gastrodon"],
+  "Great League": ["Melmetal", "Clodsire", "Feraligatr", "Mandibuzz", "Azumarill", "Gastrodon"],
   "Great League (1500)": ["Melmetal", "Clodsire", "Feraligatr", "Mandibuzz", "Azumarill", "Gastrodon"],
   "ULTRA LEAGUE": ["Feraligatr", "Cobalion", "Cresselia", "Registeel", "Annihilape"],
+  "Ultra League": ["Feraligatr", "Cobalion", "Cresselia", "Registeel", "Annihilape"],
   "Ultra League (2500)": ["Feraligatr", "Cobalion", "Cresselia", "Registeel", "Annihilape"],
   "MASTER LEAGUE": ["Palkia (Origin)", "Zacian (Crowned)", "Dialga (Origin)", "Necrozma (Dusk Mane)", "Landorus (Therian)"],
+  "Master League": ["Palkia (Origin)", "Zacian (Crowned)", "Dialga (Origin)", "Necrozma (Dusk Mane)", "Landorus (Therian)"],
   "Master League (10000)": ["Palkia (Origin)", "Zacian (Crowned)", "Dialga (Origin)", "Necrozma (Dusk Mane)", "Landorus (Therian)"],
   "MEGA MASTER LEAGUE": ["Mega Rayquaza", "Primal Groudon", "Primal Kyogre", "Mega Mewtwo Y", "Mega Gyarados"],
+  "Mega Master League": ["Mega Rayquaza", "Primal Groudon", "Primal Kyogre", "Mega Mewtwo Y", "Mega Gyarados"],
   "Mega Master League (10000)": ["Mega Rayquaza", "Primal Groudon", "Primal Kyogre", "Mega Mewtwo Y", "Mega Gyarados"],
   "BATTLE FRONTIER (SPECTRAL)": ["Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian"],
   "BATTLE FRONTIER (CAULDRON)": ["Muk (Alolan)", "Talonflame", "Moltres (Galarian)", "Greedent", "Dragalge"],

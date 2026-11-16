@@ -265,7 +265,7 @@ export function MathValidatorTab({
                           : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                       }`}
                     >
-                      {l === 'GREAT LEAGUE' ? 'GL (1500)' : l === 'ULTRA LEAGUE' ? 'UL (2500)' : 'ML (10000)'}
+                      {l === 'GREAT LEAGUE' ? 'GL' : l === 'ULTRA LEAGUE' ? 'UL' : 'ML'}
                     </button>
                   ))}
                 </div>
@@ -808,7 +808,7 @@ export function MathValidatorTab({
                                 <tr key={`${lg}-${r.name}`} className="hover:bg-slate-800/40 transition">
                                   {i === 0 && (
                                     <td rowSpan={5} className="p-2.5 font-bold text-amber-400 align-top border-r border-slate-800 bg-slate-950/40">
-                                      {lg === 'GREAT LEAGUE' ? 'Great League (1500)' : lg === 'ULTRA LEAGUE' ? 'Ultra League (2500)' : 'Master League (10000)'}
+                                      {lg === 'GREAT LEAGUE' ? 'Great League' : lg === 'ULTRA LEAGUE' ? 'Ultra League' : 'Master League'}
                                     </td>
                                   )}
                                   <td className="p-2.5 font-bold text-slate-200">#{r.rank}</td>

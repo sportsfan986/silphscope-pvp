@@ -1087,13 +1087,15 @@ class OverlayService : LifecycleService() {
                 t == "cauldron cup"
         }
 
+        fun stripLeagueCpSuffixStatic(raw: String): String =
+            raw.trim().replace(Regex("\\s*\\((?:≤|<=)?\\s*(?:500|1500|2500|10000)(?:\\s*CP)?\\)\\s*$", RegexOption.IGNORE_CASE), "").trim()
+
         fun formatCatalogLeagueKeyStatic(rawTitle: String, cp: Int, cupSlug: String = ""): String {
             val cleanNoCp = rawTitle.trim().replace(Regex("\\s*\\((500|1500|2500|10000)\\)\\s*$"), "").trim()
             if (isBattleFrontierFormatTitleStatic(cleanNoCp, cupSlug)) {
                 return cleanNoCp.uppercase()
             }
-            val titleCase = toPvPokeTitleCaseStatic(cleanNoCp)
-            return "$titleCase ($cp)"
+            return toPvPokeTitleCaseStatic(cleanNoCp)
         }
 
         val DEFAULT_LIMITED_META_CATALOG: List<LimitedMetaFormat> get() = PokemonStaticData.DEFAULT_LIMITED_META_CATALOG
@@ -1269,6 +1271,7 @@ class OverlayService : LifecycleService() {
                 return isOldCupForModeStatic(entryLeague, isShow6, prefs)
             }
             return entryLeague.trim().equals(spec, ignoreCase = true) ||
+                stripLeagueCpSuffixStatic(entryLeague).equals(stripLeagueCpSuffixStatic(spec), ignoreCase = true) ||
                 remapLegacyLeagueForModeStatic(entryLeague, isShow6).equals(
                     remapLegacyLeagueForModeStatic(spec, isShow6),
                     ignoreCase = true
@@ -1278,35 +1281,44 @@ class OverlayService : LifecycleService() {
         fun remapLegacyLeagueForModeStatic(rawLeague: String, isShow6: Boolean): String {
             val trimmed = rawLeague.trim()
             if (trimmed.isEmpty()) return if (isShow6) "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE"
-            val upper = trimmed.uppercase()
-            if (upper == "MEGA MASTER LEAGUE" || upper == "MASTER LEAGUE (MEGA)" || upper == "MEGA MASTER LEAGUE (10000)" || upper == "MASTER LEAGUE (MEGA) (10000)") {
-                return "Mega Master League (10000)"
+            val stripped = stripLeagueCpSuffixStatic(trimmed)
+            val upper = stripped.uppercase()
+            if (upper == "MEGA MASTER LEAGUE" || upper == "MASTER LEAGUE (MEGA)") {
+                return "Mega Master League"
+            }
+            if (upper == "MEGA ULTRA LEAGUE" || upper == "ULTRA LEAGUE (MEGA)") {
+                return "Mega Ultra League"
+            }
+            if (upper == "MEGA GREAT LEAGUE" || upper == "GREAT LEAGUE (MEGA)") {
+                return "Mega Great League"
             }
             if (upper.startsWith("BATTLE FRONTIER")) {
-                return upper.replace(Regex("\\s*\\((500|1500|2500|10000)\\)\\s*$"), "").trim()
+                return upper
             }
             if (isShow6) {
                 return when (upper) {
-                    "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> "Great League (1500)"
-                    "ULTRA LEAGUE", "ULTRA LEAGUE (2500)" -> "Ultra League (2500)"
-                    "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> "Master League (10000)"
+                    "GREAT LEAGUE" -> "Great League"
+                    "ULTRA LEAGUE" -> "Ultra League"
+                    "MASTER LEAGUE" -> "Master League"
                     else -> {
                         val matched = LAST_LOADED_META_CATALOG.find {
-                            it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true)
+                            stripLeagueCpSuffixStatic(it.leagueKey).equals(stripped, ignoreCase = true) ||
+                                it.title.equals(stripped, ignoreCase = true)
                         }
-                        matched?.leagueKey ?: trimmed
+                        matched?.leagueKey ?: stripped
                     }
                 }
             } else {
                 return when (upper) {
-                    "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> "GREAT LEAGUE"
-                    "ULTRA LEAGUE", "ULTRA LEAGUE (2500)" -> "ULTRA LEAGUE"
-                    "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> "MASTER LEAGUE"
+                    "GREAT LEAGUE" -> "GREAT LEAGUE"
+                    "ULTRA LEAGUE" -> "ULTRA LEAGUE"
+                    "MASTER LEAGUE" -> "MASTER LEAGUE"
                     else -> {
                         val matched = LAST_LOADED_META_CATALOG.find {
-                            it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true)
+                            stripLeagueCpSuffixStatic(it.leagueKey).equals(stripped, ignoreCase = true) ||
+                                it.title.equals(stripped, ignoreCase = true)
                         }
-                        matched?.leagueKey ?: trimmed
+                        matched?.leagueKey ?: stripped
                     }
                 }
             }
@@ -1978,7 +1990,7 @@ class OverlayService : LifecycleService() {
             if (upper == "ULTRA LEAGUE" || upper == "ULTRA LEAGUE (2500)") return "ULTRA LEAGUE"
             if (upper == "MASTER LEAGUE" || upper == "MASTER LEAGUE (10000)") return "MASTER LEAGUE"
             if (upper == "MEGA MASTER LEAGUE" || upper == "MEGA MASTER LEAGUE (10000)" || upper == "MASTER LEAGUE (MEGA)" || upper == "MASTER LEAGUE (MEGA) (10000)") {
-                return "MEGA MASTER LEAGUE (10000)"
+                return "MEGA MASTER LEAGUE"
             }
             val matchedCatalog = (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).find {
                 it.leagueKey.equals(trimmed, ignoreCase = true) ||
@@ -1994,9 +2006,9 @@ class OverlayService : LifecycleService() {
                 upper.contains("LAGOON") -> "BATTLE FRONTIER (LAGOON)"
                 upper.contains("FRONTIER (UL)") -> "BATTLE FRONTIER (UL)"
                 upper.contains("FRONTIER") -> "BATTLE FRONTIER (MASTER)"
-                upper.contains("MEGA GREAT") -> "MEGA GREAT LEAGUE (1500)"
-                upper.contains("MEGA ULTRA") -> "MEGA ULTRA LEAGUE (2500)"
-                upper.contains("MEGA") -> "MEGA MASTER LEAGUE (10000)"
+                upper.contains("MEGA GREAT") -> "MEGA GREAT LEAGUE"
+                upper.contains("MEGA ULTRA") -> "MEGA ULTRA LEAGUE"
+                upper.contains("MEGA") -> "MEGA MASTER LEAGUE"
                 upper.contains("GREAT") -> "GREAT LEAGUE"
                 upper.contains("ULTRA") -> "ULTRA LEAGUE"
                 else -> "MASTER LEAGUE"

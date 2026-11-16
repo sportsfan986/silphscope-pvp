@@ -42,6 +42,13 @@ export interface DvrReplayItem {
 
 type DvrCpTier = 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER';
 
+function stripDvrLeagueCpSuffix(raw?: string): string {
+  return String(raw || '')
+    .trim()
+    .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, '')
+    .trim();
+}
+
 function resolveDvrCpTier(rawLeague?: string): 'GREAT' | 'ULTRA' | 'MASTER' {
   const upper = String(rawLeague || '').trim().toUpperCase();
   if (!upper) return 'GREAT';
@@ -55,14 +62,18 @@ function resolveDvrCpTier(rawLeague?: string): 'GREAT' | 'ULTRA' | 'MASTER' {
 }
 
 function formatDvrCupLabel(leagueKey: string, cpTier: DvrCpTier): string {
-  const u = leagueKey.trim().toUpperCase();
+  const clean = stripDvrLeagueCpSuffix(leagueKey);
+  const u = clean.toUpperCase();
   if (cpTier !== 'ALL' && (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE')) {
     return 'Open / Standard';
   }
-  if (cpTier !== 'ALL' && u.includes('MEGA')) {
-    return `Mega (${leagueKey})`;
+  if (cpTier !== 'ALL' && u.startsWith('MEGA ')) {
+    return clean;
   }
-  return leagueKey;
+  if (cpTier !== 'ALL' && u.includes('MEGA')) {
+    return `Mega (${clean})`;
+  }
+  return clean;
 }
 
 function sortDvrCupsWithinTier(cups: string[]): string[] {
@@ -93,7 +104,7 @@ const CANONICAL_FEATURED_REPLAYS: DvrReplayItem[] = [
     shareId: 'f_ml_closer',
     battleId: 'log-1794105062689-388',
     screenName: 'Featured',
-    league: 'Mega Master League (10000)',
+    league: 'Mega Master League',
     result: 'WIN',
     matchupSummary: 'Dialga (Origin), Lugia, Kyogre (Primal) vs Zekrom, Kyogre (Primal), Dialga (Origin) • 4 anomalies',
     durationSec: 191,
@@ -110,7 +121,7 @@ const CANONICAL_FEATURED_REPLAYS: DvrReplayItem[] = [
     shareId: 'f_ul_shield',
     battleId: 'log-1794012768340-568',
     screenName: 'Featured',
-    league: 'Mega Ultra League (2500)',
+    league: 'Mega Ultra League',
     result: 'WIN',
     matchupSummary: 'Tinkaton, Mimikyu, Swampert vs Greninja, Giratina (Altered), Mewtwo (Armored) • 3 anomalies',
     durationSec: 182,
@@ -2706,7 +2717,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   ? vaultReplays
                   : vaultReplays.filter((r) => resolveDvrCpTier(r.league) === vaultCpTier);
               const availableCups = sortDvrCupsWithinTier(
-                tierScopedReplays.map((r) => String(r.league || '').trim()).filter(Boolean)
+                tierScopedReplays.map((r) => stripDvrLeagueCpSuffix(r.league)).filter(Boolean)
               );
               const tierAllLabel =
                 vaultCpTier === 'ALL'
@@ -2717,11 +2728,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       ? `All Ultra Cups (${tierScopedReplays.length})`
                       : `All Master Cups (${tierScopedReplays.length})`;
               const tierButtons: Array<{ key: DvrCpTier; label: string }> = [
-                { key: 'ALL', label: `All CP (${tierCounts.ALL})` },
-                { key: 'GREAT', label: `Great ≤1500 (${tierCounts.GREAT})` },
-                { key: 'ULTRA', label: `Ultra 2500 (${tierCounts.ULTRA})` },
-                { key: 'MASTER', label: `Master 10000 (${tierCounts.MASTER})` }
+                { key: 'ALL', label: `All Leagues (${tierCounts.ALL})` },
+                { key: 'GREAT', label: `Great (${tierCounts.GREAT})` },
+                { key: 'ULTRA', label: `Ultra (${tierCounts.ULTRA})` },
+                { key: 'MASTER', label: `Master (${tierCounts.MASTER})` }
               ];
+              const cleanVaultCupFilter = stripDvrLeagueCpSuffix(vaultCupFilter);
               return (
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/70">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -2750,14 +2762,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap">🏅 Cup:</span>
                     <select
-                      value={availableCups.some((c) => c.toUpperCase() === vaultCupFilter.toUpperCase()) ? vaultCupFilter : 'ALL'}
+                      value={availableCups.some((c) => c.toUpperCase() === cleanVaultCupFilter.toUpperCase()) ? cleanVaultCupFilter : 'ALL'}
                       onChange={(e) => setVaultCupFilter(e.target.value)}
                       className="px-2.5 py-1 rounded-lg bg-[#081120] border border-[#19304E] text-cyan-200 font-bold text-xs focus:outline-none focus:border-cyan-400 cursor-pointer"
                     >
                       <option value="ALL">{tierAllLabel}</option>
                       {availableCups.map((cup) => {
                         const count = tierScopedReplays.filter(
-                          (r) => String(r.league || '').trim().toUpperCase() === cup.toUpperCase()
+                          (r) => stripDvrLeagueCpSuffix(r.league).toUpperCase() === cup.toUpperCase()
                         ).length;
                         return (
                           <option key={cup} value={cup}>
@@ -2822,7 +2834,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   }
                   if (
                     vaultCupFilter !== 'ALL' &&
-                    String(item.league || '').trim().toUpperCase() !== vaultCupFilter.trim().toUpperCase()
+                    stripDvrLeagueCpSuffix(item.league).toUpperCase() !== stripDvrLeagueCpSuffix(vaultCupFilter).toUpperCase()
                   ) {
                     return false;
                   }
@@ -2888,7 +2900,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                                   {item.result || 'BATTLE'}
                                 </span>
                                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/35">
-                                  {item.league}
+                                  {stripDvrLeagueCpSuffix(item.league)}
                                 </span>
                               </div>
                               <span className="text-[11px] font-mono font-bold text-slate-400">
