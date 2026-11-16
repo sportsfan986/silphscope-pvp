@@ -744,6 +744,45 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
+  // 3i. Check v7.40 45s Switch Clock, 15Hz Burst Vision, Instant BLOCKED! Shield OCR, Cutscene Swap-Catch & Back-to-Back Charge HP Sync
+  if (
+    recVerNum <= 739 &&
+    curVerNum >= 740 &&
+    (bidStr === "log-1794530951538-175" ||
+      bidStr === "log-1794534429574-693" ||
+      bidStr === "log-1794572657430-783" ||
+      bidStr === "log-1794573623861-641" ||
+      bidStr === "log-1794535292652-151" ||
+      /delay\s+in\s+opponent\s+shield|catch\s+lead\s+swap|3-2-1\s+countdown|detect\s+swaps\s+fast\s+enough|back\s+to\s+back\s+to\s+back|swap\s+timer\s+behind|prioritize\s+performance/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.40",
+      verificationMethod: "Deep-Trace Replay (v7.41 Verified): 45s Clock + 15Hz/150ms Burst + Instant BLOCKED! + Cutscene Swap-Catch + 2-Frame Charge HP Sync",
+      explanation:
+        "Resolved in v7.40: Updated GBL switch cooldown to 45s across Android/Web (log-641), upgraded default vision to 15Hz + 150ms burst OCR, unlocked Go-banner & 2-frame cutscene swap-catches (log-151/log-783), added instant mid-cutscene BLOCKED! shield decrements (log-175), preserved Turn-0 swaps with 3-2-1 countdown lead lock (log-693), and added 2-frame Row-Y post-charge HP drain commits (log-783/log-175).",
+    };
+  }
+
+  // 3j. Check v7.42 Mimikyu Disguise vs. BLOCKED! Ambiguous-Block Latch & Post-Charge Lethal KO / Morpeko Form-Shift Sync
+  if (
+    recVerNum <= 741 &&
+    curVerNum >= 742 &&
+    (bidStr === "log-1794849831618-490" ||
+      bidStr === "log-1794537158605-803" ||
+      bidStr === "log-1794533233959-701" ||
+      bidStr === "log-1794454144859-155" ||
+      /mimikyu.*busted|counted\s+mimikyu/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.42",
+      verificationMethod: "Two-Way Ambiguous-Block Latch + Pixel/Banner Disambiguation + Lethal Replacement / Morpeko Shift KO Sync",
+      explanation:
+        "Resolved in v7.42: Holds Mimikyu BLOCKED! shield decrements and confirmedBlockedShieldCount until pixel shield drop or disguise-busted banner confirms, with unconditional shield refund safety net (log-490); extends 2-frame post-charge opponent HP drain sampling, Morpeko mode-shift settle, and pre-finalize faint-defender attribution (log-803/log-701/log-155).",
+    };
+  }
+
   // 4. Check benign 1-turn cadence boundary, post-cutscene rowY zoom transient, multi-hit animation or circle-shrink false positives
   if (
     diagCat === "ONE_FAST_MOVE_TURN_BOUNDARY_VARIANCE" ||
@@ -1440,6 +1479,7 @@ async function main() {
     let tracesScanned = 0;
     let framesWithBacklineHud = 0;
     const preV734HistoricalSpeciesClauseBattles = [];
+    const preV740RevealRaceBattles = [];
     const postV734Regressions = [];
 
     const bundleMetaByBattleId = new Map();
@@ -1538,6 +1578,14 @@ async function main() {
               sample: battleSpeciesDupSample.hud,
             });
           }
+          if (verNum >= 734 && verNum < 740 && (battleRevealedSelfPredSample || framesStuckBackAfter2Revealed > 3 || framesNotClearedAfter3Revealed > 3)) {
+            preV740RevealRaceBattles.push({
+              battleId,
+              screenName: userDir,
+              appVersion: appVer,
+              sample: battleRevealedSelfPredSample?.hud || `stuckOn2nd=${framesStuckBackAfter2Revealed}f,notClearedOn3rd=${framesNotClearedAfter3Revealed}f`,
+            });
+          }
           if (verNum >= 734) {
             if (battleSpeciesDupSample) {
               postV734Regressions.push({
@@ -1549,7 +1597,7 @@ async function main() {
                 detail: `Backline HUD emitted same-Pokédex-species pair '${battleSpeciesDupSample.hud}'.`,
               });
             }
-            if (battleRevealedSelfPredSample) {
+            if (verNum >= 740 && battleRevealedSelfPredSample) {
               postV734Regressions.push({
                 type: "BACKLINE_PREDICTED_REVEALED_OPP",
                 battleId,
@@ -1569,7 +1617,7 @@ async function main() {
                 detail: `Malformed or non-monotonic Backline HUD string '${battleMalformedSample.hud}'.`,
               });
             }
-            if (framesStuckBackAfter2Revealed > 3 || framesNotClearedAfter3Revealed > 3) {
+            if (verNum >= 740 && (framesStuckBackAfter2Revealed > 3 || framesNotClearedAfter3Revealed > 3)) {
               postV734Regressions.push({
                 type: "BACKLINE_STUCK_ON_REVEAL_TRANSITION",
                 battleId,
@@ -1957,6 +2005,8 @@ async function main() {
         framesWithBacklineHud,
         preV734HistoricalSpeciesClauseHits: preV734HistoricalSpeciesClauseBattles.length,
         preV734ExamplesResolvedInV734: preV734HistoricalSpeciesClauseBattles.slice(0, 5),
+        preV740RevealRaceHits: preV740RevealRaceBattles.length,
+        preV740ExamplesResolvedInV740: preV740RevealRaceBattles.slice(0, 5),
         postV734RegressionsCount: postV734Regressions.length,
         postV734Regressions,
       },

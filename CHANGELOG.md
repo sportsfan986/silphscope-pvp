@@ -1,4 +1,16 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.41`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.42`)
+
+---
+
+## v7.42 (2026-11-16) — Mimikyu Disguise vs. Shield Latch, Post-Charge Lethal KO & Morpeko Sync, Early `3-2-1` Countdown Wake-Up & Clean League Labels
+*Live Android APK, Web Simulator & Cloudflare DVR release (`v7.42`, `versionCode = 1742`) resolving all combat telemetry issues identified in the `2026-11-16` Daily Telemetry Audit alongside unified CP-free league and cup labeling.*
+
+### Highlights
+- **Mimikyu Disguise vs. `"BLOCKED!"` Two-Way Ambiguous-Block Latch & Shield Refund**: Holds ambiguous `"BLOCKED!"` announcements on unbusted Mimikyu without prematurely burning a shield or breaking Disguise; resolves deterministically via pixel shield telemetry and `"Mimikyu's disguise is busted!"` / `StatStageChange` callouts, with an unconditional `+1` shield / `confirmed*BlockedShieldCount` refund safety net if Disguise bust is confirmed after a real-shield guess.
+- **Post-Charge Lethal KO, Immediate Send-Out `0%` HP Sync & Morpeko Form-Shift Hold**: Commits 2-frame debounced opponent HP drains immediately after user charge moves even during exit fades, prevents already-fainted defenders from being misattributed as switch-catches to incoming replacements, gates `oppClockLocked` / post-user-charge faint replacements accurately, and holds HP sampling briefly during Morpeko Hangry/Full Belly form transitions.
+- **Earlier `3-2-1` Countdown Wake-Up & Burst OCR**: Wakes battle countdown detection on `"go,"`/`"go "` tokens and full `3v3` opening Pokéball or explicit-CP nameplate availability during `"3"`/`"2"` before floating HP bars appear at `"1"`, backed by `150ms` idle burst OCR.
+- **Clean League & Cup Labels Across Android, Web & DVR (`fc628ee`)**: Removed redundant CP limit suffixes from league and cup display labels consistently across `MainActivity.kt`, `OverlayService.kt`, `PokemonDatabase.kt`, `overlay.html`, `App.tsx`, `MarketingWebsite.tsx`, `pokemonDb.ts`, and `cloudflare/telemetry-worker/worker.mjs`.
+- **Nightly Telemetry Audit Classifier Precision (`nightly-telemetry-audit.mjs`)**: Added `v7.40` and `v7.42` retroactive fix verification rules (`-175`, `-693`, `-783`, `-641`, `-151`, `-490`, `-803`, `-701`, `-155`) and scoped legacy `v7.37`–`v7.39` backline reveal-race telemetry alerts to `v7.40+`.
 
 ---
 

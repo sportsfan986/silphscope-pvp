@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.42',
+    codename: 'Mimikyu Disguise vs. Shield Latch, Post-Charge Lethal KO Sync, Early 3-2-1 Wake-Up & Clean League Labels',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Resolves Mimikyu Disguise vs. Protect Shield desyncs with a two-way ambiguous-block latch and refund safety net, adds post-charge lethal KO / replacement & Morpeko form-shift HP sync, wakes 3-2-1 countdowns at "3"/"2" on 3v3 Pokeballs or explicit-CP nameplates, updates nightly audit classifiers, and removes CP limit suffixes from league/cup labels across Android, Web, and DVR.',
+    icon: '🛡️',
+    accentColor: '#A855F7',
+    highlights: [
+      'Two-way ambiguous-"BLOCKED!" Mimikyu Disguise vs. Protect Shield latch with pixel shield disambiguation, StatStageChange defender preference, and +1 shield refund safety net',
+      'Post-user-charge 2-frame lethal KO HP commit, fainted-defender replacement guard against false switch-catches, and Morpeko Hangry/Full Belly transition hold',
+      'Early "3"/"2" countdown wake-up via 3v3 opening Pokeballs or explicit-CP nameplate visibility with 150ms idle burst OCR',
+      'Clean league & cup labels without CP limit suffixes across Android, Web Simulator, and Cloudflare DVR Replay Theater'
+    ]
+  },
+  {
     version: 'v7.41',
     codename: '3-Way ELO-Weighted Crowd Meta Fusion, Non-Standard Moveset Spice Detection & In-App APK Update Notifier',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Introduces 3-way ELO-weighted crowd meta and moveset blending across Android, Web Simulator, and Cloudflare D1, idle-only GBL ELO Auto-OCR with Rank-20 reveal backfill, Spice Badge non-standard moveset highlights on Battle Log cards, and automated in-app APK update alerts.',
     icon: '🎯',
