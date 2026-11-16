@@ -2115,14 +2115,10 @@ async function main() {
   const stage2SupporterFreeActiveToday = stage2SupporterFreeLowQueueAll.slice(0, maxSupporterFreePerDay);
   const stage2SupporterFreeDeferredBacklog = stage2SupporterFreeLowQueueAll.slice(maxSupporterFreePerDay);
 
-  const recommendedPlanningModel =
-    stage3ProVipMediumQueue.length > 0
-      ? "pro"
-      : stage2SupporterFreeActiveToday.length > 0
-      ? "flash"
-      : "flash_lite";
+  const recommendedPlanningModel = "gemini-pro-orchestrator";
 
   const modelRoutingPolicy = {
+    orchestratorModel: "gemini-pro-orchestrator (Orchestrator Carbon)",
     stage0LocalEngine: "0_AI_TOKENS (100% Local Node.js + ffmpeg + PixelScannerEngine v7.08 port)",
     stage1OcrAndVideoSubagent: "flash (strictly for contact-sheet / keyframe OCR subagent calls + mechanical release CI)",
     stage2SupporterAndFreeHighTier: {
@@ -2504,39 +2500,62 @@ async function main() {
   // 7. Send High-Level Morning Summary to Telegram if `--send-telegram`
   if (SEND_TELEGRAM) {
     console.error("[4/4] Sending 6:00 AM high-level summary to Telegram...");
+    const escTg = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    const todayCentral = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
     const trainerLines = trainerTable
       .map(
         (t) =>
-          `• <b>@${t.screenName}</b> (<code>${t.tier.toUpperCase()}</code>): ${t.battles24h}d / ${t.battles7d}w / ${t.battlesTotal} total (${t.dvrTotal} DVR, ${t.manualFlagsTotal} flagged)`
+          `• <b>@${escTg(t.screenName)}</b> (<code>${escTg(t.tier.toUpperCase())}</code>): ${t.battles24h}d / ${t.battles7d}w / ${t.battlesTotal} total (${t.dvrTotal} DVR, ${t.manualFlagsTotal} flagged)`
       )
       .join("\n");
+    const openManualFlags = manualIssuesAudit.filter(
+      (m) => m.retroactiveAudit?.status !== "RESOLVED_BY_LATEST_RELEASE"
+    );
+    const resolvedManualFlags = manualIssuesAudit.filter(
+      (m) => m.retroactiveAudit?.status === "RESOLVED_BY_LATEST_RELEASE"
+    );
+    const recentResolvedFlags = resolvedManualFlags.slice(-5);
+    const hiddenResolvedCount = Math.max(0, resolvedManualFlags.length - recentResolvedFlags.length);
+    const shownManualFlags = [...openManualFlags, ...recentResolvedFlags];
     const manualLines =
-      manualIssuesAudit.length > 0
-        ? manualIssuesAudit
-            .map((m) => {
+      shownManualFlags.length > 0
+        ? [
+            ...shownManualFlags.map((m) => {
               const px = m.paidVideoPixelRescan?.executed
-                ? ` [Pixel Rescan: U ${m.paidVideoPixelRescan.preFixUserDetectionRate}->${m.paidVideoPixelRescan.postFixUserDetectionRate}, O ${m.paidVideoPixelRescan.preFixOppDetectionRate}->${m.paidVideoPixelRescan.postFixOppDetectionRate}]`
+                ? ` [Pixel Rescan: U ${m.paidVideoPixelRescan.preFixUserDetectionRate}➔${m.paidVideoPixelRescan.postFixUserDetectionRate}, O ${m.paidVideoPixelRescan.preFixOppDetectionRate}➔${m.paidVideoPixelRescan.postFixOppDetectionRate}]`
                 : "";
-              return `• <b>@${m.screenName}</b> (<code>v${m.appVersion}</code>): "${m.userIssueNote}" ➔ <b>${m.retroactiveAudit.status}</b> (${m.retroactiveAudit.resolvedInVersion || "Open"})${px}`;
-            })
-            .join("\n")
+              return `• <b>@${escTg(m.screenName)}</b> (<code>v${escTg(m.appVersion)}</code>): "${escTg(m.userIssueNote)}" ➔ <b>${escTg(m.retroactiveAudit.status)}</b> (${escTg(m.retroactiveAudit.resolvedInVersion || "Open")})${escTg(px)}`;
+            }),
+            ...(hiddenResolvedCount > 0
+              ? [`• <i>(+${hiddenResolvedCount} older resolved issues verified)</i>`]
+              : []),
+          ].join("\n")
         : "• None";
 
     const unreleasedTg = unreleasedCommitsAudit.hasUnreleasedCommits
-      ? `🚀 <b>Unreleased Commits:</b> <code>${unreleasedCommitsAudit.unreleasedCommitsCount} commit(s) ahead of ${unreleasedCommitsAudit.latestReleaseTag}</code> ➔ Ready for <b>${unreleasedCommitsAudit.suggestedNextVersion}</b>\n\n`
+      ? `🚀 <b>Unreleased Commits:</b> <code>${unreleasedCommitsAudit.unreleasedCommitsCount} commit(s) ahead of ${escTg(unreleasedCommitsAudit.latestReleaseTag)}</code> ➔ Ready for <b>${escTg(unreleasedCommitsAudit.suggestedNextVersion)}</b>\n\n`
       : "";
 
     const tgHtml =
       `🌅 <b>SilphScope PvP — 6:00 AM Daily Telemetry Audit Ready!</b>\n` +
-      `📦 <b>Latest Release:</b> <code>v${currentVersion}</code>\n` +
+      `📦 <b>Latest Release:</b> <code>v${escTg(currentVersion)}</code>\n` +
       unreleasedTg +
       `👥 <b>Active Trainers (${trainerTable.length}):</b>\n${trainerLines}\n\n` +
       `🚩 <b>7-Day Flagged Issue Verification:</b>\n${manualLines}\n\n` +
       `📊 <b>Retroactive 7-Day Anomaly Status:</b>\n` +
-      `• Verified Fixed in <code>v7.04–v${currentVersion}</code>: <b>${anomalyRetroSummary.RESOLVED_BY_LATEST_RELEASE + anomalyRetroSummary.RESOLVED_OR_SUPERSEDED_PRE_V704}</b>\n` +
+      `• Verified Fixed in <code>v7.04–v${escTg(currentVersion)}</code>: <b>${anomalyRetroSummary.RESOLVED_BY_LATEST_RELEASE + anomalyRetroSummary.RESOLVED_OR_SUPERSEDED_PRE_V704}</b>\n` +
       `• Benign 1-Turn / Circle Variance: <b>${anomalyRetroSummary.BENIGN_FALSE_POSITIVE}</b>\n` +
       `• Open Action Items: <b>${openActionItems.length}</b>\n\n` +
-      `📌 <i>Open your pinned Antigravity chat ("📌 [DAILY TELEMETRY AUDIT & PLAN]") to review the interactive Q&A plan!</i>`;
+      `💬 <i>Open today's new Antigravity chat ("📊 [${todayCentral}] Daily Telemetry Audit &amp; Plan") on Orchestrator (Carbon) to review &amp; interact!</i>`;
 
     await sendTelegramSummary(tgHtml);
   }

@@ -1496,8 +1496,19 @@ function enforceLocalStorageQuota(config, state = null) {
     return { totalMb: Number((totalBytes / (1024 * 1024)).toFixed(2)), evictedFiles: 0 };
   }
 
-  // Never delete state metadata, latest report, .jsonl traces, or digest.json files
-  const protectedPaths = new Set([STATE_FILE, SUMMARY_FILE, SYNC_LOG_FILE, LOCK_FILE]);
+  // Never delete root cache metadata/briefings/logs/history, .jsonl traces, or digest.json files
+  const protectedPaths = new Set([
+    STATE_FILE,
+    SUMMARY_FILE,
+    SYNC_LOG_FILE,
+    LOCK_FILE,
+    path.join(CACHE_DIR, "morning_briefing.md"),
+    path.join(CACHE_DIR, "nightly_audit_digest.json"),
+    path.join(CACHE_DIR, "nightly_run.log"),
+    path.join(CACHE_DIR, "daily_plan_conversation.json"),
+    path.join(CACHE_DIR, "daily_plan_history.json"),
+    path.join(CACHE_DIR, "daily_plan.lock"),
+  ]);
   const manuallyFlaggedBattleIds = new Set(
     Object.values(state?.dvrBundles || {})
       .filter((b) => b && b.manuallyFlagged)
@@ -1506,6 +1517,7 @@ function enforceLocalStorageQuota(config, state = null) {
 
   const candidates = allFiles.filter((f) => {
     if (protectedPaths.has(f.path)) return false;
+    if (path.dirname(f.path) === CACHE_DIR) return false;
     if (config.storage?.protectDeepTraceJsonl !== false && f.path.endsWith(".jsonl")) return false;
     if (config.storage?.protectDigestJson !== false && f.path.endsWith("digest.json")) return false;
     if (f.path.endsWith("telemetry_hud.ass")) return false;

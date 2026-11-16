@@ -20,7 +20,7 @@ $Action = New-ScheduledTaskAction `
 $Trigger = New-ScheduledTaskTrigger `
     -Once `
     -At (Get-Date).AddMinutes(1) `
-    -RepetitionInterval (New-TimeSpan -Minutes 5) `
+    -RepetitionInterval (New-TimeSpan -Hours 3) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 
 $Settings = New-ScheduledTaskSettingsSet `
@@ -28,14 +28,14 @@ $Settings = New-ScheduledTaskSettingsSet `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
     -MultipleInstances IgnoreNew `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 4)
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
 
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $Action `
     -Trigger $Trigger `
     -Settings $Settings `
-    -Description "Pulls SilphScope PvP telemetry and 1-Battle DVR videos from Cloudflare every 5 minutes using local Node.js + ffmpeg (0 AI tokens), pre-extracts event screenshots, prunes Cloudflare storage, and enforces a 1 GB local disk cap." `
+    -Description "Pulls SilphScope PvP telemetry and 1-Battle DVR videos from Cloudflare R2 every 3 hours using local Node.js + ffmpeg (0 AI tokens), pre-extracts event screenshots, prunes Cloudflare storage, and enforces a 1 GB local disk cap." `
     -Force | Out-Null
 
-Write-Host "[OK] Installed Windows Scheduled Task '$TaskName' (runs every 5 minutes in background, 0 AI tokens)."
+Write-Host "[OK] Installed Windows Scheduled Task '$TaskName' (runs every 3 hours in background, 0 AI tokens)."

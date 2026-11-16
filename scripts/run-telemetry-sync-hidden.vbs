@@ -1,4 +1,4 @@
-' SilphScope PvP — Hidden Background Launcher for 5-Minute Local Telemetry Sync + ffmpeg Preprocessor
+' SilphScope PvP — Hidden Background Launcher for 3-Hour Local Telemetry Sync + ffmpeg Preprocessor
 ' Runs strictly with local resources (Node 22 + local ffmpeg) with zero console window popups and zero AI tokens.
 
 Option Explicit
