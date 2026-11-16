@@ -2,6 +2,16 @@
 
 ---
 
+## v7.44 (2026-11-16) — Guided Idle HUD ELO Scanner, 5-Battle Set Reprompt & Passive GBL Lobby/Modal OCR Fix
+*Live Android APK, Web Simulator & Cloudflare Edge release (`v7.44`, `versionCode = 1744`) fixing 4 blockers in idle ELO auto-capture and introducing an in-HUD guided scroll-to-scan workflow prompted once every 5 GBL battles.*
+
+### Highlights
+- **Fixed Passive End-of-Set & Scrolled Lobby ELO Auto-OCR**: Allowed idle ELO scanning while the HUD displays `WAITING FOR OPPONENT...` (`isWaitingForOpponent && !hasBattleStarted`), widened `evaluateIdleGblCardPixelGate` for Pokémon GO's mint/teal GBL lobby gradient, prevented the `4.5s` visual-signature cooldown from blocking the 2nd confirmation read on steady scrolled frames, and added adjacent-line `Rating` + same-row stat-exclusion guards.
+- **Guided `📷 Scan ELO` Scroll-to-Scan Mode (`250ms` Live OCR)**: Tapping **`🎯`** or **`📷 Scan ELO`** temporarily collapses idle attack tables to leave the screen clear, runs an unthrottled `250ms` ML Kit OCR loop for `15s` until the scrolled `"CURRENT SEASON"` card or modal locks on 2 frames (`~0.5s`), fires a haptic pulse, displays your set delta (`+Delta` / `±0`), and syncs `S:gbl_current_user_elo` to Cloudflare D1.
+- **5-Battle GBL Set Cadence & Native `⌨️ Type` Overlay Modal**: Displays a compact `🎯 <ELO> (N/5)` chip during sets 1–4, shows `[📷 Scan ELO] [✓ Same] [⌨️ Type] [✕ Snooze]` after every 5th logged GBL battle (auto-cleared when passive End-of-Set OCR catches it first or when `3-2-1` starts), applies updated ratings forward to upcoming sets (preserving 120s null backfill on first Rank-20 reveal), and supports `< R20` unranked prompt snoozing.
+
+---
+
 ## v7.43 (2026-11-16) — BF Label Streamlining, 2-Row Multi-Cup Anti-Meta & IV Lab Cup Rankings + Overall W-L-T
 *Live Android APK, Web Simulator & Cloudflare DVR release (`v7.43`, `versionCode = 1743`) adding 2-row multi-cup Anti-Meta and IV Lab league filters with strict Row 2 pruning, Shadow-aware IV Lab Cup `#Rank` + Overall `W-L-T` metrics, `BF` label streamlining across every surface, and streamlined workspace documentation & release-verification guardrails.*
 

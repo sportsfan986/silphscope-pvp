@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.44',
+    codename: 'Guided Idle HUD ELO Scanner, 5-Battle Set Reprompt & Passive GBL Lobby/Modal OCR Fix',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Fixes passive idle ELO auto-OCR across waiting/mint-teal GBL lobby frames and 2nd-frame signature locks, adds a clickable idle ELO set-progress chip (N/5) with automatic 5-battle reprompt banner ([📷 Scan ELO], [✓ Same], [⌨️ Type], [✕ Snooze]), Guided 250ms Scroll-to-Scan mode, and forward set-rating stamping with D1 sync.',
+    icon: '🎯',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Fixes 4 passive ELO OCR blockers: isBattleActive="Waiting..." lobby gate, mint/teal gradient pixel gate, 4.5s 2nd-frame self-lock, and adjacent-line/row-neighbor parsing',
+      'Clickable 🎯 ELO (N/5) idle chip + automatic 5-battle Set Complete reprompt ([📷 Scan ELO], [✓ Same], [⌨️ Type], [✕ Snooze]) that collapses immediately on 3-2-1 start',
+      'Guided 250ms live scroll-to-scan OCR mode (~0.5s lock on scrolled CURRENT SEASON or End-of-Set modal) with haptic confirmation, set delta display, and Cloudflare D1 sync',
+      'Native in-overlay numeric ⌨️ Type dialog with < R20 Unranked prompt snooze and forward-only new-set ELO stamping (keeping 120s first-R20 reveal backfill)'
+    ]
+  },
+  {
     version: 'v7.43',
     codename: 'BF Label Streamlining, 2-Row Multi-Cup Anti-Meta & IV Lab Cup Rankings + Overall W-L-T',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Upgrades Anti-Meta Team Builder and IV Lab with 2-row GL/UL/ML/ALL -> Open + Limited multi-cup filters with strict Row 2 pruning, adds Shadow-aware Cup #Rank and Overall (7-Shield / Even 3) W-L-T records + Combined Multi-Cup summaries, abbreviates Battle Frontier labels to BF everywhere, and streamlines workspace release verification.',
     icon: '⚖️',
