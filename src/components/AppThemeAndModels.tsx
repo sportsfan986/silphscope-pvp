@@ -166,6 +166,13 @@ export interface WebBattleLogEntry {
   recommendationsIssuedCount?: number | null;
   recommendationsFollowedCount?: number | null;
   deviceId?: string;
+  userElo?: number | null;
+  oppObservedMoves?: {
+    species: string;
+    fastMove?: string | null;
+    fastStatus?: string | null;
+    chargedMoves?: string[];
+  }[];
   issueFlagged?: boolean;
   issueNote?: string;
   updatedAt?: number;

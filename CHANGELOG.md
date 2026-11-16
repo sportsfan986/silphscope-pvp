@@ -1,4 +1,15 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.40`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.41`)
+
+---
+
+## v7.41 (2026-11-15) — 3-Way ELO-Weighted Crowd Meta Fusion, Non-Standard Moveset Spice Detection & In-App APK Update Notifier
+*Live Android APK, Web Simulator & Cloudflare Edge release (`v7.41`, `versionCode = 1741`) introducing 3-way ELO-weighted crowd meta and moveset blending, idle-only GBL ELO Auto-OCR, non-standard Spice moveset badges, and in-app APK update notifications.*
+
+### Highlights
+- **Idle-Only GBL ELO Auto-OCR & Cross-Device Sync**: Automatically captures your GBL rating strictly outside active combat (`>= 1500ms` throttle, zero battle CPU overhead) from both End-of-Set `"Rating: X,XXX"` modals and scrolled `"CURRENT SEASON"` lobby cards (with 120s Rank-20 reveal backfill), plus manual ELO override (`300–3800` or `Unranked < R20`) synced via Cloudflare D1 `userSettings`.
+- **3-Way Meta & Moveset Fusion (`GET /v1/meta/crowd-elo`)**: Blends recency-weighted personal season logs (`exp(-λ·idx)`), Gaussian ELO-weighted Cloudflare D1 crowd telemetry across all trainers (including your own uploaded logs, with smooth all-ELO fallback when unranked or low sample size), and PvPoke baseline priors into the Anti-Meta Team Generator, Meta Tab, Live HUD expected movesets, and Shield Decision Overlay.
+- **Observed Opponent Movesets & Clean `🌶️ Spice` Badges**: Persists confirmed opponent fast and charged moves on `BattleLogEntry` / D1 `battle_logs` and highlights **only** confirmed non-standard moves (`🌶️ Spice: <Species> (<Move>)`) on Battle Log cards with zero clutter for standard or unrevealed moves.
+- **In-App APK Update Notifier (`GET /v1/version/latest`)**: Displays a dismissible update banner in `MainActivity` with release changelog highlights, a manual `🔄 Check for App Update` button in ⚙️ Settings, and 1-tap browser download via `https://dl.silphscopepvp.com` with zero new Android manifest permissions.
 
 ---
 

@@ -1,4 +1,4 @@
-import { type FastMove, type TeamMember, type LeagueType, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
+import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
 import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr, registerCombatSimulatorMetaHooks } from "./combatSimulator";
 
 export interface BlendedSeasonMetaDistribution {
@@ -8,6 +8,333 @@ export interface BlendedSeasonMetaDistribution {
   wMeta: number;
   leadProbabilities: Map<string, number>;
   fieldProbabilities: Map<string, number>;
+  crowdWeightPct?: number;
+  crowdMatchCount?: number;
+  crowdTargetElo?: number | null;
+}
+
+export interface CrowdSpeciesMoveEntry {
+  fastTotalWeight?: number;
+  chargedTotalWeight?: number;
+  fast?: Record<string, number>;
+  charged?: Record<string, number>;
+}
+
+export interface CrowdEloMetaSnapshotWeb {
+  league: string;
+  seasonId?: string;
+  combatMode?: string;
+  eloBucket?: number | null;
+  totalRows: number;
+  eloTaggedRows?: number;
+  effectiveSampleSize: number;
+  uniqueTrainers?: number;
+  fetchedAtMs: number;
+  leadShares: Record<string, number>;
+  backShares: Record<string, number>;
+  fieldShares: Record<string, number>;
+  speciesMoves: Record<string, CrowdSpeciesMoveEntry>;
+}
+
+export interface BlendedSpeciesMovesetProfileWeb {
+  species: string;
+  primaryFastMove: string;
+  primaryCharged1: string;
+  primaryCharged2: string;
+  fastMoveWeights: Record<string, number>;
+  chargedMoveWeights: Record<string, number>;
+  orderedFastMoves: string[];
+  orderedChargedMoves: string[];
+  altComboFastMove?: string | null;
+  altComboCharged1?: string | null;
+  altComboCharged2?: string | null;
+  altComboShare: number;
+}
+
+export const CURRENT_USER_ELO_STORAGE_KEY = "gbl_current_user_elo";
+export const USER_SETTINGS_UPDATED_AT_STORAGE_KEY = "gbl_user_settings_updated_at";
+export const CROWD_ELO_META_CACHE_STORAGE_KEY = "gbl_crowd_elo_meta_cache_v1";
+
+const CROWD_META_MEMORY_CACHE = new Map<string, CrowdEloMetaSnapshotWeb>();
+const CROWD_META_FETCH_TIMESTAMPS = new Map<string, number>();
+
+export function sanitizeUserEloWeb(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") {
+    const r = Math.round(raw);
+    return Number.isFinite(r) && r >= 300 && r <= 3800 ? r : null;
+  }
+  const str = String(raw).trim().replace(/,/g, "");
+  if (!str) return null;
+  const parsed = Number.parseInt(str, 10);
+  return Number.isFinite(parsed) && parsed >= 300 && parsed <= 3800 ? parsed : null;
+}
+
+export function getCurrentUserEloWeb(): number | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return sanitizeUserEloWeb(localStorage.getItem(CURRENT_USER_ELO_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function setCurrentUserEloWeb(
+  raw: unknown,
+  opts?: { touchUpdatedAt?: boolean }
+): number | null {
+  const clean = sanitizeUserEloWeb(raw);
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(CURRENT_USER_ELO_STORAGE_KEY, clean !== null ? String(clean) : "");
+      if (opts?.touchUpdatedAt !== false) {
+        localStorage.setItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY, String(Date.now()));
+      }
+    }
+  } catch {}
+  return clean;
+}
+
+function getCrowdEloBucketWeb(userElo?: number | null): number | null {
+  const clean = sanitizeUserEloWeb(userElo);
+  if (clean === null) return null;
+  return Math.max(300, Math.min(3800, Math.round(clean / 50) * 50));
+}
+
+export function getCachedCrowdEloMetaForLeague(
+  league: string,
+  userElo?: number | null
+): CrowdEloMetaSnapshotWeb | null {
+  const normLeague = normalizeLeagueName(league);
+  const bucket = getCrowdEloBucketWeb(userElo ?? getCurrentUserEloWeb());
+  const exactKey = `${normLeague}|${bucket ?? "all"}`;
+  const memExact = CROWD_META_MEMORY_CACHE.get(exactKey);
+  if (memExact) return memExact;
+
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(CROWD_ELO_META_CACHE_STORAGE_KEY);
+      if (raw) {
+        const obj = JSON.parse(raw) as Record<string, CrowdEloMetaSnapshotWeb>;
+        const found = obj?.[exactKey] || obj?.[`${normLeague}|all`];
+        if (found && found.fieldShares) {
+          CROWD_META_MEMORY_CACHE.set(exactKey, found);
+          return found;
+        }
+      }
+    }
+  } catch {}
+
+  for (const [k, v] of CROWD_META_MEMORY_CACHE.entries()) {
+    if (k.startsWith(`${normLeague}|`) && v.fieldShares) return v;
+  }
+  return null;
+}
+
+export async function fetchCrowdEloMetaForLeague(
+  league: string,
+  userElo?: number | null,
+  forceRefresh: boolean = false
+): Promise<CrowdEloMetaSnapshotWeb | null> {
+  const normLeague = normalizeLeagueName(league);
+  const bucket = getCrowdEloBucketWeb(userElo ?? getCurrentUserEloWeb());
+  const cacheKey = `${normLeague}|${bucket ?? "all"}`;
+  const nowMs = Date.now();
+  const lastMs = CROWD_META_FETCH_TIMESTAMPS.get(cacheKey) || 0;
+  if (!forceRefresh && nowMs - lastMs < 5 * 60_000 && CROWD_META_MEMORY_CACHE.has(cacheKey)) {
+    return CROWD_META_MEMORY_CACHE.get(cacheKey) || null;
+  }
+  CROWD_META_FETCH_TIMESTAMPS.set(cacheKey, nowMs);
+
+  try {
+    const eloQuery = bucket !== null ? `&elo=${bucket}` : "";
+    const url = `https://api.silphscopepvp.com/v1/meta/crowd-elo?league=${encodeURIComponent(normLeague)}${eloQuery}&mode=gbl`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) return getCachedCrowdEloMetaForLeague(normLeague, userElo);
+    const data = await res.json();
+    if (!data?.ok) return getCachedCrowdEloMetaForLeague(normLeague, userElo);
+
+    const snap: CrowdEloMetaSnapshotWeb = {
+      league: String(data.league || normLeague),
+      seasonId: data.seasonId ? String(data.seasonId) : undefined,
+      combatMode: data.combatMode ? String(data.combatMode) : "gbl",
+      eloBucket: typeof data.eloBucket === "number" ? data.eloBucket : null,
+      totalRows: Number(data.totalRows) || 0,
+      eloTaggedRows: Number(data.eloTaggedRows) || 0,
+      effectiveSampleSize: Number(data.effectiveSampleSize) || 0,
+      uniqueTrainers: Number(data.uniqueTrainers) || 0,
+      fetchedAtMs: nowMs,
+      leadShares: (data.leadShares && typeof data.leadShares === "object" ? data.leadShares : {}) as Record<string, number>,
+      backShares: (data.backShares && typeof data.backShares === "object" ? data.backShares : {}) as Record<string, number>,
+      fieldShares: (data.fieldShares && typeof data.fieldShares === "object" ? data.fieldShares : {}) as Record<string, number>,
+      speciesMoves: (data.speciesMoves && typeof data.speciesMoves === "object" ? data.speciesMoves : {}) as Record<string, CrowdSpeciesMoveEntry>
+    };
+    CROWD_META_MEMORY_CACHE.set(cacheKey, snap);
+    CROWD_META_MEMORY_CACHE.set(`${normLeague}|all`, snap);
+    try {
+      if (typeof localStorage !== "undefined") {
+        const existingRaw = localStorage.getItem(CROWD_ELO_META_CACHE_STORAGE_KEY);
+        const root = existingRaw ? (JSON.parse(existingRaw) as Record<string, CrowdEloMetaSnapshotWeb>) : {};
+        root[cacheKey] = snap;
+        root[`${normLeague}|all`] = snap;
+        localStorage.setItem(CROWD_ELO_META_CACHE_STORAGE_KEY, JSON.stringify(root));
+      }
+    } catch {}
+    ANTI_META_RESULT_CACHE.clear();
+    return snap;
+  } catch {
+    return getCachedCrowdEloMetaForLeague(normLeague, userElo);
+  }
+}
+
+export function resolveBlendedSpeciesMoveset(
+  oppName: string,
+  league: string,
+  seasonLogs?: Array<{
+    timestampMs: number;
+    league: string;
+    oppObservedMoves?: OpponentObservedMovesInput[];
+  }>,
+  crowdSnapshot?: CrowdEloMetaSnapshotWeb | null,
+  userElo?: number | null
+): BlendedSpeciesMovesetProfileWeb {
+  const normLeague = normalizeLeagueName(league);
+  const rec = getRecommendedMovesForPokemon(oppName, normLeague);
+  const canonicalSpecies = rec?.name || oppName.trim();
+  const stdFast = (rec?.fastMove || "").trim();
+  const stdC1 = (rec?.chargedMove1 || "").trim();
+  const stdC2 = (rec?.chargedMove2 || "").trim();
+  const plusMove = (resolveMegaPlusMove(canonicalSpecies, normLeague) || "").trim();
+
+  const dbEntry = POKEMON_DATABASE[canonicalSpecies] || findPokemonByName(canonicalSpecies);
+  const legalPool = getAvailableMovePoolForPokemon(dbEntry || canonicalSpecies, normLeague);
+  const legalFastCanon = new Map<string, string>();
+  legalPool.fastMoves.forEach((fm) => {
+    const clean = fm.name.trim();
+    if (clean) legalFastCanon.set(clean.toLowerCase(), clean);
+  });
+  const legalChargedCanon = new Map<string, string>();
+  legalPool.chargedMoves.forEach((cm) => {
+    const clean = cm.name.trim();
+    if (clean && clean.toLowerCase() !== "struggle" && clean.toLowerCase() !== "frustration") {
+      legalChargedCanon.set(clean.toLowerCase(), clean);
+    }
+  });
+  if (stdFast) legalFastCanon.set(stdFast.toLowerCase(), stdFast);
+  if (stdC1) legalChargedCanon.set(stdC1.toLowerCase(), stdC1);
+  if (stdC2) legalChargedCanon.set(stdC2.toLowerCase(), stdC2);
+
+  const fastWeights = new Map<string, number>();
+  const chargedWeights = new Map<string, number>();
+  if (stdFast) fastWeights.set(stdFast, 4.0);
+  if (stdC1) chargedWeights.set(stdC1, 4.0);
+  if (stdC2 && stdC2.toLowerCase() !== stdC1.toLowerCase()) chargedWeights.set(stdC2, 4.0);
+
+  // Personal Logs = Recency-Weighted (NEVER filtered by ELO)
+  const targetLower = canonicalSpecies.toLowerCase();
+  const matchingPersonal = (seasonLogs || [])
+    .filter((entry) => normalizeLeagueName(entry.league || "") === normLeague && Array.isArray(entry.oppObservedMoves) && entry.oppObservedMoves.length > 0)
+    .sort((a, b) => b.timestampMs - a.timestampMs);
+
+  matchingPersonal.forEach((entry, idx) => {
+    const recW = Math.exp(-0.04 * idx);
+    for (const obs of entry.oppObservedMoves || []) {
+      const obsName = (obs?.species || "").trim();
+      if (!obsName) continue;
+      const obsCanon = getRecommendedMovesForPokemon(obsName, normLeague)?.name || obsName;
+      if (obsName.toLowerCase() !== targetLower && obsCanon.toLowerCase() !== targetLower) continue;
+
+      const st = (obs.fastStatus || "").trim().toUpperCase();
+      const fm = (obs.fastMove || "").trim();
+      if (fm && (st === "CONFIRMED_STD" || st === "CONFIRMED_NONSTD" || st === "CONFIRMED" || st === "CONFIRMED_STANDARD" || st === "CONFIRMED_NON_STANDARD")) {
+        const canonF = legalFastCanon.get(fm.toLowerCase()) || fm;
+        fastWeights.set(canonF, (fastWeights.get(canonF) || 0) + 2.0 * recW);
+      }
+      if (Array.isArray(obs.chargedMoves)) {
+        for (const rawCm of obs.chargedMoves) {
+          const cm = (rawCm || "").trim();
+          if (!cm) continue;
+          if (plusMove && cm.toLowerCase() === plusMove.toLowerCase()) continue;
+          const canonC = legalChargedCanon.get(cm.toLowerCase()) || cm;
+          chargedWeights.set(canonC, (chargedWeights.get(canonC) || 0) + 2.0 * recW);
+        }
+      }
+    }
+  });
+
+  // Crowd D1 ELO telemetry
+  const crowdSnap = crowdSnapshot !== undefined ? crowdSnapshot : getCachedCrowdEloMetaForLeague(normLeague, userElo ?? getCurrentUserEloWeb());
+  if (crowdSnap?.speciesMoves) {
+    const crowdEntry =
+      crowdSnap.speciesMoves[canonicalSpecies] ||
+      Object.entries(crowdSnap.speciesMoves).find(([k]) => k.toLowerCase() === targetLower)?.[1];
+    if (crowdEntry) {
+      const fastTotal = Number(crowdEntry.fastTotalWeight) || 0;
+      if (fastTotal > 0 && crowdEntry.fast) {
+        const cwFast = Math.min(8.0, 2.0 * (fastTotal / 20.0));
+        for (const [fm, share] of Object.entries(crowdEntry.fast)) {
+          const s = Number(share) || 0;
+          if (s <= 0) continue;
+          const canonF = legalFastCanon.get(fm.trim().toLowerCase()) || fm.trim();
+          fastWeights.set(canonF, (fastWeights.get(canonF) || 0) + cwFast * s);
+        }
+      }
+      const cTotal = Number(crowdEntry.chargedTotalWeight) || 0;
+      if (cTotal > 0 && crowdEntry.charged) {
+        const cwCharged = Math.min(8.0, 2.0 * (cTotal / 20.0));
+        for (const [cm, share] of Object.entries(crowdEntry.charged)) {
+          const s = Number(share) || 0;
+          if (s <= 0) continue;
+          if (plusMove && cm.trim().toLowerCase() === plusMove.toLowerCase()) continue;
+          const canonC = legalChargedCanon.get(cm.trim().toLowerCase()) || cm.trim();
+          chargedWeights.set(canonC, (chargedWeights.get(canonC) || 0) + cwCharged * s);
+        }
+      }
+    }
+  }
+
+  for (const [, canonF] of legalFastCanon.entries()) {
+    if (!fastWeights.has(canonF)) fastWeights.set(canonF, 0.05);
+  }
+  for (const [, canonC] of legalChargedCanon.entries()) {
+    if (!chargedWeights.has(canonC)) chargedWeights.set(canonC, 0.05);
+  }
+
+  const fastSum = Array.from(fastWeights.values()).reduce((acc, v) => acc + v, 0) || 1;
+  const chargedSum = Array.from(chargedWeights.values()).reduce((acc, v) => acc + v, 0) || 1;
+  const normFastSorted = Array.from(fastWeights.entries())
+    .map(([m, w]) => [m, w / fastSum] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
+  const normChargedSorted = Array.from(chargedWeights.entries())
+    .map(([m, w]) => [m, w / chargedSum] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
+
+  const primaryFast = normFastSorted[0]?.[0] || stdFast;
+  const primaryC1 = normChargedSorted[0]?.[0] || stdC1;
+  const primaryC2 = normChargedSorted[1]?.[0] || (stdC2 && stdC2.toLowerCase() !== primaryC1.toLowerCase() ? stdC2 : primaryC1);
+
+  const altFastCand = normFastSorted.find(([m, s]) => m.toLowerCase() !== primaryFast.toLowerCase() && s >= 0.16);
+  const altChargedCand = normChargedSorted.find(
+    ([m, s]) => m.toLowerCase() !== primaryC1.toLowerCase() && m.toLowerCase() !== primaryC2.toLowerCase() && s >= 0.16
+  );
+
+  let altShare = Math.min(0.45, Math.max(altFastCand?.[1] || 0, (altChargedCand?.[1] || 0) * 1.35));
+  if (!altFastCand && !altChargedCand) altShare = 0;
+
+  return {
+    species: canonicalSpecies,
+    primaryFastMove: primaryFast,
+    primaryCharged1: primaryC1,
+    primaryCharged2: primaryC2,
+    fastMoveWeights: Object.fromEntries(normFastSorted),
+    chargedMoveWeights: Object.fromEntries(normChargedSorted),
+    orderedFastMoves: normFastSorted.map(([m]) => m),
+    orderedChargedMoves: normChargedSorted.map(([m]) => m),
+    altComboFastMove: altFastCand ? altFastCand[0] : primaryFast,
+    altComboCharged1: altChargedCand ? primaryC1 : primaryC1,
+    altComboCharged2: altChargedCand ? altChargedCand[0] : primaryC2,
+    altComboShare: altShare
+  };
 }
 
 export interface BattleFrontierUsageEntry {
@@ -1278,7 +1605,9 @@ export function computeBlendedSeasonMeta(
   league: string,
   seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[] }>,
   currentSeason?: { startMs: number; endMs: number } | number,
-  endMsArg?: number
+  endMsArg?: number,
+  crowdSnapshot?: CrowdEloMetaSnapshotWeb | null,
+  disableCrowd: boolean = false
 ): BlendedSeasonMetaDistribution {
   const normLeague = normalizeLeagueName(league);
   const seasonBounds =
@@ -1419,6 +1748,46 @@ export function computeBlendedSeasonMeta(
     for (const [k, v] of pStdField.entries()) pStdField.set(k, v / totalStdFieldWeight);
   }
 
+  const effCrowd =
+    disableCrowd
+      ? null
+      : crowdSnapshot !== undefined
+      ? crowdSnapshot
+      : getCachedCrowdEloMetaForLeague(normLeague, getCurrentUserEloWeb());
+
+  const pCrowdLead = new Map<string, number>();
+  const pCrowdField = new Map<string, number>();
+  let totalCrowdLeadWeight = 0;
+  let totalCrowdFieldWeight = 0;
+  if (effCrowd) {
+    for (const [rawSp, rawSh] of Object.entries(effCrowd.fieldShares || {})) {
+      const sh = Number(rawSh) || 0;
+      if (sh <= 0) continue;
+      const canon = canonicalizeMetaPokemonName(rawSp) || rawSp.trim();
+      if (!canon) continue;
+      pCrowdField.set(canon, (pCrowdField.get(canon) || 0) + sh);
+      totalCrowdFieldWeight += sh;
+    }
+    for (const [rawSp, rawSh] of Object.entries(effCrowd.leadShares || {})) {
+      const sh = Number(rawSh) || 0;
+      if (sh <= 0) continue;
+      const canon = canonicalizeMetaPokemonName(rawSp) || rawSp.trim();
+      if (!canon) continue;
+      pCrowdLead.set(canon, (pCrowdLead.get(canon) || 0) + sh);
+      totalCrowdLeadWeight += sh;
+    }
+    if (totalCrowdFieldWeight > 0) {
+      for (const [k, v] of pCrowdField.entries()) pCrowdField.set(k, v / totalCrowdFieldWeight);
+    }
+    if (totalCrowdLeadWeight > 0) {
+      for (const [k, v] of pCrowdLead.entries()) pCrowdLead.set(k, v / totalCrowdLeadWeight);
+    }
+  }
+  const hasValidCrowd =
+    Boolean(effCrowd) &&
+    (Number(effCrowd?.effectiveSampleSize) || 0) > 0 &&
+    pCrowdField.size > 0;
+
   const N = matchingLogs.length;
   const rawWHist = N > 0 ? (logCapPct / 100.0) * Math.min(1.0, N / 50.0) : 0;
   const remAfterHist = Math.max(0, 1.0 - rawWHist);
@@ -1426,14 +1795,31 @@ export function computeBlendedSeasonMeta(
     isGblLimitedCup && totalStdFieldWeight > 0
       ? Math.min(remAfterHist, (limStdBlendPct / 100.0) * Math.exp(-limStdDecay * N))
       : 0;
-  const rawWMeta = Math.max(0, remAfterHist - rawWStd);
-  const sumW = rawWHist + rawWStd + rawWMeta || 1.0;
+  const remAfterStd = Math.max(0, remAfterHist - rawWStd);
+  const rawWCrowd =
+    hasValidCrowd && effCrowd
+      ? remAfterStd * Math.max(0, Math.min(0.65, 0.65 * Math.min(1.0, effCrowd.effectiveSampleSize / 80.0)))
+      : 0;
+  const rawWMeta = Math.max(0, remAfterStd - rawWCrowd);
+  const sumW = rawWHist + rawWStd + rawWCrowd + rawWMeta || 1.0;
   const wHist = rawWHist / sumW;
   const wStd = rawWStd / sumW;
+  const wCrowd = rawWCrowd / sumW;
   const wMeta = rawWMeta / sumW;
 
-  const allLeadSpecies = new Set<string>([...pMeta.keys(), ...pHistLead.keys(), ...pStdLead.keys()]);
-  const allFieldSpecies = new Set<string>([...pMeta.keys(), ...pHistField.keys(), ...pStdField.keys()]);
+  const allLeadSpecies = new Set<string>([
+    ...pMeta.keys(),
+    ...pHistLead.keys(),
+    ...pStdLead.keys(),
+    ...(hasValidCrowd ? pCrowdLead.keys() : []),
+    ...(hasValidCrowd ? pCrowdField.keys() : [])
+  ]);
+  const allFieldSpecies = new Set<string>([
+    ...pMeta.keys(),
+    ...pHistField.keys(),
+    ...pStdField.keys(),
+    ...(hasValidCrowd ? pCrowdField.keys() : [])
+  ]);
 
   const leadProbabilities = new Map<string, number>();
   const fieldProbabilities = new Map<string, number>();
@@ -1443,7 +1829,12 @@ export function computeBlendedSeasonMeta(
     const mP = pMeta.get(sp) || 0;
     const hP = totalHistLeadWeight > 0 ? pHistLead.get(sp) || 0 : mP;
     const sP = totalStdLeadWeight > 0 ? pStdLead.get(sp) || 0 : mP;
-    const val = wHist * hP + wStd * sP + wMeta * mP;
+    const cP = !hasValidCrowd
+      ? mP
+      : totalCrowdLeadWeight > 0
+      ? pCrowdLead.get(sp) || 0
+      : pCrowdField.get(sp) || 0;
+    const val = wHist * hP + wStd * sP + wCrowd * cP + wMeta * mP;
     if (val > 0) {
       leadProbabilities.set(sp, val);
       sumLead += val;
@@ -1458,7 +1849,8 @@ export function computeBlendedSeasonMeta(
     const mP = pMeta.get(sp) || 0;
     const hP = totalHistFieldWeight > 0 ? pHistField.get(sp) || 0 : mP;
     const sP = totalStdFieldWeight > 0 ? pStdField.get(sp) || 0 : mP;
-    const val = wHist * hP + wStd * sP + wMeta * mP;
+    const cP = hasValidCrowd ? pCrowdField.get(sp) || 0 : mP;
+    const val = wHist * hP + wStd * sP + wCrowd * cP + wMeta * mP;
     if (val > 0) {
       fieldProbabilities.set(sp, val);
       sumField += val;
@@ -1472,9 +1864,12 @@ export function computeBlendedSeasonMeta(
     league: normLeague,
     seasonMatchCount: N,
     wHist,
-    wMeta,
+    wMeta: wMeta + wCrowd,
     leadProbabilities,
-    fieldProbabilities
+    fieldProbabilities,
+    crowdWeightPct: Math.round(wCrowd * 100),
+    crowdMatchCount: hasValidCrowd ? Number(effCrowd?.totalRows) || 0 : 0,
+    crowdTargetElo: hasValidCrowd ? (effCrowd?.eloBucket ?? null) : null
   };
 }
 
@@ -3627,6 +4022,9 @@ export interface RoleWeightedMetaDistribution {
   top100Species: string[];
   wHistPct: number;
   wMetaPct: number;
+  wCrowdPct?: number;
+  crowdMatchCount?: number;
+  crowdTargetElo?: number | null;
   seasonMatchCount: number;
 }
 
@@ -3637,8 +4035,10 @@ export interface RoleWeightedMetaDistribution {
  */
 export function computeRoleWeightedTop100Meta(
   normLeague: string,
-  seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[] }>,
-  currentSeason?: { startMs: number; endMs: number }
+  seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[]; oppObservedMoves?: OpponentObservedMovesInput[] }>,
+  currentSeason?: { startMs: number; endMs: number },
+  crowdSnapshot?: CrowdEloMetaSnapshotWeb | null,
+  disableCrowd: boolean = false
 ): RoleWeightedMetaDistribution {
   const rawTop100 = getLeagueTopMetaSpeciesNames(normLeague, 100);
   const top100Species: string[] = [];
@@ -3783,10 +4183,75 @@ export function computeRoleWeightedTop100Meta(
   if (sumHC > 0) for (const [k, v] of histCloser.entries()) histCloser.set(k, v / sumHC);
   if (sumHF > 0) for (const [k, v] of histField.entries()) histField.set(k, v / sumHF);
 
+  const effCrowd =
+    disableCrowd
+      ? null
+      : crowdSnapshot !== undefined
+      ? crowdSnapshot
+      : getCachedCrowdEloMetaForLeague(normLeague, getCurrentUserEloWeb());
+
+  const canonicalByLower = new Map<string, string>();
+  for (const sp of top100Species) {
+    canonicalByLower.set(sp.toLowerCase(), sp);
+  }
+  const canonRoleOpp = (rawName: string): string => {
+    const trimmed = (rawName || "").trim();
+    if (!trimmed) return "";
+    const direct = canonicalByLower.get(trimmed.toLowerCase());
+    if (direct) return direct;
+    const canon = canonicalizeMetaPokemonName(trimmed) || trimmed;
+    return canonicalByLower.get(canon.toLowerCase()) || canon;
+  };
+
+  const crowdLead = new Map<string, number>();
+  const crowdSwap = new Map<string, number>();
+  const crowdCloser = new Map<string, number>();
+  const crowdField = new Map<string, number>();
+  if (effCrowd) {
+    for (const [rawSp, rawSh] of Object.entries(effCrowd.fieldShares || {})) {
+      const sh = Number(rawSh) || 0;
+      const canon = canonRoleOpp(rawSp);
+      if (sh > 0 && canon) crowdField.set(canon, (crowdField.get(canon) || 0) + sh);
+    }
+    for (const [rawSp, rawSh] of Object.entries(effCrowd.leadShares || {})) {
+      const sh = Number(rawSh) || 0;
+      const canon = canonRoleOpp(rawSp);
+      if (sh > 0 && canon) crowdLead.set(canon, (crowdLead.get(canon) || 0) + sh);
+    }
+    for (const [rawSp, rawSh] of Object.entries(effCrowd.backShares || {})) {
+      const sh = Number(rawSh) || 0;
+      const canon = canonRoleOpp(rawSp);
+      if (sh > 0 && canon) {
+        crowdSwap.set(canon, (crowdSwap.get(canon) || 0) + sh);
+        crowdCloser.set(canon, (crowdCloser.get(canon) || 0) + sh);
+      }
+    }
+    const normMap = (m: Map<string, number>) => {
+      const tot = Array.from(m.values()).reduce((acc, v) => acc + v, 0);
+      if (tot > 0) for (const [k, v] of m.entries()) m.set(k, v / tot);
+    };
+    normMap(crowdField);
+    normMap(crowdLead);
+    normMap(crowdSwap);
+    normMap(crowdCloser);
+  }
+  const hasValidCrowd =
+    Boolean(effCrowd) &&
+    (Number(effCrowd?.effectiveSampleSize) || 0) > 0 &&
+    crowdField.size > 0;
+  const crowdSubW =
+    hasValidCrowd && effCrowd
+      ? Math.max(0, Math.min(0.65, 0.65 * Math.min(1.0, effCrowd.effectiveSampleSize / 80.0)))
+      : 0;
+  const wCrowd = wMeta * crowdSubW;
+  const effWMeta = Math.max(0, wMeta - wCrowd);
+
   const allSpecies = new Set<string>([
     ...top100Species,
     ...histField.keys(),
-    ...histLead.keys()
+    ...histLead.keys(),
+    ...(hasValidCrowd ? crowdField.keys() : []),
+    ...(hasValidCrowd ? crowdLead.keys() : [])
   ]);
 
   const blendMap = (
@@ -3794,7 +4259,8 @@ export function computeRoleWeightedTop100Meta(
     hMap: Map<string, number>,
     hSum: number,
     fallbackHistMap: Map<string, number>,
-    fallbackHistSum: number
+    fallbackHistSum: number,
+    cMap: Map<string, number>
   ): Map<string, number> => {
     const out = new Map<string, number>();
     let total = 0;
@@ -3806,7 +4272,12 @@ export function computeRoleWeightedTop100Meta(
           : fallbackHistSum > 0
           ? fallbackHistMap.get(sp) || 0
           : mP;
-      const val = wHist * hP + wMeta * mP;
+      const cP = !hasValidCrowd
+        ? mP
+        : cMap.size > 0
+        ? cMap.get(sp) || 0
+        : crowdField.get(sp) || 0;
+      const val = wHist * hP + wCrowd * cP + effWMeta * mP;
       if (val > 0) {
         out.set(sp, val);
         total += val;
@@ -3818,10 +4289,10 @@ export function computeRoleWeightedTop100Meta(
     return out;
   };
 
-  const leadWeights = blendMap(synLead, histLead, sumHL, histField, sumHF);
-  const swapWeights = blendMap(synSwap, histSwap, sumHS, histField, sumHF);
-  const closerWeights = blendMap(synCloser, histCloser, sumHC, histField, sumHF);
-  const fieldWeights = blendMap(synField, histField, sumHF, histField, sumHF);
+  const leadWeights = blendMap(synLead, histLead, sumHL, histField, sumHF, crowdLead);
+  const swapWeights = blendMap(synSwap, histSwap, sumHS, histField, sumHF, crowdSwap);
+  const closerWeights = blendMap(synCloser, histCloser, sumHC, histField, sumHF, crowdCloser);
+  const fieldWeights = blendMap(synField, histField, sumHF, histField, sumHF, crowdField);
 
   const sortedFieldEntries = Array.from(fieldWeights.entries()).sort((a, b) => b[1] - a[1]);
   const top50Raw = sortedFieldEntries.map((e) => e[0]).slice(0, 50);
@@ -3837,7 +4308,10 @@ export function computeRoleWeightedTop100Meta(
     top50Threats,
     top100Species,
     wHistPct: Math.round(wHist * 100),
-    wMetaPct: Math.round(wMeta * 100),
+    wMetaPct: Math.round((effWMeta + wCrowd) * 100),
+    wCrowdPct: Math.round(wCrowd * 100),
+    crowdMatchCount: hasValidCrowd ? Number(effCrowd?.totalRows) || 0 : 0,
+    crowdTargetElo: hasValidCrowd ? (effCrowd?.eloBucket ?? null) : null,
     seasonMatchCount: N
   };
 }
@@ -3854,20 +4328,37 @@ const ANTI_META_RESULT_CACHE = new Map<string, AntiMetaTeamBuilderResult>();
 export function generateAntiMetaTeamOptions(
   league: string = "GREAT LEAGUE",
   featuredPokemonNames: string[] = [],
-  seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[] }>,
-  currentSeason?: { startMs: number; endMs: number }
+  seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[]; oppObservedMoves?: OpponentObservedMovesInput[] }>,
+  currentSeason?: { startMs: number; endMs: number },
+  crowdSnapshot?: CrowdEloMetaSnapshotWeb | null,
+  userElo?: number | null
 ): AntiMetaTeamBuilderResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const normLeague = normalizeLeagueName(league);
 
-  const roleMeta = computeRoleWeightedTop100Meta(normLeague, seasonBattleLogs, currentSeason);
+  const resolvedUserElo = userElo !== undefined ? sanitizeUserEloWeb(userElo) : getCurrentUserEloWeb();
+  const effCrowd =
+    crowdSnapshot !== undefined
+      ? crowdSnapshot
+      : getCachedCrowdEloMetaForLeague(normLeague, resolvedUserElo);
+
+  const roleMeta = computeRoleWeightedTop100Meta(
+    normLeague,
+    seasonBattleLogs,
+    currentSeason,
+    effCrowd,
+    false
+  );
+  const crowdSig = effCrowd
+    ? `${effCrowd.totalRows || 0}:${effCrowd.eloBucket ?? "all"}:${Math.round((effCrowd.effectiveSampleSize || 0) * 10)}`
+    : "0";
   const featKey = (featuredPokemonNames || [])
     .slice(0, 2)
     .map((f) => (f || "").trim().toLowerCase())
     .filter(Boolean)
     .join("||");
   const liveSize = LIVE_RANKINGS_MAP[normLeague]?.size || 0;
-  const resultCacheKey = `${normLeague}||${featKey}||${roleMeta.seasonMatchCount}||${roleMeta.wHistPct}||${liveSize}`;
+  const resultCacheKey = `${normLeague}||${featKey}||${roleMeta.seasonMatchCount}||${roleMeta.wHistPct}||${crowdSig}||${resolvedUserElo ?? "unranked"}||${liveSize}`;
   const cachedResult = ANTI_META_RESULT_CACHE.get(resultCacheKey);
   if (cachedResult) return cachedResult;
 
@@ -3994,6 +4485,67 @@ export function generateAntiMetaTeamOptions(
     ])
   );
 
+  const buildOppMemberForMoveset = (
+    oppName: string,
+    fastMove: string,
+    charged1: string,
+    charged2: string
+  ): TeamMember | string => {
+    const rec = getRecommendedMovesForPokemon(oppName, normLeague);
+    if (!rec) return oppName;
+    return {
+      id: `opp-${oppName.toLowerCase()}`,
+      name: rec.name,
+      cp: rec.cp,
+      fastMove: fastMove || rec.fastMove,
+      chargedMove1: charged1 || rec.chargedMove1,
+      chargedMove2: charged2 || rec.chargedMove2,
+      ivs: rec.defaultIvs
+    };
+  };
+
+  const oppEvalVariants = new Map<
+    string,
+    {
+      primaryOpp: TeamMember | string;
+      altOpp: TeamMember | string | null;
+      altShare: number;
+    }
+  >();
+  for (const oppName of allMetaOpps) {
+    const prof = resolveBlendedSpeciesMoveset(
+      oppName,
+      normLeague,
+      seasonBattleLogs,
+      effCrowd,
+      resolvedUserElo
+    );
+    const primaryOpp = buildOppMemberForMoveset(
+      oppName,
+      prof.primaryFastMove,
+      prof.primaryCharged1,
+      prof.primaryCharged2
+    );
+    const altShare = Math.max(0, Math.min(0.45, Number(prof.altComboShare) || 0));
+    const hasAlt =
+      altShare >= 0.16 &&
+      Boolean(prof.altComboFastMove || prof.altComboCharged1 || prof.altComboCharged2) &&
+      (
+        (prof.altComboFastMove || prof.primaryFastMove).toLowerCase() !== prof.primaryFastMove.toLowerCase() ||
+        (prof.altComboCharged1 || prof.primaryCharged1).toLowerCase() !== prof.primaryCharged1.toLowerCase() ||
+        (prof.altComboCharged2 || prof.primaryCharged2).toLowerCase() !== prof.primaryCharged2.toLowerCase()
+      );
+    const altOpp = hasAlt
+      ? buildOppMemberForMoveset(
+          oppName,
+          prof.altComboFastMove || prof.primaryFastMove,
+          prof.altComboCharged1 || prof.primaryCharged1,
+          prof.altComboCharged2 || prof.primaryCharged2
+        )
+      : null;
+    oppEvalVariants.set(oppName, { primaryOpp, altOpp, altShare });
+  }
+
   interface SlotCandidateEval {
     member: TeamMember;
     baseSpecies: string;
@@ -4017,7 +4569,25 @@ export function generateAntiMetaTeamOptions(
   ): SlotCandidateEval => {
     const pwByOpp = new Map<string, PositionWeightedMatchupRatings>();
     for (const oppName of allMetaOpps) {
-      pwByOpp.set(oppName, evaluatePositionWeightedBr(member, oppName, normLeague));
+      const variant = oppEvalVariants.get(oppName);
+      if (!variant) {
+        pwByOpp.set(oppName, evaluatePositionWeightedBr(member, oppName, normLeague));
+        continue;
+      }
+      const pBr = evaluatePositionWeightedBr(member, variant.primaryOpp, normLeague);
+      if (!variant.altOpp || variant.altShare <= 0) {
+        pwByOpp.set(oppName, pBr);
+        continue;
+      }
+      const aBr = evaluatePositionWeightedBr(member, variant.altOpp, normLeague);
+      const wP = 1.0 - variant.altShare;
+      const wA = variant.altShare;
+      pwByOpp.set(oppName, {
+        ...pBr,
+        leadBr: Math.round(wP * pBr.leadBr + wA * aBr.leadBr),
+        swapBr: Math.round(wP * pBr.swapBr + wA * aBr.swapBr),
+        closerBr: Math.round(wP * pBr.closerBr + wA * aBr.closerBr)
+      });
     }
 
     let leadSum = 0;
@@ -4849,7 +5419,10 @@ export function generateAntiMetaTeamOptions(
     top25MetaNames: roleMeta.top25Threats,
     top25MetaList: top50MetaList,
     top50MetaList,
-    metaSummaryLabel: `Top-100 Flattened Role-Weighted Synthetic Meta (${roleMeta.wMetaPct}% PvPoke Role Meta / ${roleMeta.wHistPct}% Season Logs • Auditing Top 50 Meta w/ Battle Rankings)`,
+    metaSummaryLabel:
+      (roleMeta.crowdMatchCount || 0) > 0 && (roleMeta.wCrowdPct || 0) > 0
+        ? `Top-100 3-Way Meta (${Math.max(0, roleMeta.wMetaPct - (roleMeta.wCrowdPct || 0))}% PvPoke / ${roleMeta.wCrowdPct}% Crowd ${roleMeta.crowdTargetElo ? `ELO ${roleMeta.crowdTargetElo}` : "All ELOs"} (${roleMeta.crowdMatchCount}) / ${roleMeta.wHistPct}% Season Logs • Auditing Top 50 Meta w/ Blended Movesets)`
+        : `Top-100 Flattened Role-Weighted Synthetic Meta (${roleMeta.wMetaPct}% PvPoke Role Meta / ${roleMeta.wHistPct}% Season Logs • Auditing Top 50 Meta w/ Battle Rankings)`,
     elapsedMs: Math.max(1, Math.round(t1 - t0))
   };
   if (ANTI_META_RESULT_CACHE.size > 40) {

@@ -7020,3 +7020,73 @@ export function getLeagueTop3Template(
   ];
 }
 
+export interface OpponentObservedMovesInput {
+  species: string;
+  fastMove?: string | null;
+  fastStatus?: string | null;
+  chargedMoves?: string[];
+}
+
+/**
+ * Returns formatted non-standard ("spice") move tags ("Species (Move)") for confirmed
+ * observed opponent moves that differ from the standard PvPoke recommended moveset.
+ * Returns [] if all revealed moves match standard PvPoke moves, Mega "+" moves, or are unrevealed.
+ */
+export function resolveNonStandardObservedMoves(
+  observedList: OpponentObservedMovesInput[] | undefined | null,
+  league: string
+): string[] {
+  if (!Array.isArray(observedList) || observedList.length === 0) return [];
+  const normLg = normalizeLeagueName(league || "GREAT LEAGUE");
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const obs of observedList) {
+    if (!obs || typeof obs.species !== "string") continue;
+    const rawSpecies = obs.species.trim();
+    if (!rawSpecies || rawSpecies === "Waiting..." || rawSpecies === "Unknown") continue;
+    const rec = getRecommendedMovesForPokemon(rawSpecies, normLg);
+    if (!rec) continue;
+    const canonName = rec.name || rawSpecies;
+    const plusMove = (resolveMegaPlusMove(canonName, normLg) || "").trim().toLowerCase();
+    const stdFastLower = (rec.fastMove || "").trim().toLowerCase();
+    const stdChargedSet = new Set(
+      [rec.chargedMove1, rec.chargedMove2]
+        .map((m) => (m || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const statusNorm = (obs.fastStatus || "").trim().toUpperCase();
+    const fast = (obs.fastMove || "").trim();
+    if (
+      fast &&
+      (statusNorm === "CONFIRMED_NONSTD" ||
+        (statusNorm === "CONFIRMED_STD" && stdFastLower && fast.toLowerCase() !== stdFastLower))
+    ) {
+      const label = `${canonName} (${fast})`;
+      const k = label.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(label);
+      }
+    }
+
+    if (Array.isArray(obs.chargedMoves)) {
+      for (const rawCm of obs.chargedMoves) {
+        const cm = (rawCm || "").trim();
+        if (!cm) continue;
+        const cmLower = cm.toLowerCase();
+        if (stdChargedSet.has(cmLower)) continue;
+        if (plusMove && cmLower === plusMove) continue;
+        const label = `${canonName} (${cm})`;
+        const k = label.toLowerCase();
+        if (!seen.has(k)) {
+          seen.add(k);
+          out.push(label);
+        }
+      }
+    }
+  }
+  return out;
+}
+

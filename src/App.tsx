@@ -122,6 +122,15 @@ import {
   isMegaOrPrimalSpecies,
   hasMultipleMegas,
   resolveMegaPlusMove,
+  resolveNonStandardObservedMoves,
+  type CrowdEloMetaSnapshotWeb,
+  CURRENT_USER_ELO_STORAGE_KEY,
+  USER_SETTINGS_UPDATED_AT_STORAGE_KEY,
+  sanitizeUserEloWeb,
+  getCurrentUserEloWeb,
+  setCurrentUserEloWeb,
+  getCachedCrowdEloMetaForLeague,
+  fetchCrowdEloMetaForLeague,
   getSavedBfUsageSheetUrl,
   setSavedBfUsageSheetUrl,
   getSavedBfCoresSheetUrl,
@@ -1282,6 +1291,24 @@ export default function App() {
         : '🛡️ Switched to Standard GBL Mode (Blind 3 PvP • Independent Teams, Trash & Battle Logs)'
     );
     setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  // Feature #3: Current GBL ELO (300..3800 or null = Unranked < R20) synced via Cloudflare D1 userSettings
+  const [currentUserElo, setCurrentUserElo] = useState<number | null>(() => getCurrentUserEloWeb());
+  const [eloHeaderEditOpen, setEloHeaderEditOpen] = useState<boolean>(false);
+  const [eloHeaderDraft, setEloHeaderDraft] = useState<string>(() => {
+    const cur = getCurrentUserEloWeb();
+    return cur !== null ? String(cur) : '';
+  });
+  const [antiMetaCrowdSnap, setAntiMetaCrowdSnap] = useState<CrowdEloMetaSnapshotWeb | null>(null);
+
+  const handleUpdateCurrentUserElo = (nextRaw: number | string | null) => {
+    const parsed = sanitizeUserEloWeb(nextRaw);
+    setCurrentUserEloWeb(parsed);
+    setCurrentUserElo(parsed);
+    setEloHeaderDraft(parsed !== null ? String(parsed) : '');
+    setAntiMetaResult(null);
+    return parsed;
   };
 
   // Independent Battle Logs: Standard GBL ('gbl_battle_logs_v1') vs Show 6 ('gbl_show6_battle_logs_v1')
@@ -4631,6 +4658,7 @@ export default function App() {
       opponents: oppsToLog,
       result,
       leadMatchup: currentLeadMatchup,
+      userElo: currentUserElo,
       bmfScore: qualityMeta ? qualityMeta.pPre : null,
       execWae: qualityMeta ? qualityMeta.execWae : null,
       badges: qualityMeta ? [qualityMeta.badgeLabel] : [],
@@ -5831,11 +5859,17 @@ export default function App() {
     setIsGeneratingAntiMeta(true);
     setTimeout(() => {
       try {
+        const effCrowd =
+          antiMetaCrowdSnap && normalizeLeagueName(antiMetaCrowdSnap.league) === normalizeLeagueName(targetLeague)
+            ? antiMetaCrowdSnap
+            : getCachedCrowdEloMetaForLeague(targetLeague, currentUserElo);
         const res = generateAntiMetaTeamOptions(
           targetLeague,
           featuredList,
           battleLogs,
-          activeSeasonBounds
+          activeSeasonBounds,
+          effCrowd,
+          currentUserElo
         );
         const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
         setAntiMetaResult({
@@ -5852,6 +5886,28 @@ export default function App() {
 
   useEffect(() => {
     if (siteView !== 'app' || activeTab !== 'presets' || !showAntiMetaBuilder) return;
+    let cancelled = false;
+    fetchCrowdEloMetaForLeague(antiMetaLeague, currentUserElo)
+      .then((freshSnap) => {
+        if (cancelled || !freshSnap) return;
+        setAntiMetaCrowdSnap((prev) => {
+          const same =
+            prev &&
+            normalizeLeagueName(prev.league) === normalizeLeagueName(freshSnap.league) &&
+            prev.totalRows === freshSnap.totalRows &&
+            (prev.eloBucket ?? null) === (freshSnap.eloBucket ?? null);
+          if (!same) setAntiMetaResult(null);
+          return freshSnap;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, currentUserElo]);
+
+  useEffect(() => {
+    if (siteView !== 'app' || activeTab !== 'presets' || !showAntiMetaBuilder) return;
     const normTarget = normalizeLeagueName(antiMetaLeague);
     if (antiMetaResult && antiMetaResult.league === normTarget) return;
     let cancelled = false;
@@ -5860,11 +5916,17 @@ export default function App() {
       if (cancelled) return;
       try {
         const featuredList = [antiMetaFeat1.trim(), antiMetaFeat2.trim()].filter((s) => s.length > 0);
+        const effCrowd =
+          antiMetaCrowdSnap && normalizeLeagueName(antiMetaCrowdSnap.league) === normTarget
+            ? antiMetaCrowdSnap
+            : getCachedCrowdEloMetaForLeague(antiMetaLeague, currentUserElo);
         const res = generateAntiMetaTeamOptions(
           antiMetaLeague,
           featuredList,
           battleLogs,
-          activeSeasonBounds
+          activeSeasonBounds,
+          effCrowd,
+          currentUserElo
         );
         if (cancelled) return;
         const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
@@ -5882,7 +5944,7 @@ export default function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, webMembershipTier]);
+  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, webMembershipTier, antiMetaCrowdSnap, currentUserElo]);
 
   const handleSelectAntiMetaTeamOption = (option: AntiMetaTeamOption) => {
     const newId = `preset-antimeta-${Date.now()}`;
@@ -6206,7 +6268,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.40 • Android Native Overlay
+                  v7.41 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -14614,6 +14676,20 @@ export default function App() {
                       if (activeSession) headers['X-Vault-Session'] = activeSession;
                       if (webUnlockKey.trim()) headers['X-SilphScope-Unlock-Key'] = webUnlockKey.trim().toUpperCase();
 
+                      let localSettingsUpdAt = 0;
+                      let lastPushedSettingsMs = 0;
+                      try {
+                        localSettingsUpdAt = Number(localStorage.getItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY)) || 0;
+                        lastPushedSettingsMs = Number(localStorage.getItem('gbl_d1_last_pushed_settings_ms_v1')) || 0;
+                      } catch {}
+                      const shouldPushUserSettings = localSettingsUpdAt > lastPushedSettingsMs;
+                      const outgoingUserSettings = shouldPushUserSettings
+                        ? {
+                            [`S:${CURRENT_USER_ELO_STORAGE_KEY}`]:
+                              currentUserElo !== null ? String(currentUserElo) : ''
+                          }
+                        : undefined;
+
                       const syncRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
                         method: 'POST',
                         headers,
@@ -14624,6 +14700,12 @@ export default function App() {
                           unlockKey: webUnlockKey.trim().toUpperCase(),
                           sinceServerMs,
                           isInitialMigration: !alreadyMigrated,
+                          ...(shouldPushUserSettings
+                            ? {
+                                userSettings: outgoingUserSettings,
+                                settingsUpdatedAt: localSettingsUpdAt
+                              }
+                            : {}),
                           battleLogs: logsToPush,
                           teamPresets: teamsToPush,
                           builtPokemon: builtToPush,
@@ -14783,6 +14865,39 @@ export default function App() {
                         if (syncJson.serverSyncMs) {
                           localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(syncJson.serverSyncMs));
                           localStorage.setItem('gbl_d1_sync_cursor_user_v1', cleanName);
+                        }
+                        const pulledUserSettings =
+                          syncJson?.userSettings && typeof syncJson.userSettings === 'object'
+                            ? (syncJson.userSettings as Record<string, string>)
+                            : null;
+                        const pulledSettingsUpdAt = Number(syncJson?.settingsUpdatedAt) || 0;
+                        if (
+                          pulledUserSettings &&
+                          Object.prototype.hasOwnProperty.call(
+                            pulledUserSettings,
+                            `S:${CURRENT_USER_ELO_STORAGE_KEY}`
+                          ) &&
+                          (localSettingsUpdAt === 0 || pulledSettingsUpdAt > localSettingsUpdAt)
+                        ) {
+                          const syncedElo = setCurrentUserEloWeb(
+                            pulledUserSettings[`S:${CURRENT_USER_ELO_STORAGE_KEY}`],
+                            { touchUpdatedAt: false }
+                          );
+                          setCurrentUserElo(syncedElo);
+                          setEloHeaderDraft(syncedElo !== null ? String(syncedElo) : '');
+                          setAntiMetaResult(null);
+                          if (pulledSettingsUpdAt > 0) {
+                            localStorage.setItem(
+                              USER_SETTINGS_UPDATED_AT_STORAGE_KEY,
+                              String(pulledSettingsUpdAt)
+                            );
+                          }
+                        }
+                        if (shouldPushUserSettings) {
+                          localStorage.setItem(
+                            'gbl_d1_last_pushed_settings_ms_v1',
+                            String(Math.max(localSettingsUpdAt, pushStartedAtMs))
+                          );
                         }
                       } catch {}
 
@@ -15851,6 +15966,58 @@ export default function App() {
                     >
                       ☁️ Multi-Device Cloud Sync
                     </button>
+                    {appCombatMode !== 'show6' && (
+                      !eloHeaderEditOpen ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEloHeaderDraft(currentUserElo !== null ? String(currentUserElo) : '');
+                            setEloHeaderEditOpen(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition ${
+                            currentUserElo !== null
+                              ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-200'
+                              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="Set Current GBL ELO (300–3800) or Unranked (< R20)"
+                        >
+                          {currentUserElo !== null ? `🎯 ELO: ${currentUserElo}` : '🎯 ELO: Unranked (< R20)'}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 bg-slate-950 border border-amber-400/60 rounded-xl px-2.5 py-1">
+                          <span className="text-[10px] font-bold text-amber-300">🎯 ELO</span>
+                          <input
+                            type="number"
+                            min={300}
+                            max={3800}
+                            value={eloHeaderDraft}
+                            onChange={(e) => setEloHeaderDraft(e.target.value)}
+                            placeholder="300–3800"
+                            className="w-20 bg-transparent text-xs font-mono text-white outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleUpdateCurrentUserElo(eloHeaderDraft);
+                              setEloHeaderEditOpen(false);
+                            }}
+                            className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-extrabold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleUpdateCurrentUserElo(null);
+                              setEloHeaderEditOpen(false);
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold"
+                          >
+                            Clear
+                          </button>
+                        </span>
+                      )
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
@@ -16434,6 +16601,23 @@ export default function App() {
                                     <span className="font-bold text-sky-400">
                                       {entry.league}
                                     </span>
+                                    {typeof entry.userElo === 'number' && entry.userElo >= 300 && entry.userElo <= 3800 && (
+                                      <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-amber-500/20 text-amber-200 border border-amber-400/40 font-mono">
+                                        🎯 {entry.userElo}
+                                      </span>
+                                    )}
+                                    {(() => {
+                                      const spiceList = resolveNonStandardObservedMoves(entry.oppObservedMoves, entry.league);
+                                      if (spiceList.length === 0) return null;
+                                      return (
+                                        <span
+                                          className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-rose-500/20 text-rose-200 border border-rose-400/40"
+                                          title="Confirmed non-standard PvP move(s) observed"
+                                        >
+                                          🌶️ Spice: {spiceList.join(' • ')}
+                                        </span>
+                                      );
+                                    })()}
                                     <span className="text-[11px] font-mono text-slate-400">
                                       {new Date(entry.timestampMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                                     </span>
@@ -16765,6 +16949,31 @@ export default function App() {
                           />
                         </div>
                       ))}
+                      <div>
+                        <label className="block text-[10px] text-amber-300 font-bold mb-0.5">
+                          Battle ELO Rating (Optional: 300–3800, blank = Unranked &lt; R20)
+                        </label>
+                        <input
+                          type="number"
+                          min={300}
+                          max={3800}
+                          value={editingLogEntry.userElo ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            if (!raw) {
+                              setEditingLogEntry({ ...editingLogEntry, userElo: null });
+                            } else {
+                              const num = Math.round(Number(raw));
+                              setEditingLogEntry({
+                                ...editingLogEntry,
+                                userElo: Number.isFinite(num) ? num : null
+                              });
+                            }
+                          }}
+                          placeholder="e.g. 2307 (blank = Unranked)"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
@@ -16778,14 +16987,18 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
+                          const normalizedEditEntry = {
+                            ...editingLogEntry,
+                            userElo: sanitizeUserEloWeb(editingLogEntry.userElo)
+                          };
                           const recomputedQuality = resolveLogEntryQuality(
-                            { ...editingLogEntry, quality: undefined },
+                            { ...normalizedEditEntry, quality: undefined },
                             presets
                           );
                           const updated = battleLogs.map((b) =>
-                            b.id === editingLogEntry.id
+                            b.id === normalizedEditEntry.id
                               ? {
-                                  ...editingLogEntry,
+                                  ...normalizedEditEntry,
                                   bmfScore: recomputedQuality ? recomputedQuality.pPre : null,
                                   execWae: recomputedQuality ? recomputedQuality.execWae : null,
                                   badges: recomputedQuality ? [recomputedQuality.badgeLabel] : [],
@@ -17201,6 +17414,8 @@ export default function App() {
             setGblLogWeightCapPct={setGblLogWeightCapPct}
             webMembershipTier={webMembershipTier}
             onOpenMembershipModal={() => setShowMembershipModal(true)}
+            currentUserElo={currentUserElo}
+            onChangeCurrentUserElo={handleUpdateCurrentUserElo}
             onBuildAntiNemesisTeam={(lg) => {
               setAntiMetaLeague(lg);
               setActiveTab('presets');
@@ -17869,7 +18084,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.40 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.41 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

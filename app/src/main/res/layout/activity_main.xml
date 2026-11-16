@@ -283,6 +283,77 @@
     </LinearLayout>
 
     <!-- ===================================================================
+         FEATURE #6: DISMISSIBLE IN-APP APK UPDATE BANNER (v7.41)
+         =================================================================== -->
+    <LinearLayout
+        android:id="@+id/layout_app_update_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0c4a6e"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="8dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/text_app_update_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🚀 Update Available"
+                android:textColor="#e0f2fe"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_app_update_download"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="10dp"
+                android:text="⬇️ Download APK"
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#38bdf8"
+                android:textColor="#082f49"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btn_app_update_dismiss"
+                android:layout_width="32dp"
+                android:layout_height="30dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="✕"
+                android:textSize="10.5sp"
+                android:backgroundTint="#0369a1"
+                android:textColor="#ffffff" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_app_update_notes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#bae6fd"
+            android:textSize="10.5sp"
+            android:lineSpacingExtra="1.5dp"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+
+    <!-- ===================================================================
          PAGE 1: GBL TEAM PRESETS (Default Active Page)
          =================================================================== -->
     <LinearLayout
@@ -1561,6 +1632,98 @@
                     android:textColor="#fbbf24"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />
+
+                <!-- Current GBL ELO Row (Feature #3) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:id="@+id/text_settings_current_elo_val"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🎯 Current GBL ELO: Unranked (&lt; R20)"
+                        android:textColor="#cbd5e1"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btn_settings_edit_elo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="10dp"
+                        android:text="Edit ELO"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btn_settings_clear_elo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="Reset"
+                        android:textSize="10.5sp"
+                        android:backgroundTint="#334155"
+                        android:textColor="#cbd5e1" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================================================================
+                 IN-APP APK UPDATE CHECKER (Feature #6)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_app_update"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🚀 App Updates &amp; Release Channel"
+                    android:textColor="#38bdf8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_settings_app_update_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Installed Version • Tap below to check GitHub Releases for newer APK builds."
+                    android:textColor="#94a3b8"
+                    android:textSize="10.5sp"
+                    android:lineSpacingExtra="1.5dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btn_settings_check_app_update"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:text="🔄 Check for App Update"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
             </LinearLayout>
 
             <!-- ===================================================================
@@ -4439,16 +4602,40 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="GBL Battle Log &amp; Replay"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textColor="#e2e8f0"
-            android:layout_marginBottom="6dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:text="GBL Battle Log &amp; Replay"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#e2e8f0" />
+
+            <Button
+                android:id="@+id/btn_battle_log_elo_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="9dp"
+                android:singleLine="true"
+                android:text="🎯 Unranked (&lt; R20)"
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#1e293b"
+                android:textColor="#38bdf8" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -4946,6 +5133,23 @@
                 android:textSize="14.5sp"
                 android:textStyle="bold"
                 android:textColor="#e2e8f0" />
+
+            <Button
+                android:id="@+id/btn_meta_tab_elo_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="8dp"
+                android:singleLine="true"
+                android:text="🎯 Unranked (&lt; R20)"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#1e293b"
+                android:textColor="#38bdf8"
+                android:layout_marginEnd="6dp" />
 
             <TextView
                 android:id="@+id/tv_meta_mode_badge"

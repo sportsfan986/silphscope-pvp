@@ -432,8 +432,9 @@ internal fun OverlayService.Companion.decryptVaultSecretForGitHubUserStatic(
     return null
 }
 
-private val SYNCABLE_STRING_PREF_KEYS = listOf(
+private val SYNCABLE_STRING_PREF_KEYS: List<String> = listOf(
     PREFS_KEY_USER_SCREEN_NAME,
+    OverlayService.PREFS_KEY_CURRENT_USER_ELO,
     OverlayService.PREFS_KEY_APP_THEME_ID,
     OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION,
     OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE,
@@ -584,6 +585,14 @@ internal fun OverlayService.Companion.applySyncedSettingsMapStatic(
                 } else if (key == PREFS_KEY_USER_SCREEN_NAME) {
                     val clean = OverlayService.sanitizeScreenNameStatic(rawVal)
                     if (clean.isNotEmpty()) editor.putString(key, clean)
+                } else if (key == OverlayService.PREFS_KEY_CURRENT_USER_ELO) {
+                    val parsedElo = rawVal.trim().toIntOrNull()?.takeIf { it in 300..3800 }
+                    if (parsedElo != null) {
+                        editor.putString(key, parsedElo.toString())
+                    } else {
+                        editor.putString(key, "")
+                    }
+                    OverlayService.activeCurrentUserElo = parsedElo
                 } else {
                     editor.putString(key, rawVal)
                 }

@@ -2182,6 +2182,300 @@ async function ensureBuiltPokemonTable(db) {
   }
 }
 
+let battleLogsEloColsEnsured = false;
+
+async function ensureBattleLogsEloAndMovesColumns(db) {
+  if (!db || battleLogsEloColsEnsured) return;
+  try {
+    await db.prepare('ALTER TABLE battle_logs ADD COLUMN user_elo INTEGER').run();
+  } catch (_) {}
+  try {
+    await db.prepare('ALTER TABLE battle_logs ADD COLUMN opp_moves_json TEXT').run();
+  } catch (_) {}
+  try {
+    await db
+      .prepare(
+        'CREATE INDEX IF NOT EXISTS idx_battle_logs_crowd_elo ON battle_logs (league, season_id, deleted, combat_mode, user_elo)'
+      )
+      .run();
+    battleLogsEloColsEnsured = true;
+  } catch (err) {
+    console.warn('ensureBattleLogsEloAndMovesColumns index warning:', err?.message || err);
+  }
+}
+
+function sanitizeUserEloValue(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const cleaned = typeof raw === 'string' ? raw.replace(/,/g, '').trim() : raw;
+  const num = Number(cleaned);
+  if (!Number.isFinite(num)) return null;
+  const intVal = Math.round(num);
+  if (intVal < 300 || intVal > 3800) return null;
+  return intVal;
+}
+
+function sanitizeOppObservedMovesJson(rawMoves) {
+  if (!Array.isArray(rawMoves) || rawMoves.length === 0) return null;
+  const cleaned = [];
+  for (const item of rawMoves.slice(0, 3)) {
+    if (!item || typeof item !== 'object') continue;
+    const species = cleanPokemonSpeciesName(item.species);
+    if (!species) continue;
+    const rawStatus = String(item.fastStatus || '').trim().toUpperCase();
+    const fastStatus =
+      rawStatus === 'CONFIRMED_NONSTD' || rawStatus === 'CONFIRMED_STD'
+        ? rawStatus
+        : 'UNCONFIRMED';
+    const fastMoveRaw =
+      typeof item.fastMove === 'string' ? item.fastMove.trim().slice(0, 48) : '';
+    const fastMove =
+      fastMoveRaw && (fastStatus === 'CONFIRMED_NONSTD' || fastStatus === 'CONFIRMED_STD')
+        ? fastMoveRaw
+        : null;
+    const chargedList = Array.isArray(item.chargedMoves)
+      ? Array.from(
+          new Set(
+            item.chargedMoves
+              .map((m) => String(m || '').trim().slice(0, 48))
+              .filter(Boolean)
+          )
+        ).slice(0, 4)
+      : [];
+    if (!fastMove && chargedList.length === 0) continue;
+    cleaned.push({
+      species,
+      ...(fastMove ? { fastMove, fastStatus } : {}),
+      ...(chargedList.length > 0 ? { chargedMoves: chargedList } : {}),
+    });
+  }
+  if (cleaned.length === 0) return null;
+  const encoded = JSON.stringify(cleaned);
+  return encoded.length <= 2048 ? encoded : null;
+}
+
+function parseSemanticVersionCode(tagOrVer) {
+  const m = String(tagOrVer || '').match(/v?(\d+)\.(\d+)/i);
+  if (!m) return 0;
+  const major = Number(m[1]) || 0;
+  const minor = Number(m[2]) || 0;
+  return 1000 + major * 100 + minor;
+}
+
+function extractReleaseHighlightsFromBody(bodyText, maxItems = 5) {
+  const lines = String(bodyText || '').split(/\r?\n/);
+  const highlights = [];
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)$/);
+    if (!bulletMatch) continue;
+    let text = bulletMatch[1]
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text.length < 6) continue;
+    if (text.length > 140) {
+      text = text.slice(0, 137).trimEnd() + '...';
+    }
+    highlights.push(text);
+    if (highlights.length >= maxItems) break;
+  }
+  if (highlights.length === 0) {
+    for (const rawLine of lines) {
+      const cleaned = rawLine
+        .replace(/^#+\s*/, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cleaned.length >= 10 && !cleaned.toLowerCase().startsWith('full changelog')) {
+        highlights.push(cleaned.length > 140 ? cleaned.slice(0, 137).trimEnd() + '...' : cleaned);
+        if (highlights.length >= maxItems) break;
+      }
+    }
+  }
+  return highlights;
+}
+
+async function buildCrowdEloMetaSummaryFromD1(
+  db,
+  { league = 'GREAT LEAGUE', seasonId = '', combatMode = 'gbl', targetElo = null } = {}
+) {
+  await ensureBattleLogsEloAndMovesColumns(db);
+  const normLeague = String(league || 'GREAT LEAGUE').trim().toUpperCase().slice(0, 64) || 'GREAT LEAGUE';
+  const normSeason = String(seasonId || computeGblSeasonId(Date.now())).trim().slice(0, 32);
+  const normMode = String(combatMode || 'gbl').trim().toLowerCase() === 'show6' ? 'show6' : 'gbl';
+  const cleanTargetElo = sanitizeUserEloValue(targetElo);
+  const eloBucket = cleanTargetElo !== null ? Math.round(cleanTargetElo / 50) * 50 : null;
+
+  // Aggregates across ALL active trainers INCLUDING the requesting user's own uploaded logs
+  const res = await db
+    .prepare(
+      `SELECT screen_name, opp_lead, opp_back1, opp_back2, user_elo, opp_moves_json, timestamp_ms
+       FROM battle_logs
+       WHERE deleted = 0 AND league = ?1 AND season_id = ?2 AND combat_mode = ?3
+       ORDER BY timestamp_ms DESC
+       LIMIT 2500`
+    )
+    .bind(normLeague, normSeason, normMode)
+    .all();
+
+  const rows = Array.isArray(res?.results) ? res.results : [];
+  let eloTaggedRows = 0;
+  let eloEffSum = 0;
+  if (eloBucket !== null) {
+    for (const row of rows) {
+      const rElo = sanitizeUserEloValue(row.user_elo);
+      if (rElo !== null) {
+        eloTaggedRows++;
+        const kW = Math.max(0.05, Math.exp(-Math.pow((rElo - eloBucket) / 225.0, 2)));
+        eloEffSum += kW;
+      }
+    }
+  } else {
+    for (const row of rows) {
+      if (sanitizeUserEloValue(row.user_elo) !== null) eloTaggedRows++;
+    }
+  }
+
+  const alphaFallback =
+    eloBucket === null ? 1.0 : Math.max(0.0, Math.min(1.0, 1.0 - eloEffSum / 15.0));
+
+  const leadWeights = new Map();
+  const backWeights = new Map();
+  const fieldWeights = new Map();
+  const speciesMovesMap = new Map();
+  const trainers = new Set();
+
+  let leadSum = 0;
+  let backSum = 0;
+  let fieldSum = 0;
+  let effectiveSampleSize = 0;
+
+  for (const row of rows) {
+    const rElo = sanitizeUserEloValue(row.user_elo);
+    let wRow = 1.0;
+    if (eloBucket !== null) {
+      if (rElo !== null) {
+        const kW = Math.max(0.05, Math.exp(-Math.pow((rElo - eloBucket) / 225.0, 2)));
+        wRow = (1.0 - alphaFallback) * kW + alphaFallback * 1.0;
+      } else {
+        wRow = (1.0 - alphaFallback) * 0.20 + alphaFallback * 1.0;
+      }
+    }
+    effectiveSampleSize += wRow;
+    if (row.screen_name) trainers.add(String(row.screen_name).toLowerCase());
+
+    const leadSp = cleanPokemonSpeciesName(row.opp_lead);
+    const back1Sp = cleanPokemonSpeciesName(row.opp_back1);
+    const back2Sp = cleanPokemonSpeciesName(row.opp_back2);
+
+    if (leadSp) {
+      leadWeights.set(leadSp, (leadWeights.get(leadSp) || 0) + wRow);
+      leadSum += wRow;
+      fieldWeights.set(leadSp, (fieldWeights.get(leadSp) || 0) + wRow);
+      fieldSum += wRow;
+    }
+    for (const bSp of [back1Sp, back2Sp]) {
+      if (!bSp) continue;
+      backWeights.set(bSp, (backWeights.get(bSp) || 0) + wRow);
+      backSum += wRow;
+      fieldWeights.set(bSp, (fieldWeights.get(bSp) || 0) + wRow);
+      fieldSum += wRow;
+    }
+
+    if (row.opp_moves_json && typeof row.opp_moves_json === 'string') {
+      try {
+        const parsedMoves = JSON.parse(row.opp_moves_json);
+        if (Array.isArray(parsedMoves)) {
+          for (const obs of parsedMoves.slice(0, 3)) {
+            if (!obs || typeof obs !== 'object') continue;
+            const sp = cleanPokemonSpeciesName(obs.species);
+            if (!sp) continue;
+            let entry = speciesMovesMap.get(sp);
+            if (!entry) {
+              entry = {
+                fastTotalWeight: 0,
+                chargedTotalWeight: 0,
+                fast: new Map(),
+                charged: new Map(),
+              };
+              speciesMovesMap.set(sp, entry);
+            }
+            const fStatus = String(obs.fastStatus || '').toUpperCase();
+            const fMove = typeof obs.fastMove === 'string' ? obs.fastMove.trim() : '';
+            if (fMove && (fStatus === 'CONFIRMED_NONSTD' || fStatus === 'CONFIRMED_STD')) {
+              entry.fast.set(fMove, (entry.fast.get(fMove) || 0) + wRow);
+              entry.fastTotalWeight += wRow;
+            }
+            if (Array.isArray(obs.chargedMoves) && obs.chargedMoves.length > 0) {
+              const uniqueCharged = Array.from(
+                new Set(obs.chargedMoves.map((m) => String(m || '').trim()).filter(Boolean))
+              );
+              if (uniqueCharged.length > 0) {
+                entry.chargedTotalWeight += wRow;
+                for (const cm of uniqueCharged) {
+                  entry.charged.set(cm, (entry.charged.get(cm) || 0) + wRow);
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  const normalizeShareMap = (m, total, maxEntries = 120) => {
+    const out = {};
+    if (total <= 0) return out;
+    const sorted = Array.from(m.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxEntries);
+    for (const [k, v] of sorted) {
+      out[k] = Number((v / total).toFixed(5));
+    }
+    return out;
+  };
+
+  const speciesMovesOut = {};
+  for (const [sp, rec] of speciesMovesMap.entries()) {
+    if (rec.fastTotalWeight <= 0 && rec.chargedTotalWeight <= 0) continue;
+    const fastObj = {};
+    for (const [fm, w] of rec.fast.entries()) {
+      fastObj[fm] = Number(w.toFixed(3));
+    }
+    const chargedObj = {};
+    for (const [cm, w] of rec.charged.entries()) {
+      chargedObj[cm] = Number(w.toFixed(3));
+    }
+    speciesMovesOut[sp] = {
+      fastTotalWeight: Number(rec.fastTotalWeight.toFixed(3)),
+      chargedTotalWeight: Number(rec.chargedTotalWeight.toFixed(3)),
+      fast: fastObj,
+      charged: chargedObj,
+    };
+  }
+
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    league: normLeague,
+    seasonId: normSeason,
+    combatMode: normMode,
+    eloBucket,
+    totalRows: rows.length,
+    eloTaggedRows,
+    effectiveSampleSize: Number(effectiveSampleSize.toFixed(2)),
+    uniqueTrainers: trainers.size,
+    leadShares: normalizeShareMap(leadWeights, leadSum, 120),
+    backShares: normalizeShareMap(backWeights, backSum, 120),
+    fieldShares: normalizeShareMap(fieldWeights, fieldSum, 120),
+    speciesMoves: speciesMovesOut,
+  };
+}
+
 async function upsertVaultBatchIntoD1(
   db,
   screenName,
@@ -2203,6 +2497,7 @@ async function upsertVaultBatchIntoD1(
   if (!cleanUser) throw new Error('Invalid screenName');
 
   await ensureBuiltPokemonTable(db);
+  await ensureBattleLogsEloAndMovesColumns(db);
 
   const nowMs = Date.now();
   const incomingLogs = Array.isArray(battleLogs) ? battleLogs : [];
@@ -2288,12 +2583,14 @@ async function upsertVaultBatchIntoD1(
       screen_name, log_id, season_id, league, combat_mode, result, lead_matchup,
       user_lead, user_back1, user_back2, opp_lead, opp_back1, opp_back2,
       first_swap_actor, switch_advantage, bmf_score, exec_wae,
-      timestamp_ms, updated_at, server_updated_ms, deleted, source, payload_json
+      timestamp_ms, updated_at, server_updated_ms, deleted, source, payload_json,
+      user_elo, opp_moves_json
     ) VALUES (
       ?1, ?2, ?3, ?4, ?5, ?6, ?7,
       ?8, ?9, ?10, ?11, ?12, ?13,
       ?14, ?15, ?16, ?17,
-      ?18, ?19, ?20, ?21, ?22, ?23
+      ?18, ?19, ?20, ?21, ?22, ?23,
+      ?24, ?25
     )
     ON CONFLICT(screen_name, log_id) DO UPDATE SET
       season_id = excluded.season_id,
@@ -2316,10 +2613,14 @@ async function upsertVaultBatchIntoD1(
       server_updated_ms = excluded.server_updated_ms,
       deleted = excluded.deleted,
       source = excluded.source,
+      user_elo = COALESCE(excluded.user_elo, battle_logs.user_elo),
+      opp_moves_json = CASE WHEN excluded.opp_moves_json IS NOT NULL AND excluded.opp_moves_json != '' THEN excluded.opp_moves_json ELSE battle_logs.opp_moves_json END,
       payload_json = CASE WHEN excluded.deleted = 1 AND battle_logs.payload_json != '' THEN battle_logs.payload_json ELSE excluded.payload_json END
     WHERE excluded.updated_at > battle_logs.updated_at
        OR excluded.deleted != battle_logs.deleted
        OR (excluded.updated_at = battle_logs.updated_at AND excluded.deleted = 0 AND excluded.payload_json != battle_logs.payload_json)
+       OR (excluded.user_elo IS NOT NULL AND battle_logs.user_elo IS NULL)
+       OR (excluded.opp_moves_json IS NOT NULL AND excluded.opp_moves_json != '' AND (battle_logs.opp_moves_json IS NULL OR battle_logs.opp_moves_json = ''))
   `;
 
   for (const rawLog of incomingLogs) {
@@ -2347,6 +2648,8 @@ async function upsertVaultBatchIntoD1(
     const wae = rawLog.execWae !== null && rawLog.execWae !== undefined && Number.isFinite(Number(rawLog.execWae))
       ? Number(rawLog.execWae)
       : null;
+    const userElo = sanitizeUserEloValue(rawLog.userElo);
+    const oppMovesJson = sanitizeOppObservedMovesJson(rawLog.oppObservedMoves);
     const payloadStr = JSON.stringify(rawLog);
     if (payloadStr.length > 131072) continue;
 
@@ -2374,7 +2677,9 @@ async function upsertVaultBatchIntoD1(
         nowMs,
         isDel,
         String(source || 'app_sync').slice(0, 32),
-        payloadStr
+        payloadStr,
+        userElo,
+        oppMovesJson
       )
     );
     logsUpserted++;
@@ -7720,6 +8025,8 @@ export default {
       const isPublicStreamOrAsset =
         path.startsWith('/v1/replays/stream/') ||
         path === '/v1/replays/featured' ||
+        path === '/v1/meta/crowd-elo' ||
+        path === '/v1/version/latest' ||
         path === '/overlay.html';
       return new Response(null, {
         status: 204,
@@ -7827,6 +8134,172 @@ self.addEventListener('fetch', (e) => {
         }),
       });
     }
+    if (isGetOrHead && path === '/v1/version/latest') {
+      try {
+        const ghHeaders = {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.41',
+        };
+        if (env.GITHUB_PUBLIC_READ_TOKEN) {
+          ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
+        }
+        let ghRes = await fetch(
+          'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
+          {
+            headers: ghHeaders,
+            cf: { cacheTtl: 300, cacheEverything: true },
+          }
+        );
+        if (ghRes.status === 401 && ghHeaders.Authorization) {
+          delete ghHeaders.Authorization;
+          ghRes = await fetch(
+            'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
+            {
+              headers: ghHeaders,
+              cf: { cacheTtl: 300, cacheEverything: true },
+            }
+          );
+        }
+        if (!ghRes.ok) {
+          return jsonResponse(
+            { ok: false, error: `GitHub release lookup failed (${ghRes.status})` },
+            502,
+            request,
+            false
+          );
+        }
+        const release = await ghRes.json();
+        const rawTag = String(release.tag_name || release.name || '').trim();
+        const verMatch = rawTag.match(/v?(\d+\.\d+)/i);
+        const latestVersion = verMatch ? `v${verMatch[1]}` : rawTag;
+        const versionCode = parseSemanticVersionCode(latestVersion);
+        const releaseTitle = String(release.name || latestVersion).trim();
+        const publishedAt = release.published_at || null;
+        const highlights = extractReleaseHighlightsFromBody(release.body || '', 5);
+        return new Response(
+          request.method === 'HEAD'
+            ? null
+            : JSON.stringify(
+                {
+                  ok: true,
+                  latestVersion,
+                  versionCode,
+                  releaseTitle,
+                  publishedAt,
+                  highlights,
+                  downloadUrl: 'https://dl.silphscopepvp.com',
+                },
+                null,
+                2
+              ),
+          {
+            status: 200,
+            headers: buildSecurityHeaders({
+              'Content-Type': 'application/json; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=300',
+            }),
+          }
+        );
+      } catch (err) {
+        return jsonResponse(
+          { ok: false, error: err?.message || 'GitHub release lookup unavailable' },
+          502,
+          request,
+          false
+        );
+      }
+    }
+
+    if (isGetOrHead && path === '/v1/meta/crowd-elo') {
+      if (!env.SYNC_DB) {
+        return jsonResponse(
+          { ok: false, error: 'SYNC_DB (Cloudflare D1) is not configured on this Worker.' },
+          500,
+          request,
+          false
+        );
+      }
+      const reqLeague = String(url.searchParams.get('league') || 'GREAT LEAGUE')
+        .trim()
+        .toUpperCase()
+        .slice(0, 64) || 'GREAT LEAGUE';
+      const reqSeason = String(url.searchParams.get('seasonId') || computeGblSeasonId(Date.now()))
+        .trim()
+        .slice(0, 32);
+      const reqMode =
+        String(url.searchParams.get('combatMode') || 'gbl').trim().toLowerCase() === 'show6'
+          ? 'show6'
+          : 'gbl';
+      const reqElo = sanitizeUserEloValue(url.searchParams.get('elo'));
+      const eloBucketKey = reqElo !== null ? String(Math.round(reqElo / 50) * 50) : 'ALL';
+
+      const cacheUrl = new URL(request.url);
+      cacheUrl.search = `?league=${encodeURIComponent(reqLeague)}&seasonId=${encodeURIComponent(
+        reqSeason
+      )}&combatMode=${encodeURIComponent(reqMode)}&eloBucket=${encodeURIComponent(eloBucketKey)}`;
+      const cacheKey = new Request(cacheUrl.toString(), { method: 'GET' });
+      const edgeCache = caches?.default;
+      if (edgeCache) {
+        try {
+          const cachedResp = await edgeCache.match(cacheKey);
+          if (cachedResp) {
+            return new Response(request.method === 'HEAD' ? null : cachedResp.body, {
+              status: 200,
+              headers: buildSecurityHeaders({
+                'Content-Type': 'application/json; charset=utf-8',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=600',
+                'X-SilphScope-Cache': 'HIT',
+              }),
+            });
+          }
+        } catch (_) {}
+      }
+
+      try {
+        const summary = await buildCrowdEloMetaSummaryFromD1(env.SYNC_DB, {
+          league: reqLeague,
+          seasonId: reqSeason,
+          combatMode: reqMode,
+          targetElo: reqElo,
+        });
+        const bodyJson = JSON.stringify(summary);
+        const respHeaders = buildSecurityHeaders({
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=600',
+          'X-SilphScope-Cache': 'MISS',
+        });
+        const resp = new Response(request.method === 'HEAD' ? null : bodyJson, {
+          status: 200,
+          headers: respHeaders,
+        });
+        if (edgeCache && request.method === 'GET' && ctx?.waitUntil) {
+          ctx.waitUntil(
+            edgeCache.put(
+              cacheKey,
+              new Response(bodyJson, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'application/json; charset=utf-8',
+                  'Cache-Control': 'public, max-age=600',
+                },
+              })
+            )
+          );
+        }
+        return resp;
+      } catch (err) {
+        return jsonResponse(
+          { ok: false, error: err?.message || 'Crowd ELO meta query failed' },
+          500,
+          request,
+          false
+        );
+      }
+    }
+
     if (
       isGetOrHead &&
       (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk')

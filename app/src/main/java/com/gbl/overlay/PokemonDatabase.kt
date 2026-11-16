@@ -3370,7 +3370,10 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     myIsBestBuddy: Boolean = false,
     oppIvs: String? = null,
     oppCp: Int? = null,
-    oppIsBestBuddy: Boolean = false
+    oppIsBestBuddy: Boolean = false,
+    oppFastMove: String? = null,
+    oppCharged1: String? = null,
+    oppCharged2: String? = null
 ): Int {
     val sUser = userShields.coerceIn(0, 2)
     val sOpp = oppShields.coerceIn(0, 2)
@@ -3567,6 +3570,14 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
 
         val totalDelta = chargedDelta + fastDelta + effectiveShadowDelta + shieldAdvantageDelta + uniqueMechanicsDelta
         return (500.0 + totalDelta).coerceIn(150.0, 850.0)
+    }
+
+    val hasExplicitOppOverride = !oppFastMove.isNullOrBlank() || !oppCharged1.isNullOrBlank() || !oppCharged2.isNullOrBlank()
+    if (hasExplicitOppOverride) {
+        val effFast = oppFastMove?.takeIf { it.isNotBlank() } ?: oppMeta.defaultFastMove
+        val effC1 = oppCharged1?.takeIf { it.isNotBlank() } ?: oppMeta.chargedMove1
+        val effC2 = oppCharged2?.takeIf { it.isNotBlank() } ?: oppMeta.chargedMove2.ifBlank { effC1 }
+        return evaluateAgainstOppMoveset(effFast, effC1, effC2).roundToInt().coerceIn(150, 850)
     }
 
     val (oppFastPool, oppChargedPool) = getAvailableMovePoolForSpeciesStatic(oppMeta.name, league)

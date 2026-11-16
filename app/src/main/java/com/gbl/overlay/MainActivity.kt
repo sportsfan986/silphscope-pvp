@@ -241,6 +241,19 @@ class MainActivity : AppCompatActivity() {
     private var isMetaSettingsDrawerExpanded: Boolean = false
     private var isUpdatingMetaLeagueSpinner: Boolean = false
     private var metaDashboardJob: kotlinx.coroutines.Job? = null
+    private lateinit var layoutAppUpdateBanner: LinearLayout
+    private lateinit var textAppUpdateTitle: TextView
+    private lateinit var textAppUpdateNotes: TextView
+    private lateinit var btnAppUpdateDownload: Button
+    private lateinit var btnAppUpdateDismiss: Button
+    private lateinit var textSettingsCurrentEloVal: TextView
+    private lateinit var btnSettingsEditElo: Button
+    private lateinit var btnSettingsClearElo: Button
+    private lateinit var textSettingsAppUpdateStatus: TextView
+    private lateinit var btnSettingsCheckAppUpdate: Button
+    private lateinit var btnBattleLogEloBadge: Button
+    private lateinit var btnMetaTabEloBadge: Button
+    private var activeUpdateReleaseInfo: OverlayService.Companion.AppUpdateReleaseInfo? = null
 
     private val APP_THEME_COLLECTION: List<AppThemePalette> by lazy {
         listOf(
@@ -584,7 +597,14 @@ class MainActivity : AppCompatActivity() {
                 refreshPresetsAndBattleLogsIfVisible()
             }
             updateTrainerScreenNameUi()
+            updateCurrentEloUiBadges()
             updateSyncStatusUi()
+            OverlayService.refreshCrowdEloMetaCacheAsync(
+                prefs = prefs,
+                league = getSelectedPreset()?.league ?: "GREAT LEAGUE",
+                userElo = OverlayService.getCurrentUserEloStatic(prefs)
+            )
+            checkForAppUpdateAsync(manual = false)
             // Automatically pull & reconcile deltas from SilphScope Cloudflare D1 Vault on app open / resume
             triggerTwoDeviceCloudSync(silent = true, isResumeCheck = true)
             retryPendingDvrBundlesInBackground()
@@ -1688,7 +1708,66 @@ class MainActivity : AppCompatActivity() {
         updateShieldChipTolUi()
         updateSwapRollbackWindowUi()
 
+        layoutAppUpdateBanner = findViewById(R.id.layout_app_update_banner)
+        textAppUpdateTitle = findViewById(R.id.text_app_update_title)
+        textAppUpdateNotes = findViewById(R.id.text_app_update_notes)
+        btnAppUpdateDownload = findViewById(R.id.btn_app_update_download)
+        btnAppUpdateDismiss = findViewById(R.id.btn_app_update_dismiss)
+        textSettingsCurrentEloVal = findViewById(R.id.text_settings_current_elo_val)
+        btnSettingsEditElo = findViewById(R.id.btn_settings_edit_elo)
+        btnSettingsClearElo = findViewById(R.id.btn_settings_clear_elo)
+        textSettingsAppUpdateStatus = findViewById(R.id.text_settings_app_update_status)
+        btnSettingsCheckAppUpdate = findViewById(R.id.btn_settings_check_app_update)
+        btnBattleLogEloBadge = findViewById(R.id.btn_battle_log_elo_badge)
+        btnMetaTabEloBadge = findViewById(R.id.btn_meta_tab_elo_badge)
+
         updateTrainerScreenNameUi()
+        updateCurrentEloUiBadges()
+        btnSettingsEditElo.setOnClickListener {
+            showEditCurrentEloDialog()
+        }
+        btnBattleLogEloBadge.setOnClickListener {
+            showEditCurrentEloDialog()
+        }
+        btnMetaTabEloBadge.setOnClickListener {
+            showEditCurrentEloDialog()
+        }
+        btnSettingsClearElo.setOnClickListener {
+            OverlayService.setCurrentUserEloStatic(prefs, null)
+            updateCurrentEloUiBadges()
+            OverlayService.refreshCrowdEloMetaCacheAsync(
+                prefs = prefs,
+                league = getSelectedPreset()?.league ?: "GREAT LEAGUE",
+                userElo = null,
+                forceRefresh = true
+            ) {
+                runOnUiThread {
+                    if (!isFinishing && currentActivePage == "meta") refreshMetaTabDashboard()
+                }
+            }
+            triggerTwoDeviceCloudSync(silent = true)
+            Toast.makeText(this, "🎯 Current GBL ELO reset to Unranked (< R20)", Toast.LENGTH_SHORT).show()
+        }
+        btnSettingsCheckAppUpdate.setOnClickListener {
+            checkForAppUpdateAsync(manual = true)
+        }
+        btnAppUpdateDownload.setOnClickListener {
+            val targetUrl = activeUpdateReleaseInfo?.downloadUrl?.takeIf { it.isNotBlank() }
+                ?: "https://dl.silphscopepvp.com"
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
+            } catch (e: Exception) {
+                Toast.makeText(this, "Could not open browser for APK download: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+        btnAppUpdateDismiss.setOnClickListener {
+            val verCode = activeUpdateReleaseInfo?.versionCode ?: 0
+            if (verCode > 0) {
+                prefs.edit().putInt(OverlayService.PREFS_KEY_DISMISSED_APP_UPDATE_VERSION, verCode).apply()
+            }
+            layoutAppUpdateBanner.visibility = android.view.View.GONE
+        }
+        renderAppUpdateUi(activeUpdateReleaseInfo, manual = false)
         btnSaveTrainerScreenName.setOnClickListener {
             saveTrainerScreenNameFromInput()
         }
@@ -2644,7 +2723,321 @@ class MainActivity : AppCompatActivity() {
             .apply()
     }
 
+    private fun formatEloBadgeLabel(elo: Int?): String {
+        return if (elo != null && elo in 300..3800) {
+            "🎯 ELO: ${String.format(java.util.Locale.US, "%,d", elo)}"
+        } else {
+            "🎯 Unranked (< R20)"
+        }
+    }
+
+    private fun updateCurrentEloUiBadges() {
+        if (!::prefs.isInitialized) return
+        val elo = OverlayService.getCurrentUserEloStatic(prefs)
+        val badgeLabel = formatEloBadgeLabel(elo)
+        if (::textSettingsCurrentEloVal.isInitialized) {
+            textSettingsCurrentEloVal.text = if (elo != null) {
+                "🎯 Current GBL ELO: ${String.format(java.util.Locale.US, "%,d", elo)}"
+            } else {
+                "🎯 Current GBL ELO: Unranked (< R20)"
+            }
+        }
+        if (::btnSettingsClearElo.isInitialized) {
+            btnSettingsClearElo.visibility = if (elo != null) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        if (::btnBattleLogEloBadge.isInitialized) {
+            btnBattleLogEloBadge.text = badgeLabel
+        }
+        if (::btnMetaTabEloBadge.isInitialized) {
+            btnMetaTabEloBadge.text = badgeLabel
+        }
+    }
+
+    private fun showEditCurrentEloDialog(onUpdated: ((Int?) -> Unit)? = null) {
+        if (!::prefs.isInitialized) return
+        val density = resources.displayMetrics.density
+        val pad = (14 * density).toInt()
+        val curElo = OverlayService.getCurrentUserEloStatic(prefs)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(pad, pad, pad, pad)
+        }
+        val descTv = TextView(this).apply {
+            text = "Enter your current GBL rating (300–3800), or leave blank for Unranked (< Rank 20). Automatically updates from End-of-Set and CURRENT SEASON lobby screens when screen capture is running."
+            setTextColor(0xFFCBD5E1.toInt())
+            textSize = 11.5f
+            setPadding(0, 0, 0, (10 * density).toInt())
+        }
+        val editElo = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "300 – 3800 (or blank = Unranked)"
+            setText(curElo?.toString().orEmpty())
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF64748B.toInt())
+            textSize = 14f
+        }
+        container.addView(descTv)
+        container.addView(editElo)
+
+        val dlg = AlertDialog.Builder(this)
+            .setTitle("🎯 Set Current GBL ELO")
+            .setView(wrapViewWithThemeWatermark(container, watermarkSizeDp = 200))
+            .setPositiveButton("Save ELO") { _, _ ->
+                val raw = editElo.text?.toString()?.trim().orEmpty()
+                val nextElo: Int? = if (raw.isEmpty()) {
+                    null
+                } else {
+                    val parsed = raw.replace(",", "").toIntOrNull()
+                    if (parsed == null || parsed !in 300..3800) {
+                        Toast.makeText(this, "Enter a valid rating between 300 and 3800, or leave blank.", Toast.LENGTH_LONG).show()
+                        return@setPositiveButton
+                    }
+                    parsed
+                }
+                OverlayService.setCurrentUserEloStatic(prefs, nextElo)
+                updateCurrentEloUiBadges()
+                OverlayService.refreshCrowdEloMetaCacheAsync(
+                    prefs = prefs,
+                    league = getSelectedPreset()?.league ?: "GREAT LEAGUE",
+                    userElo = nextElo,
+                    forceRefresh = true
+                ) {
+                    if (!isFinishing && currentActivePage == "meta") {
+                        refreshMetaTabDashboard()
+                    }
+                }
+                if (isOverlayRunning) {
+                    try {
+                        startService(Intent(this, OverlayService::class.java).apply {
+                            action = OverlayService.ACTION_UPDATE_SETTINGS
+                        })
+                    } catch (_: Exception) {}
+                }
+                triggerTwoDeviceCloudSync(silent = true)
+                Toast.makeText(
+                    this,
+                    if (nextElo != null) "🎯 ELO updated to $nextElo" else "🎯 ELO set to Unranked (< R20)",
+                    Toast.LENGTH_SHORT
+                ).show()
+                onUpdated?.invoke(nextElo)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        styleThemedAlertDialog(dlg)
+    }
+
+    private fun getInstalledAppVersionNameAndCode(): Pair<String, Int> {
+        return try {
+            val pi = packageManager.getPackageInfo(packageName, 0)
+            val vName = pi.versionName ?: OverlayService.APP_VERSION
+            val vCode = pi.longVersionCode.toInt()
+            vName to vCode
+        } catch (_: Exception) {
+            OverlayService.APP_VERSION to OverlayService.APP_VERSION_CODE
+        }
+    }
+
+    private fun parseLatestAppReleasePayload(rawJson: String): OverlayService.Companion.AppUpdateReleaseInfo? {
+        if (rawJson.isBlank()) return null
+        return try {
+            val root = com.google.gson.JsonParser.parseString(rawJson).asJsonObject
+            val tagName = (
+                root.get("tagName")?.takeIf { !it.isJsonNull }?.asString
+                    ?: root.get("tag_name")?.takeIf { !it.isJsonNull }?.asString
+                    ?: root.get("versionName")?.takeIf { !it.isJsonNull }?.asString
+                    ?: ""
+                ).trim()
+            val cleanVer = tagName.removePrefix("v").removePrefix("V").trim()
+            var verCode = root.get("versionCode")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+            if (verCode <= 0 && cleanVer.isNotEmpty()) {
+                val m = Regex("""(\d+)\.(\d+)""").find(cleanVer)
+                if (m != null) {
+                    val maj = m.groupValues[1].toIntOrNull() ?: 0
+                    val min = m.groupValues[2].toIntOrNull() ?: 0
+                    verCode = 1000 + maj * 100 + min
+                }
+            }
+            if (verCode <= 0) return null
+
+            val highlights = ArrayList<String>(5)
+            val arr = root.get("highlights")?.takeIf { it.isJsonArray }?.asJsonArray
+            if (arr != null) {
+                for (el in arr) {
+                    val line = el?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+                    if (line.isNotEmpty()) highlights.add(line)
+                    if (highlights.size >= 5) break
+                }
+            }
+            if (highlights.isEmpty()) {
+                val body = root.get("body")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                for (rawLine in body.lineSequence()) {
+                    val cleaned = rawLine.trim()
+                        .replace(Regex("""^[-*•]+\s*"""), "")
+                        .replace(Regex("""\*\*([^*]+)\*\*"""), "$1")
+                        .trim()
+                    if (cleaned.length >= 6 &&
+                        !cleaned.startsWith("#") &&
+                        !cleaned.startsWith(">") &&
+                        !cleaned.startsWith("```") &&
+                        !cleaned.lowercase().contains("sha256")
+                    ) {
+                        highlights.add(cleaned.take(120))
+                        if (highlights.size >= 5) break
+                    }
+                }
+            }
+            val dlUrl = root.get("downloadUrl")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                ?.takeIf { it.startsWith("https://") }
+                ?: "https://dl.silphscopepvp.com"
+            val htmlUrl = root.get("releaseNotesUrl")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                ?: root.get("html_url")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                ?: "https://github.com/sportsfan986/silphscope-pvp/releases/latest"
+            val pubAt = root.get("publishedAt")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                ?: root.get("published_at")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                ?: ""
+
+            OverlayService.Companion.AppUpdateReleaseInfo(
+                versionName = cleanVer.ifEmpty { tagName },
+                versionCode = verCode,
+                tagName = tagName.ifEmpty { "v$cleanVer" },
+                downloadUrl = dlUrl,
+                releaseNotesUrl = htmlUrl,
+                publishedAt = pubAt,
+                highlights = highlights,
+                checkedAtMs = System.currentTimeMillis()
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun renderAppUpdateUi(info: OverlayService.Companion.AppUpdateReleaseInfo?, manual: Boolean = false) {
+        if (!::prefs.isInitialized) return
+        val (installedName, installedCode) = getInstalledAppVersionNameAndCode()
+        val isNewer = info != null && info.versionCode > installedCode
+
+        if (::textSettingsAppUpdateStatus.isInitialized) {
+            when {
+                isNewer && info != null -> {
+                    val bullets = if (info.highlights.isNotEmpty()) {
+                        "\n" + info.highlights.take(4).joinToString("\n") { "• $it" }
+                    } else ""
+                    textSettingsAppUpdateStatus.text =
+                        "🆕 Update Available: ${info.tagName} (Installed: v$installedName • code $installedCode)$bullets"
+                    textSettingsAppUpdateStatus.setTextColor(0xFF34D399.toInt())
+                }
+                info != null -> {
+                    textSettingsAppUpdateStatus.text =
+                        "✅ Up to date: v$installedName (code $installedCode) • Latest Release: ${info.tagName}"
+                    textSettingsAppUpdateStatus.setTextColor(0xFF94A3B8.toInt())
+                }
+                else -> {
+                    textSettingsAppUpdateStatus.text =
+                        "Installed: v$installedName (code $installedCode) • Tap below to check GitHub Releases for newer APK builds."
+                    textSettingsAppUpdateStatus.setTextColor(0xFF94A3B8.toInt())
+                }
+            }
+        }
+
+        if (::layoutAppUpdateBanner.isInitialized) {
+            val dismissedCode = prefs.getInt(OverlayService.PREFS_KEY_DISMISSED_APP_UPDATE_VERSION, 0)
+            if (isNewer && info != null && (manual || dismissedCode < info.versionCode)) {
+                textAppUpdateTitle.text = "🚀 Update Available: ${info.tagName} (Your build: v$installedName)"
+                textAppUpdateNotes.text = if (info.highlights.isNotEmpty()) {
+                    info.highlights.take(5).joinToString("\n") { "• $it" }
+                } else {
+                    "New SilphScope PvP Android build ready at https://dl.silphscopepvp.com"
+                }
+                layoutAppUpdateBanner.visibility = android.view.View.VISIBLE
+            } else if (!isNewer) {
+                layoutAppUpdateBanner.visibility = android.view.View.GONE
+            }
+        }
+    }
+
+    private fun checkForAppUpdateAsync(manual: Boolean = false) {
+        if (!::prefs.isInitialized) return
+        val nowMs = System.currentTimeMillis()
+        val lastCheckMs = prefs.getLong(OverlayService.PREFS_KEY_LAST_APP_UPDATE_CHECK_MS, 0L)
+        val cachedJson = prefs.getString(OverlayService.PREFS_KEY_CACHED_APP_UPDATE_JSON, null)
+        val cachedParsed = if (!cachedJson.isNullOrBlank()) parseLatestAppReleasePayload(cachedJson) else null
+        if (cachedParsed != null) {
+            activeUpdateReleaseInfo = cachedParsed
+        }
+
+        if (!manual && (nowMs - lastCheckMs) < 4L * 60L * 60L * 1000L && cachedParsed != null) {
+            renderAppUpdateUi(cachedParsed, manual = false)
+            return
+        }
+
+        if (manual && ::btnSettingsCheckAppUpdate.isInitialized) {
+            btnSettingsCheckAppUpdate.isEnabled = false
+            btnSettingsCheckAppUpdate.text = "⏳ Checking for Updates..."
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            var fetched: OverlayService.Companion.AppUpdateReleaseInfo? = null
+            var rawBodyToCache: String? = null
+            val endpoints = listOf(
+                "${OverlayService.CLOUDFLARE_TELEMETRY_WORKER_URL}/v1/version/latest",
+                OverlayService.GITHUB_LATEST_RELEASE_API_URL
+            )
+            for (url in endpoints) {
+                try {
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("Accept", "application/json")
+                        .build()
+                    client.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val bodyStr = resp.body?.string().orEmpty()
+                            val parsed = parseLatestAppReleasePayload(bodyStr)
+                            if (parsed != null) {
+                                fetched = parsed
+                                rawBodyToCache = bodyStr
+                            }
+                        }
+                    }
+                    if (fetched != null) break
+                } catch (_: Exception) {}
+            }
+
+            if (fetched != null) {
+                activeUpdateReleaseInfo = fetched
+                val ed = prefs.edit().putLong(OverlayService.PREFS_KEY_LAST_APP_UPDATE_CHECK_MS, System.currentTimeMillis())
+                if (!rawBodyToCache.isNullOrBlank()) {
+                    ed.putString(OverlayService.PREFS_KEY_CACHED_APP_UPDATE_JSON, rawBodyToCache)
+                }
+                ed.apply()
+            }
+
+            withContext(Dispatchers.Main) {
+                if (isFinishing) return@withContext
+                if (::btnSettingsCheckAppUpdate.isInitialized) {
+                    btnSettingsCheckAppUpdate.isEnabled = true
+                    btnSettingsCheckAppUpdate.text = "🔄 Check for App Update"
+                }
+                val effInfo = fetched ?: cachedParsed
+                renderAppUpdateUi(effInfo, manual = manual)
+                if (manual) {
+                    val (installedName, installedCode) = getInstalledAppVersionNameAndCode()
+                    when {
+                        effInfo != null && effInfo.versionCode > installedCode ->
+                            Toast.makeText(this@MainActivity, "🚀 New release ${effInfo.tagName} available!", Toast.LENGTH_LONG).show()
+                        effInfo != null ->
+                            Toast.makeText(this@MainActivity, "✅ You are up to date (v$installedName)", Toast.LENGTH_SHORT).show()
+                        else ->
+                            Toast.makeText(this@MainActivity, "⚠️ Unable to reach release feed right now.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     private fun updateTrainerScreenNameUi() {
+        updateCurrentEloUiBadges()
         if (!::editTrainerScreenName.isInitialized || !::textTrainerScreenNameStatus.isInitialized) return
         val screenName = OverlayService.getRequiredScreenNameStatic(prefs)
         if (editTrainerScreenName.text?.toString()?.trim() != screenName) {
@@ -7402,7 +7795,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val metaTv = TextView(this).apply {
-                    text = "${entry.league.replace(" LEAGUE", "")} • ${timeFmt.format(java.util.Date(entry.timestampMs))}"
+                    val eloPart = entry.userElo?.takeIf { it in 300..3800 }?.let {
+                        "🎯 ${String.format(java.util.Locale.US, "%,d", it)} • "
+                    } ?: ""
+                    text = "$eloPart${entry.league.replace(" LEAGUE", "")} • ${timeFmt.format(java.util.Date(entry.timestampMs))}"
                     setTextColor(0xFF94A3B8.toInt())
                     textSize = 10.5f
                     gravity = android.view.Gravity.END
@@ -7585,6 +7981,32 @@ class MainActivity : AppCompatActivity() {
                         setPadding(pH, pV, pH, pV)
                     }
                     qualityRow.addView(unrankedTv)
+                }
+
+                val nonStdObserved = entry.oppObservedMoves.orEmpty().mapNotNull { obs ->
+                    val (spName, badMoves) = OverlayService.resolveNonStandardObservedMovesStatic(obs, entry.league)
+                    if (!spName.isNullOrBlank() && badMoves.isNotEmpty()) {
+                        "$spName (${badMoves.joinToString(", ")})"
+                    } else null
+                }
+                if (nonStdObserved.isNotEmpty()) {
+                    val spiceTv = TextView(this).apply {
+                        text = "🌶️ Spice: ${nonStdObserved.joinToString(" • ")}"
+                        setTextColor(0xFFFDE68A.toInt())
+                        setBackgroundColor(0x26F59E0B)
+                        textSize = 9.5f
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        val pH = (6 * density).toInt()
+                        val pV = (2.5f * density).toInt()
+                        setPadding(pH, pV, pH, pV)
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            topMargin = (4 * density).toInt()
+                        }
+                    }
+                    qualityRow.addView(spiceTv)
                 }
 
                 // v3.50 Permanent Main Log Summary Row: Final HP/Shields + First Swap Actor & Switch Advantage
@@ -7842,6 +8264,21 @@ class MainActivity : AppCompatActivity() {
         val editOpp1 = createOpponentAutoInput("1st Seen Opponent (Lead)", existing?.opponents?.getOrNull(0) ?: "")
         val editOpp2 = createOpponentAutoInput("2nd Seen Opponent (Switch)", existing?.opponents?.getOrNull(1) ?: "")
         val editOpp3 = createOpponentAutoInput("3rd Seen Opponent (Closer)", existing?.opponents?.getOrNull(2) ?: "")
+        val eloLabel = TextView(this).apply {
+            text = "Current GBL ELO (300–3800 • blank = Unranked < R20)"
+            setTextColor(0xFF94A3B8.toInt())
+            textSize = 11f
+            setPadding(0, (8 * density).toInt(), 0, 0)
+        }
+        val initialEloVal = if (existing != null) existing.userElo else OverlayService.getCurrentUserEloStatic(prefs)
+        val editDialogElo = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "300 – 3800 (optional)"
+            setText(initialEloVal?.toString().orEmpty())
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF64748B.toInt())
+            textSize = 13f
+        }
 
         container.addView(resultLabel)
         container.addView(spinnerResult)
@@ -7853,6 +8290,8 @@ class MainActivity : AppCompatActivity() {
         container.addView(editOpp1)
         container.addView(editOpp2)
         container.addView(editOpp3)
+        container.addView(eloLabel)
+        container.addView(editDialogElo)
 
         val themedContainer = wrapViewWithThemeWatermark(container, watermarkSizeDp = 220)
         val dialog = AlertDialog.Builder(this)
@@ -7865,6 +8304,23 @@ class MainActivity : AppCompatActivity() {
                     editOpp2.text.toString().trim(),
                     editOpp3.text.toString().trim()
                 ).filter { it.isNotEmpty() }
+
+                val rawEloTxt = editDialogElo.text?.toString()?.trim().orEmpty()
+                val parsedDialogElo: Int? = if (rawEloTxt.isEmpty()) {
+                    null
+                } else {
+                    val v = OverlayService.sanitizeUserEloStatic(rawEloTxt)
+                    if (v == null) {
+                        Toast.makeText(this, "⚠️ ELO must be 300–3800; kept previous value.", Toast.LENGTH_SHORT).show()
+                        initialEloVal
+                    } else {
+                        v
+                    }
+                }
+                if (existing == null && parsedDialogElo != OverlayService.getCurrentUserEloStatic(prefs)) {
+                    OverlayService.setCurrentUserEloStatic(prefs, parsedDialogElo)
+                    updateCurrentEloUiBadges()
+                }
 
                 val nowMs = System.currentTimeMillis()
                 val chosenLeague = chosenPreset?.league ?: existing?.league ?: "GREAT LEAGUE"
@@ -7901,6 +8357,8 @@ class MainActivity : AppCompatActivity() {
                     opponents = opps,
                     leadMatchup = leadsArr.getOrElse(spinnerLead.selectedItemPosition) { "NEUTRAL" },
                     result = chosenResult,
+                    userElo = parsedDialogElo,
+                    oppObservedMoves = existing?.oppObservedMoves ?: emptyList(),
                     deviceLabel = existing?.deviceLabel ?: (Build.MODEL ?: "Android"),
                     bmfScore = computedQuality?.pPre,
                     execWae = computedQuality?.execWae,
@@ -13385,6 +13843,13 @@ class MainActivity : AppCompatActivity() {
         val featuredList = listOf(f1, f2).filter { it.isNotEmpty() }
         val preloadedLogs = loadBattleLogs()
         val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedLogs)
+        val syncLogsForBuilder = OverlayService.loadSeasonSyncLogsForLeagueStatic(
+            prefs = prefs,
+            gson = gson,
+            league = lg,
+            isShow6 = false,
+            empiricalLimit = null
+        )
         val defaultNamePreview = OverlayService.formatAntiMetaDefaultTeamNameStatic(lg)
 
         val maxPerArch = when (tier) {
@@ -13404,7 +13869,9 @@ class MainActivity : AppCompatActivity() {
                 featuredPokemonNames = featuredList,
                 seasonLogs = seasonLogs,
                 maxTeamsPerArchetype = maxPerArch,
-                allowAltMovesets = allowAlt
+                allowAltMovesets = allowAlt,
+                seasonSyncLogs = syncLogsForBuilder,
+                prefsForCrowd = prefs
             )
             withContext(Dispatchers.Main) {
                 btnGenerateAntiMetaTeams.isEnabled = true
@@ -15564,15 +16031,29 @@ class MainActivity : AppCompatActivity() {
         }
         coresSubtitle?.text = "$selectedLeague • $scopeBanner"
         pokemonSubtitle?.text = "$selectedLeague • $scopeBanner"
+        if (empiricalLimit == null && ::prefs.isInitialized) {
+            OverlayService.refreshCrowdEloMetaCacheAsync(
+                prefs = prefs,
+                league = selectedLeague,
+                userElo = OverlayService.getCurrentUserEloStatic(prefs)
+            )
+        }
 
         metaDashboardJob?.cancel()
         metaDashboardJob = lifecycleScope.launch(Dispatchers.Default) {
+            val curElo = if (::prefs.isInitialized) OverlayService.getCurrentUserEloStatic(prefs) else OverlayService.activeCurrentUserElo
+            val crowdSnap = if (empiricalLimit == null && ::prefs.isInitialized) {
+                OverlayService.loadCrowdEloMetaForLeagueStatic(prefs, selectedLeague, curElo)
+            } else {
+                null
+            }
             val dist = OverlayService.computeBlendedSeasonMetaStatic(
                 league = selectedLeague,
                 seasonLogs = seasonLogs,
                 isShow6 = isShow6,
                 sameCpStandardLogs = sameCpStdLogs,
-                empiricalOnlyLimit = empiricalLimit
+                empiricalOnlyLimit = empiricalLimit,
+                crowdSnapshot = crowdSnap
             )
             val topCores = OverlayService.computeBlendedSeasonMetaCoresStatic(
                 league = selectedLeague,
@@ -15580,7 +16061,8 @@ class MainActivity : AppCompatActivity() {
                 isShow6 = isShow6,
                 sameCpStandardLogs = sameCpStdLogs,
                 empiricalOnlyLimit = empiricalLimit,
-                maxCores = 20
+                maxCores = 20,
+                precomputedDist = dist
             )
             val topPokemon = OverlayService.buildTopMetaPokemonEntriesStatic(
                 dist = dist,
@@ -15588,6 +16070,13 @@ class MainActivity : AppCompatActivity() {
             )
 
             withContext(Dispatchers.Main) {
+                updateCurrentEloUiBadges()
+                val crowdNote = if (empiricalLimit == null && dist.crowdWeightPct > 0 && dist.crowdMatchCount > 0) {
+                    val eloStr = dist.crowdTargetElo?.let { "ELO $it" } ?: "All ELOs"
+                    " • Crowd ($eloStr): ${dist.crowdWeightPct}% (${dist.crowdMatchCount} matches)"
+                } else ""
+                coresSubtitle?.text = "$selectedLeague • $scopeBanner$crowdNote"
+                pokemonSubtitle?.text = "$selectedLeague • $scopeBanner$crowdNote"
                 val density = resources.displayMetrics.density
                 val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
                 val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"

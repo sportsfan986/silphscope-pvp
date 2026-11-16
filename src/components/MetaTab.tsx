@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart2 } from 'lucide-react';
 import {
   type AppCombatMode,
   type LeagueType,
+  type CrowdEloMetaSnapshotWeb,
   normalizeLeagueName,
   getLeagueCpCap,
-  computeBlendedSeasonMeta
+  computeBlendedSeasonMeta,
+  getCurrentUserEloWeb,
+  setCurrentUserEloWeb,
+  sanitizeUserEloWeb,
+  fetchCrowdEloMetaForLeague
 } from '../data/gblData';
 import type { WebBattleLogEntry, GblSeasonInfo } from './AppThemeAndModels';
 
@@ -38,6 +43,8 @@ export interface MetaTabProps {
   webMembershipTier?: 'free' | 'supporter' | 'pro' | 'vip';
   onBuildAntiNemesisTeam?: (league: LeagueType, nemesisNames: string[]) => void;
   onOpenMembershipModal?: () => void;
+  currentUserElo?: number | null;
+  onChangeCurrentUserElo?: (nextElo: number | null) => void;
 }
 
 export function MetaTab(props: MetaTabProps) {
@@ -69,10 +76,39 @@ export function MetaTab(props: MetaTabProps) {
     setGblLogWeightCapPct,
     webMembershipTier = 'free',
     onBuildAntiNemesisTeam,
-    onOpenMembershipModal
+    onOpenMembershipModal,
+    currentUserElo,
+    onChangeCurrentUserElo
   } = props;
   const isProOrVip = webMembershipTier === 'pro' || webMembershipTier === 'vip';
-          const activeMetaLg = appCombatMode === 'show6' ? metaTabShow6League : metaTabGblLeague;
+  const [localUserElo, setLocalUserElo] = useState<number | null>(() => getCurrentUserEloWeb());
+  const effectiveUserElo = currentUserElo !== undefined ? sanitizeUserEloWeb(currentUserElo) : localUserElo;
+  const [eloEditorOpen, setEloEditorOpen] = useState(false);
+  const [eloDraft, setEloDraft] = useState<string>(() => (effectiveUserElo !== null ? String(effectiveUserElo) : ''));
+  const [crowdSnapshot, setCrowdSnapshot] = useState<CrowdEloMetaSnapshotWeb | null>(null);
+
+  useEffect(() => {
+    setEloDraft(effectiveUserElo !== null ? String(effectiveUserElo) : '');
+  }, [effectiveUserElo]);
+
+  const activeMetaLg = appCombatMode === 'show6' ? metaTabShow6League : metaTabGblLeague;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (appCombatMode === 'show6' || metaTabScope !== 'season') {
+      setCrowdSnapshot(null);
+      return;
+    }
+    fetchCrowdEloMetaForLeague(activeMetaLg, effectiveUserElo)
+      .then((snap) => {
+        if (!cancelled) setCrowdSnapshot(snap);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [appCombatMode, activeMetaLg, effectiveUserElo, metaTabScope]);
+
           const setActiveMetaLg = (lg: LeagueType) => {
             if (appCombatMode === 'show6') {
               setMetaTabShow6League(lg);
@@ -111,7 +147,10 @@ export function MetaTab(props: MetaTabProps) {
           const blendedDist = computeBlendedSeasonMeta(
             activeMetaLg,
             metaTabScope === 'season' ? battleLogs : scopedLogs,
-            activeSeasonBounds
+            activeSeasonBounds,
+            undefined,
+            metaTabScope === 'season' && appCombatMode !== 'show6' ? crowdSnapshot : null,
+            metaTabScope !== 'season' || appCombatMode === 'show6'
           );
           const blendedMetaList = Array.from(blendedDist.fieldProbabilities.entries())
             .map(([name, weight]) => ({ name, weight }))
@@ -199,6 +238,77 @@ export function MetaTab(props: MetaTabProps) {
                         </option>
                       ))}
                     </select>
+                    {appCombatMode !== 'show6' && (
+                      <>
+                        {!eloEditorOpen ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEloDraft(effectiveUserElo !== null ? String(effectiveUserElo) : '');
+                              setEloEditorOpen(true);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition ${
+                              effectiveUserElo !== null
+                                ? 'bg-amber-500/20 border-amber-400/50 text-amber-200 hover:bg-amber-500/30'
+                                : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-amber-400/50'
+                            }`}
+                            title="Click to set your current GBL rating (300–3800) or clear for Unranked < R20"
+                          >
+                            {effectiveUserElo !== null ? `🎯 ELO: ${effectiveUserElo}` : '🎯 ELO: Unranked (< R20)'}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-slate-950 border border-amber-400/60 rounded-lg px-2 py-0.5">
+                            <input
+                              type="number"
+                              min={300}
+                              max={3800}
+                              value={eloDraft}
+                              onChange={(e) => setEloDraft(e.target.value)}
+                              placeholder="300–3800"
+                              className="w-20 bg-transparent text-xs font-mono text-white outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const parsed = sanitizeUserEloWeb(eloDraft);
+                                if (onChangeCurrentUserElo) onChangeCurrentUserElo(parsed);
+                                else {
+                                  setCurrentUserEloWeb(parsed);
+                                  setLocalUserElo(parsed);
+                                }
+                                setEloEditorOpen(false);
+                              }}
+                              className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-extrabold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onChangeCurrentUserElo) onChangeCurrentUserElo(null);
+                                else {
+                                  setCurrentUserEloWeb(null);
+                                  setLocalUserElo(null);
+                                }
+                                setEloDraft('');
+                                setEloEditorOpen(false);
+                              }}
+                              className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold"
+                            >
+                              Clear
+                            </button>
+                          </span>
+                        )}
+                        {metaTabScope === 'season' && (
+                          <span className="px-2 py-0.5 rounded-lg bg-sky-500/15 border border-sky-400/40 text-sky-200 text-[10.5px] font-mono">
+                            🌐 Personal {Math.round(blendedDist.wHist * 100)}% • Crowd{' '}
+                            {blendedDist.crowdMatchCount
+                              ? `(${blendedDist.crowdTargetElo ? `ELO ${blendedDist.crowdTargetElo}` : 'All ELOs'}): ${blendedDist.crowdWeightPct || 0}% (${blendedDist.crowdMatchCount})`
+                              : '0%'} • PvPoke {Math.max(0, Math.round(blendedDist.wMeta * 100) - (blendedDist.crowdWeightPct || 0))}%
+                          </span>
+                        )}
+                      </>
+                    )}
                     {appCombatMode !== 'show6' && (
                       <span className="px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-400/40 text-purple-200 text-[10.5px] font-mono">
                         🔗 Limited Cup Same-CP Start Fade: {activeStdBlendPct}% {sameCpStdLeague} • Decay λ={activeStdDecay} ({activeStdDecay === 0.10 ? 'Fast' : activeStdDecay === 0.06 ? 'Std' : 'Slow'})

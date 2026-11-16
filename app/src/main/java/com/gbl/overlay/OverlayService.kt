@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.40"
-        const val APP_VERSION_CODE = 1740
+        const val APP_VERSION = "7.41"
+        const val APP_VERSION_CODE = 1741
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -226,6 +226,38 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_USER_SCREEN_NAME = "gbl_user_screen_name"
         const val PREFS_KEY_IS_RANDOM_SCREEN_NAME = "gbl_is_random_screen_name"
         const val PREFS_KEY_USER_SETTINGS_UPDATED_AT = "gbl_user_settings_updated_at"
+        const val PREFS_KEY_CURRENT_USER_ELO = "gbl_current_user_elo"
+        const val PREFS_KEY_CROWD_ELO_META_CACHE_JSON = "gbl_crowd_elo_meta_cache_v741"
+        const val PREFS_KEY_LAST_APP_UPDATE_CHECK_MS = "gbl_last_app_update_check_ms_v741"
+        const val PREFS_KEY_DISMISSED_APP_UPDATE_VERSION = "gbl_dismissed_app_update_version_v741"
+        const val PREFS_KEY_CACHED_APP_UPDATE_JSON = "gbl_cached_app_update_json_v741"
+        const val GITHUB_LATEST_RELEASE_API_URL = "https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest"
+        @Volatile var activeCurrentUserElo: Int? = null
+
+        fun sanitizeUserEloStatic(raw: Any?): Int? {
+            return when (raw) {
+                is Number -> raw.toInt().takeIf { it in 300..3800 }
+                is String -> raw.trim().replace(",", "").toIntOrNull()?.takeIf { it in 300..3800 }
+                else -> null
+            }
+        }
+
+        fun getCurrentUserEloStatic(prefs: SharedPreferences?): Int? {
+            if (prefs == null) return activeCurrentUserElo
+            val parsed = sanitizeUserEloStatic(prefs.getString(PREFS_KEY_CURRENT_USER_ELO, ""))
+            activeCurrentUserElo = parsed
+            return parsed
+        }
+
+        fun setCurrentUserEloStatic(prefs: SharedPreferences, rawElo: Int?): Int? {
+            val clean = rawElo?.takeIf { it in 300..3800 }
+            activeCurrentUserElo = clean
+            prefs.edit()
+                .putString(PREFS_KEY_CURRENT_USER_ELO, clean?.toString() ?: "")
+                .putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                .apply()
+            return clean
+        }
         const val DEFAULT_AUTO_UPLOAD_AI_LOGS = true
         const val CLOUDFLARE_TELEMETRY_WORKER_URL = "https://api.silphscopepvp.com"
         const val CLOUDFLARE_DVR_VAULT_URL = "https://dvr.silphscopepvp.com"
@@ -947,6 +979,7 @@ class OverlayService : LifecycleService() {
             activeShowOneBattleDvrBtn = (activeDvrRecordingMode == DVR_MODE_MANUAL)
             activeAllowMobileDataDvrUpload = prefs.getBoolean(PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD, DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD)
             activeOneBattleDvrArmed = prefs.getBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            activeCurrentUserElo = getCurrentUserEloStatic(prefs)
             loadCachedBattleFrontierUsageAndCores(prefs)
             refreshCachedGblStandardLeagueLogsStatic(prefs)
             recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
@@ -1447,7 +1480,9 @@ class OverlayService : LifecycleService() {
             val finalUserHpPct: List<Int>? = null,
             val finalOppHpPct: List<Int>? = null,
             val firstSwapActor: String? = null, // "USER" | "OPP" | "NONE"
-            val switchAdvantage: String? = null // "WON" | "LOST" | "NEUTRAL"
+            val switchAdvantage: String? = null, // "WON" | "LOST" | "NEUTRAL"
+            val userElo: Int? = null,
+            val oppObservedMoves: List<OpponentObservedMoves>? = null
         )
 
 
@@ -2330,7 +2365,59 @@ class OverlayService : LifecycleService() {
             val sheetWeightPct: Int = 0,
             val metaWeightPct: Int,
             val rawSeenCounts: Map<String, Int> = emptyMap(),
-            val pvpokeRankMap: Map<String, Int> = emptyMap()
+            val pvpokeRankMap: Map<String, Int> = emptyMap(),
+            val crowdWeightPct: Int = 0,
+            val crowdMatchCount: Int = 0,
+            val crowdTargetElo: Int? = null
+        )
+
+        data class CrowdSpeciesMoveEntry(
+            val fastTotalWeight: Double = 0.0,
+            val chargedTotalWeight: Double = 0.0,
+            val fast: Map<String, Double> = emptyMap(),
+            val charged: Map<String, Double> = emptyMap()
+        )
+
+        data class CrowdEloMetaSnapshot(
+            val league: String = "",
+            val seasonId: String = "",
+            val combatMode: String = "gbl",
+            val eloBucket: Int? = null,
+            val totalRows: Int = 0,
+            val eloTaggedRows: Int = 0,
+            val effectiveSampleSize: Double = 0.0,
+            val uniqueTrainers: Int = 0,
+            val fetchedAtMs: Long = 0L,
+            val leadShares: Map<String, Double> = emptyMap(),
+            val backShares: Map<String, Double> = emptyMap(),
+            val fieldShares: Map<String, Double> = emptyMap(),
+            val speciesMoves: Map<String, CrowdSpeciesMoveEntry> = emptyMap()
+        )
+
+        data class BlendedSpeciesMovesetProfile(
+            val species: String = "",
+            val primaryFastMove: String = "",
+            val primaryCharged1: String = "",
+            val primaryCharged2: String = "",
+            val fastMoveWeights: Map<String, Double> = emptyMap(),
+            val chargedMoveWeights: Map<String, Double> = emptyMap(),
+            val orderedFastMoves: List<String> = emptyList(),
+            val orderedChargedMoves: List<String> = emptyList(),
+            val altComboFastMove: String? = null,
+            val altComboCharged1: String? = null,
+            val altComboCharged2: String? = null,
+            val altComboShare: Double = 0.0
+        )
+
+        data class AppUpdateReleaseInfo(
+            val versionName: String = "",
+            val versionCode: Int = 0,
+            val tagName: String = "",
+            val downloadUrl: String = OFFICIAL_DOWNLOAD_URL,
+            val releaseNotesUrl: String = "https://github.com/sportsfan986/silphscope-pvp/releases/latest",
+            val publishedAt: String = "",
+            val highlights: List<String> = emptyList(),
+            val checkedAtMs: Long = 0L
         )
 
         data class BlendedMetaPokemonEntry(
@@ -2730,6 +2817,17 @@ class OverlayService : LifecycleService() {
     internal var currentLeadMatchup: String = "NEUTRAL"
     internal var lastClearedOpponentsSnapshot: List<String> = emptyList()
     internal var lastClearedLeadMatchupSnapshot: String = "NEUTRAL"
+    internal var lastClearedOppObservedMovesSnapshot: List<OpponentObservedMoves> = emptyList()
+    internal var idleStandbyEloJob: Job? = null
+    internal var idleEloLastOcrAttemptMs: Long = 0L
+    internal var pendingIdleLobbyElo: Int? = null
+    internal var pendingIdleLobbyEloAtMs: Long = 0L
+    internal var lastAutoCapturedEloToastMs: Long = 0L
+    internal var lastIdleEloScreenSig: Long = Long.MIN_VALUE
+    internal var cachedLiveHudSyncLogsRaw: String = ""
+    internal var cachedLiveHudSyncLogsKey: String = ""
+    internal var cachedLiveHudSyncLogsParsed: List<SyncBattleLogRecord> = emptyList()
+    internal val liveMovesetProfileCache = HashMap<String, BlendedSpeciesMovesetProfile>()
     @Volatile internal var battleResetEpoch: Long = 0L
     @Volatile internal var lastBattleResetTimeMs: Long = 0L
 
@@ -4654,7 +4752,8 @@ class OverlayService : LifecycleService() {
         val canReachNextMoveIfTanked: Boolean = true,
         val fastsToNextMoveIfTanked: Int = 0,
         val fastsShortIfTanked: Int = 0,
-        val userTargetMoveShort: String = ""
+        val userTargetMoveShort: String = "",
+        val usagePct: Int = 0
     )
 
     internal fun hideShieldDecisionOverlay() {
@@ -4857,9 +4956,15 @@ class OverlayService : LifecycleService() {
         )
         val userHpPct = playerSlotHpPct[clampedUserIdx].coerceIn(1, 100)
 
+        val oppBlendedProfile = getCachedBlendedSpeciesMovesetForLiveHud(oppMeta.name, activeLeague)
         val oppPlusMove = OverlayService.resolveMegaPlusMoveStatic(oppMeta.name, activeLeague)
             ?: OverlayService.resolveMegaPlusMoveStatic(oppRawName, activeLeague)
         val thirdMoveName = oppPlusMove
+            ?: oppBlendedProfile.orderedChargedMoves.firstOrNull { cm ->
+                cm.isNotBlank() &&
+                    !cm.equals(oppMeta.chargedMove1, ignoreCase = true) &&
+                    !cm.equals(oppMeta.chargedMove2, ignoreCase = true)
+            }
             ?: oppMeta.chargedMove3.takeIf { it.isNotBlank() }
             ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
             ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(oppMeta.name, ignoreCase = true) }?.value
@@ -4869,6 +4974,11 @@ class OverlayService : LifecycleService() {
                 !it.equals(oppMeta.chargedMove1, ignoreCase = true) &&
                 !it.equals(oppMeta.chargedMove2, ignoreCase = true) &&
                 !it.equals(thirdMoveName, ignoreCase = true)
+        } ?: oppBlendedProfile.orderedChargedMoves.firstOrNull { cm ->
+            cm.isNotBlank() &&
+                !cm.equals(oppMeta.chargedMove1, ignoreCase = true) &&
+                !cm.equals(oppMeta.chargedMove2, ignoreCase = true) &&
+                !cm.equals(thirdMoveName, ignoreCase = true)
         } ?: ""
 
         val confirmedSet = confirmedOppChargedMoves.getOrNull(clampedOppIdx) ?: emptySet()
@@ -4883,12 +4993,13 @@ class OverlayService : LifecycleService() {
         val candidateMoveNames: List<String> = if (twoRegularMovesLocked) {
             (confirmedRegularMoves.take(2) + listOfNotNull(oppPlusMove)).distinctBy { it.lowercase() }
         } else {
+            val topBlendedMoves = oppBlendedProfile.orderedChargedMoves.take(if (enable4ChargedMoves) 4 else 3)
             val baseList = if (enable4ChargedMoves && fourthMoveName.isNotBlank()) {
                 listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMoveName, fourthMoveName)
             } else {
                 listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMoveName)
             }
-            (baseList + confirmedSet.toList() + listOfNotNull(oppPlusMove))
+            (confirmedSet.toList() + topBlendedMoves + baseList + listOfNotNull(oppPlusMove))
                 .filter { it.isNotBlank() }
                 .distinctBy { it.lowercase() }
         }
@@ -4924,7 +5035,7 @@ class OverlayService : LifecycleService() {
             kotlin.math.ceil((targetUserMoveCost - userEnergyNow).toDouble() / userFastEnergy.toDouble()).toInt().coerceAtLeast(1)
         }
         val oppFastOverride = detectedOppFastMoveOverride.getOrNull(clampedOppIdx)?.takeIf { it.isNotBlank() }
-        val oppFastMoveName = oppFastOverride ?: oppMeta.defaultFastMove
+        val oppFastMoveName = oppFastOverride ?: oppBlendedProfile.primaryFastMove.takeIf { it.isNotBlank() } ?: oppMeta.defaultFastMove
         val oppFastTurns = OverlayService.resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns).coerceAtLeast(1)
         val oppFastExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = oppMeta,
@@ -4965,6 +5076,7 @@ class OverlayService : LifecycleService() {
             } else {
                 kotlin.math.ceil((myTurnsNeeded - turnsSurvivedAfterHit).toDouble() / userFastTurns.toDouble()).toInt().coerceAtLeast(1)
             }
+            val pctUsage = ((oppBlendedProfile.chargedMoveWeights[mName] ?: 0.0) * 100.0).roundToInt().coerceIn(0, 100)
             ShieldOverlayMoveRow(
                 moveName = mName,
                 energyCost = cost,
@@ -4975,7 +5087,8 @@ class OverlayService : LifecycleService() {
                 canReachNextMoveIfTanked = canReachIfTanked,
                 fastsToNextMoveIfTanked = myFastsNeededForNextMove,
                 fastsShortIfTanked = fastsShort,
-                userTargetMoveShort = targetUserMoveShort
+                userTargetMoveShort = targetUserMoveShort,
+                usagePct = pctUsage
             )
         }
 
@@ -5002,8 +5115,10 @@ class OverlayService : LifecycleService() {
             row.copy(isFunded = effectiveBankedE >= row.energyCost)
         }
 
-        val fundedMoves = normalizedRows.filter { it.isFunded }.sortedByDescending { it.dmgPct }
-        val unfundedMoves = normalizedRows.filter { !it.isFunded }.sortedBy { it.energyCost }
+        val fundedMoves = normalizedRows.filter { it.isFunded }
+            .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.usagePct >= 15 }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
+        val unfundedMoves = normalizedRows.filter { !it.isFunded }
+            .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.usagePct >= 15 }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
 
         val allFundedKo = fundedMoves.isNotEmpty() && fundedMoves.all { it.isKo }
         val someFundedKo = fundedMoves.any { it.isKo } && fundedMoves.any { !it.isKo }
@@ -5591,6 +5706,9 @@ class OverlayService : LifecycleService() {
     internal fun stopBattleOcrLoop() {
         battleLoopJob?.cancel()
         battleLoopJob = null
+        if (mediaProjection != null && isInstanceRunning) {
+            startIdleStandbyEloMonitorLoop()
+        }
     }
 
     internal fun toggleLogOnlyStealthMode() {
@@ -5962,6 +6080,7 @@ class OverlayService : LifecycleService() {
             ACTION_STOP_OVERLAY, ACTION_SHORT_STOP -> {
                 isInstanceRunning = false
                 hasActiveMediaProjection = false
+                stopIdleStandbyEloMonitorLoop()
                 notifyRunningStateChanged()
                 if (::prefs.isInitialized) {
                     OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
@@ -6119,6 +6238,7 @@ class OverlayService : LifecycleService() {
                 override fun onStop() {
                     super.onStop()
                     hasActiveMediaProjection = false
+                    stopIdleStandbyEloMonitorLoop()
                     virtualDisplay?.release()
                     virtualDisplay = null
                 }
@@ -6136,6 +6256,9 @@ class OverlayService : LifecycleService() {
                 null,
                 imageReaderHandler
             )
+            if (hasActiveMediaProjection && battleLoopJob?.isActive != true) {
+                startIdleStandbyEloMonitorLoop()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -6296,7 +6419,279 @@ class OverlayService : LifecycleService() {
      * 4. Charged-Move Reconcile Window:
      *    - Expanded catchup during the ~10s stable charged attack pause to reconcile up to +3 missed moves.
      */
+    internal fun stopIdleStandbyEloMonitorLoop() {
+        idleStandbyEloJob?.cancel()
+        idleStandbyEloJob = null
+    }
+
+    internal fun startIdleStandbyEloMonitorLoop() {
+        if (battleLoopJob?.isActive == true || mediaProjection == null || !isInstanceRunning) return
+        if (idleStandbyEloJob?.isActive == true) return
+        idleStandbyEloJob = lifecycleScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                if (battleLoopJob?.isActive == true || mediaProjection == null || !isInstanceRunning) break
+                val nowMs = System.currentTimeMillis()
+                if (!isBattleActive && !isBattleIntroCountdownActive && !isOcrInFlight) {
+                    val bmp = try {
+                        captureCleanScreenBitmap()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (bmp != null && !bmp.isRecycled) {
+                        maybeTriggerIdleGblEloOcr(bmp, bmp.width, bmp.height, nowMs)
+                    }
+                }
+                delay(1800L)
+            }
+        }
+    }
+
+    /**
+     * Ultra-cheap (<0.05ms) 12-point pixel gate to confirm an End-of-Set white/mint reward card
+     * or scrolled CURRENT SEASON GBL lobby panel is visible before running idle ML Kit OCR.
+     * Returns a pair of (passesGate, quantizedVisualSignature).
+     */
+    internal fun evaluateIdleGblCardPixelGate(screen: Bitmap, w: Int, h: Int): Pair<Boolean, Long> {
+        if (w <= 40 || h <= 80 || screen.isRecycled) return false to Long.MIN_VALUE
+        val xs = floatArrayOf(
+            0.35f, 0.65f, 0.35f, 0.65f,
+            0.14f, 0.28f, 0.40f, 0.14f,
+            0.28f, 0.40f, 0.18f, 0.34f
+        )
+        val ys = floatArrayOf(
+            0.38f, 0.38f, 0.50f, 0.50f,
+            0.70f, 0.70f, 0.70f, 0.78f,
+            0.78f, 0.78f, 0.85f, 0.85f
+        )
+        var cardLikePoints = 0
+        var sig = 17L
+        for (i in xs.indices) {
+            val px = (w * xs[i]).toInt().coerceIn(0, w - 1)
+            val py = (h * ys[i]).toInt().coerceIn(0, h - 1)
+            val c = screen.getPixel(px, py)
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            val minC = minOf(r, g, b)
+            val maxC = maxOf(r, g, b)
+            if (minC >= 120 && (maxC - minC) <= 55) {
+                cardLikePoints++
+            }
+            val lumBucket = ((r + g + b) / 48).toLong()
+            sig = sig * 31L + lumBucket
+        }
+        return (cardLikePoints >= 3) to sig
+    }
+
+    internal data class IdleEloParseResult(val elo: Int, val isEndOfSetModal: Boolean)
+
+    internal fun parseIdleGblEloFromVisionResult(
+        visionText: Text,
+        cropLeft: Int,
+        cropTop: Int,
+        scale: Float,
+        fullW: Int,
+        fullH: Int
+    ): IdleEloParseResult? {
+        val allLines = visionText.textBlocks.flatMap { it.lines }
+        if (allLines.isEmpty() || fullW <= 0 || fullH <= 0 || scale <= 0f) return null
+
+        val joinedLower = allLines.joinToString(" ") { it.text }.lowercase()
+
+        // 1. End-of-Set Rating Modal ("Rating: 2,296" with translucent or solid modal backdrop)
+        val modalRegex = Regex("""(?<![+\-\d])\brating\b\s*[:\-]?\s*([1-3]?,?[0-9]{3}|[3-9][0-9]{2})\b(?!\s*(?:ma|/5|x\b|%))""", RegexOption.IGNORE_CASE)
+        val hasSetContext = joinedLower.contains("rating") && (
+            joinedLower.contains("battle") ||
+                joinedLower.contains("win") ||
+                joinedLower.contains("rank") ||
+                joinedLower.contains("claim") ||
+                joinedLower.contains("stardust") ||
+                joinedLower.contains("season")
+            )
+        if (hasSetContext) {
+            for (line in allLines) {
+                val m = modalRegex.find(line.text) ?: continue
+                val parsed = m.groupValues.getOrNull(1)?.replace(",", "")?.toIntOrNull() ?: continue
+                if (parsed in 300..3800) {
+                    return IdleEloParseResult(elo = parsed, isEndOfSetModal = true)
+                }
+            }
+        }
+
+        // 2. Scrolled Pre-Battle GBL Lobby ("CURRENT SEASON" left column, e.g., 2,307 + ACE)
+        val hasLobbySeasonCue = joinedLower.contains("current season") ||
+            (joinedLower.contains("season") && (
+                joinedLower.contains("rank 20") ||
+                    joinedLower.contains("ace") ||
+                    joinedLower.contains("veteran") ||
+                    joinedLower.contains("expert") ||
+                    joinedLower.contains("legend")
+                ))
+        if (!hasLobbySeasonCue) return null
+
+        var currentSeasonTopNorm = 0.48f
+        for (line in allLines) {
+            val lTxt = line.text.lowercase()
+            if (lTxt.contains("current season") || lTxt == "season") {
+                val box = line.boundingBox ?: continue
+                val topFull = cropTop + box.top / scale
+                currentSeasonTopNorm = (topFull / fullH.toFloat()).coerceIn(0.30f, 0.85f)
+                break
+            }
+        }
+
+        val pureNumRegex = Regex("""^([3-9][0-9]{2}|[1-3],?[0-9]{3})$""")
+        val forbiddenTokens = listOf("win", "battle", "streak", "stardust", "/5", "cp", "hp", "lvl", "rank", "ma", "%")
+        for (line in allLines) {
+            val raw = line.text.trim()
+            if (raw.isEmpty() || raw.length > 10) continue
+            val low = raw.lowercase()
+            if (raw.contains("-") || raw.contains("+") || raw.contains("/") || low.endsWith("x") || forbiddenTokens.any { low.contains(it) }) {
+                continue
+            }
+            val cleaned = raw.replace(" ", "")
+            val match = pureNumRegex.find(cleaned) ?: continue
+            val parsed = match.groupValues[1].replace(",", "").toIntOrNull() ?: continue
+            if (parsed !in 300..3800) continue
+
+            val box = line.boundingBox ?: continue
+            val normLeft = (cropLeft + box.left / scale) / fullW.toFloat()
+            val normRight = (cropLeft + box.right / scale) / fullW.toFloat()
+            val fullTop = cropTop + box.top / scale
+            val fullBottom = cropTop + box.bottom / scale
+            val normCenterY = ((fullTop + fullBottom) * 0.5f) / fullH.toFloat()
+            val normBottom = fullBottom / fullH.toFloat()
+            val normH = (fullBottom - fullTop) / fullH.toFloat()
+
+            // Strictly inside left CURRENT SEASON column & completely unclipped from bottom edge
+            if (normLeft >= 0.08f && normRight <= 0.42f &&
+                normBottom < 0.955f && normCenterY <= 0.90f &&
+                normCenterY > currentSeasonTopNorm && normH >= 0.014f
+            ) {
+                return IdleEloParseResult(elo = parsed, isEndOfSetModal = false)
+            }
+        }
+        return null
+    }
+
+    internal fun onIdleGblEloConfirmed(confirmedElo: Int) {
+        if (!::prefs.isInitialized) return
+        val sanitized = sanitizeUserEloStatic(confirmedElo) ?: return
+        val prevElo = getCurrentUserEloStatic(prefs)
+        val nowMs = System.currentTimeMillis()
+        if (sanitized != prevElo) {
+            setCurrentUserEloStatic(prefs, sanitized)
+
+            // 120-second first-time R20 reveal backfill: stamp null userElo on recent GBL logs
+            try {
+                val rawJson = prefs.getString(PREFS_KEY_BATTLE_LOGS, null)
+                if (!rawJson.isNullOrBlank()) {
+                    val listType = object : TypeToken<MutableList<BattleLogEntry>>() {}.type
+                    val parsedList: MutableList<BattleLogEntry>? = gson.fromJson(rawJson, listType)
+                    if (!parsedList.isNullOrEmpty()) {
+                        var changed = false
+                        for (i in parsedList.indices) {
+                            val entry = parsedList[i]
+                            if (entry.userElo == null && (nowMs - entry.timestampMs) in 0L..120_000L) {
+                                parsedList[i] = entry.copy(userElo = sanitized, updatedAt = nowMs)
+                                changed = true
+                            }
+                        }
+                        if (changed) {
+                            prefs.edit().putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(parsedList)).apply()
+                            cachedLiveHudSyncLogsRaw = ""
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            val activeLg = currentPreset?.league ?: "GREAT LEAGUE"
+            refreshCrowdEloMetaCacheAsync(prefs, activeLg, sanitized, forceRefresh = true)
+
+            if ((nowMs - lastAutoCapturedEloToastMs) >= 15_000L) {
+                lastAutoCapturedEloToastMs = nowMs
+                Handler(Looper.getMainLooper()).post {
+                    showBattleToast("🎯 ELO Auto-Captured: $sanitized")
+                }
+            }
+        }
+    }
+
+    internal fun maybeTriggerIdleGblEloOcr(screen: Bitmap, w: Int, h: Int, nowMs: Long) {
+        if (isBattleActive || isBattleIntroCountdownActive) return
+        if (isWaitingForOpponent && hasBattleStarted) return
+        if (::prefs.isInitialized && prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6") return
+        if (isOcrInFlight) return
+        if ((nowMs - idleEloLastOcrAttemptMs) < 1500L) return
+
+        val (passesGate, screenSig) = evaluateIdleGblCardPixelGate(screen, w, h)
+        if (!passesGate) return
+        if (screenSig == lastIdleEloScreenSig && (nowMs - idleEloLastOcrAttemptMs) < 4500L) return
+
+        val cropLeft = (w * 0.06f).toInt().coerceIn(0, max(0, w - 10))
+        val cropTop = (h * 0.24f).toInt().coerceIn(0, max(0, h - 10))
+        val cropRight = (w * 0.94f).toInt().coerceIn(cropLeft + 10, w)
+        val cropBottom = (h * 0.958f).toInt().coerceIn(cropTop + 10, h)
+        val srcW = cropRight - cropLeft
+        val srcH = cropBottom - cropTop
+        if (srcW < 64 || srcH < 64) return
+
+        val scale = 0.80f
+        val dstW = (srcW * scale).toInt().coerceAtLeast(32)
+        val dstH = (srcH * scale).toInt().coerceAtLeast(32)
+        val cropBmp = try {
+            val b = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(b)
+            canvas.drawBitmap(screen, Rect(cropLeft, cropTop, cropRight, cropBottom), Rect(0, 0, dstW, dstH), ocrFilterPaint)
+            b
+        } catch (_: Exception) {
+            return
+        }
+
+        idleEloLastOcrAttemptMs = nowMs
+        lastIdleEloScreenSig = screenSig
+        isOcrInFlight = true
+        lifecycleScope.launch(Dispatchers.Default) {
+            try {
+                val visionText = suspendCancellableCoroutine<Text?> { cont ->
+                    val input = InputImage.fromBitmap(cropBmp, 0)
+                    textRecognizer.process(input)
+                        .addOnSuccessListener { res -> if (cont.isActive) cont.resume(res) }
+                        .addOnFailureListener { if (cont.isActive) cont.resume(null) }
+                        .addOnCanceledListener { if (cont.isActive) cont.resume(null) }
+                }
+                if (visionText != null && !isBattleActive && !isBattleIntroCountdownActive) {
+                    val parsed = parseIdleGblEloFromVisionResult(visionText, cropLeft, cropTop, scale, w, h)
+                    if (parsed != null) {
+                        val doneMs = System.currentTimeMillis()
+                        if (parsed.isEndOfSetModal) {
+                            pendingIdleLobbyElo = null
+                            onIdleGblEloConfirmed(parsed.elo)
+                        } else {
+                            if (pendingIdleLobbyElo == parsed.elo && (doneMs - pendingIdleLobbyEloAtMs) in 0L..12_000L) {
+                                pendingIdleLobbyElo = null
+                                onIdleGblEloConfirmed(parsed.elo)
+                            } else {
+                                pendingIdleLobbyElo = parsed.elo
+                                pendingIdleLobbyEloAtMs = doneMs
+                            }
+                        }
+                    } else {
+                        pendingIdleLobbyElo = null
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                try {
+                    if (!cropBmp.isRecycled) cropBmp.recycle()
+                } catch (_: Exception) {}
+                isOcrInFlight = false
+            }
+        }
+    }
+
     internal fun startBattleOcrLoop() {
+        stopIdleStandbyEloMonitorLoop()
         if (battleLoopJob?.isActive == true) return
         battleLoopJob = lifecycleScope.launch(Dispatchers.Default) {
             while (isActive) {
@@ -6474,6 +6869,7 @@ class OverlayService : LifecycleService() {
                 sampledPlayerPendingDmgPct = 0
                 sampledOppHpRowY = -1
                 sampledPlayerHpRowY = -1
+                maybeTriggerIdleGblEloOcr(screen, w, h, currentFrameTimestampMs)
             }
         } else {
             sampledPlayerShields = detectActiveShieldCount(screen, playerShieldRect)
@@ -15126,17 +15522,85 @@ class OverlayService : LifecycleService() {
         showBattleToast("⚔️ Battle Started — Scanning Opponents")
     }
 
+    internal fun normalizeOppFastMoveStatus(raw: String?): String {
+        val u = raw?.trim()?.uppercase().orEmpty()
+        return when {
+            u == "CONFIRMED_NONSTD" || u == "CONFIRMED_NON_STANDARD" -> "CONFIRMED_NONSTD"
+            u == "CONFIRMED_STD" || u == "CONFIRMED_STANDARD" -> "CONFIRMED_STD"
+            u == "CONFIRMED" -> "CONFIRMED"
+            else -> "UNCONFIRMED"
+        }
+    }
+
+    internal fun buildCurrentOppObservedMovesSnapshot(
+        formattedOpps: List<String>,
+        activeLeague: String
+    ): List<OpponentObservedMoves> {
+        return formattedOpps.take(3).mapIndexed { idx, oppSpecies ->
+            val stdFast = resolveRecommendedMovesForSpecies(oppSpecies, activeLeague)?.defaultFastMove?.trim().orEmpty()
+            val normRaw = normalizeOppFastMoveStatus(oppFastMoveStatus.getOrElse(idx) { "UNCONFIRMED" })
+            val ovr = detectedOppFastMoveOverride.getOrNull(idx)?.trim().orEmpty()
+            val (resolvedStatus, resolvedFast) = when {
+                normRaw == "CONFIRMED_NONSTD" -> {
+                    val fName = ovr.ifEmpty { "UNKNOWN" }
+                    if (stdFast.isNotEmpty() && fName.equals(stdFast, ignoreCase = true)) {
+                        "CONFIRMED_STD" to stdFast
+                    } else {
+                        "CONFIRMED_NONSTD" to fName
+                    }
+                }
+                normRaw == "CONFIRMED_STD" -> "CONFIRMED_STD" to stdFast.ifEmpty { ovr.ifEmpty { null } }
+                normRaw == "CONFIRMED" || oppFastMoveConfirmed.getOrElse(idx) { false } -> {
+                    if (ovr.isNotEmpty() && (stdFast.isEmpty() || !ovr.equals(stdFast, ignoreCase = true))) {
+                        "CONFIRMED_NONSTD" to ovr
+                    } else {
+                        "CONFIRMED_STD" to stdFast.ifEmpty { ovr.ifEmpty { null } }
+                    }
+                }
+                else -> "UNCONFIRMED" to null
+            }
+            val charged = (confirmedOppChargedMoves.getOrNull(idx) ?: emptySet())
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.endsWith("+") }
+                .distinctBy { it.lowercase() }
+            OpponentObservedMoves(
+                species = oppSpecies,
+                fastMove = resolvedFast,
+                fastStatus = resolvedStatus,
+                chargedMoves = charged
+            )
+        }
+    }
+
+    internal fun getCachedSeasonSyncLogsForLiveHud(league: String): List<SyncBattleLogRecord> {
+        if (!::prefs.isInitialized) return emptyList()
+        val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val key = if (isShow6) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
+        val raw = prefs.getString(key, "[]") ?: "[]"
+        if (raw == cachedLiveHudSyncLogsRaw && key == cachedLiveHudSyncLogsKey) {
+            return cachedLiveHudSyncLogsParsed
+        }
+        val loaded = OverlayService.loadSeasonSyncLogsForLeagueStatic(prefs, gson, league, isShow6 = isShow6, empiricalLimit = null)
+        cachedLiveHudSyncLogsRaw = raw
+        cachedLiveHudSyncLogsKey = key
+        cachedLiveHudSyncLogsParsed = loaded
+        liveMovesetProfileCache.clear()
+        return loaded
+    }
+
     /**
      * ACTION: STOP CURRENT BATTLE
      * Pauses 2 Hz / 1 Hz OCR scanning and snapshots the current battle's opponents & lead matchup
      * so the user can log Win/Loss (or skip) before starting the next battle.
      */
     fun stopCurrentBattle() {
+        val stopLeague = currentPreset?.league ?: "GREAT LEAGUE"
         if (detectedOpponents.isNotEmpty()) {
             lastClearedOpponentsSnapshot = detectedOpponents.take(3).map { oppName ->
                 formatOpponentNameWithShadow(oppName)
             }
             lastClearedLeadMatchupSnapshot = currentLeadMatchup
+            lastClearedOppObservedMovesSnapshot = buildCurrentOppObservedMovesSnapshot(lastClearedOpponentsSnapshot, stopLeague)
             lastClearedTimelineEventsSnapshot = battleTimelineEvents.toList()
             lastClearedSensorTicksSnapshot = currentBattleSensorTicks.toList()
             lastClearedBattleDurationSec = getElapsedBattleSeconds()
@@ -15382,6 +15846,17 @@ class OverlayService : LifecycleService() {
         }).mapIndexed { i, hp -> if (i == autoZeroOppCloserIdx) 0 else hp }
         val (firstSwapActor, switchAdvantage) = OverlayService.deriveFirstSwapAndSwitchAdvantageStatic(finalTimelineEvents, normalizedResult)
 
+        val snapOppObserved = if (hasLiveOpponents) {
+            buildCurrentOppObservedMovesSnapshot(formattedOpponents, league)
+        } else {
+            lastClearedOppObservedMovesSnapshot
+        }
+        val currentEloSnap = if (::prefs.isInitialized) {
+            OverlayService.getCurrentUserEloStatic(prefs)
+        } else {
+            OverlayService.activeCurrentUserElo
+        }
+
         // v3.50: Main Battle Logs store compact permanent summary fields (timelineEvents = emptyList());
         // detailed timestamped timeline events are written to the separate 7-day AI Training Log store.
         val newEntry = SyncBattleLogRecord(
@@ -15414,7 +15889,9 @@ class OverlayService : LifecycleService() {
             finalUserHpPct = endUserHpList,
             finalOppHpPct = endOppHpList,
             firstSwapActor = firstSwapActor,
-            switchAdvantage = switchAdvantage
+            switchAdvantage = switchAdvantage,
+            userElo = currentEloSnap,
+            oppObservedMoves = snapOppObserved.takeIf { it.isNotEmpty() }
         )
 
         val isShow6CombatMode = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
@@ -15642,9 +16119,15 @@ class OverlayService : LifecycleService() {
         // Ensure opponent list and timeline state are cleared for the next battle after logging
         lastClearedOpponentsSnapshot = emptyList()
         lastClearedLeadMatchupSnapshot = "NEUTRAL"
+        lastClearedOppObservedMovesSnapshot = emptyList()
         lastClearedTimelineEventsSnapshot = emptyList()
         lastClearedSensorTicksSnapshot = emptyList()
         lastClearedBattleDurationSec = null
+        cachedLiveHudSyncLogsRaw = ""
+        liveMovesetProfileCache.clear()
+        if (::prefs.isInitialized) {
+            OverlayService.refreshCrowdEloMetaCacheAsync(prefs, league, currentEloSnap, forceRefresh = false)
+        }
         battleClockAnchorMs = 0L
         battleTimelineEvents.clear()
         currentBattleSensorTicks.clear()
@@ -17445,6 +17928,40 @@ class OverlayService : LifecycleService() {
         }
     }
 
+    internal fun getCachedBlendedSpeciesMovesetForLiveHud(
+        oppName: String,
+        league: String
+    ): BlendedSpeciesMovesetProfile {
+        val normLeague = normalizeLeagueKeyStatic(league)
+        val prefs = try {
+            if (::prefs.isInitialized) prefs else getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
+        } catch (_: Exception) {
+            null
+        }
+        val syncLogs = getCachedSeasonSyncLogsForLiveHud(normLeague)
+        val eloBucket = getCurrentUserEloStatic(prefs)?.let { (it / 200) * 200 } ?: -1
+        val crowdSnap = loadCrowdEloMetaForLeagueStatic(prefs, normLeague, activeCurrentUserElo)
+        val cacheKey = "$normLeague|${oppName.trim().lowercase()}|$eloBucket|${syncLogs.size}|${crowdSnap?.fetchedAtMs ?: 0L}"
+        synchronized(liveMovesetProfileCache) {
+            liveMovesetProfileCache[cacheKey]?.let { return it }
+        }
+        val computed = resolveBlendedSpeciesMovesetStatic(
+            oppName = oppName,
+            league = normLeague,
+            seasonSyncLogs = syncLogs,
+            crowdSnapshot = crowdSnap,
+            prefs = prefs,
+            userElo = activeCurrentUserElo
+        )
+        synchronized(liveMovesetProfileCache) {
+            if (liveMovesetProfileCache.size > 256) {
+                liveMovesetProfileCache.clear()
+            }
+            liveMovesetProfileCache[cacheKey] = computed
+        }
+        return computed
+    }
+
     fun buildBattlePayloadJson(isReplayMode: Boolean = false): String {
         val p1 = currentPreset?.pokemon?.getOrNull(0)
         val p2 = currentPreset?.pokemon?.getOrNull(1)
@@ -17731,8 +18248,9 @@ class OverlayService : LifecycleService() {
         val userFastMoveName = activeSlot?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
         val userFastTurns = OverlayService.resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns)
         val activeOppSlotClamped = activeOpponentSlotIndex.coerceIn(0, 2)
+        val activeOppBlendedProfile = getCachedBlendedSpeciesMovesetForLiveHud(oppMeta.name, activeLeague)
         val activeOppFastOverride = detectedOppFastMoveOverride.getOrNull(activeOppSlotClamped)?.takeIf { it.isNotBlank() }
-        val oppFastMoveName = activeOppFastOverride ?: oppMeta.defaultFastMove
+        val oppFastMoveName = activeOppFastOverride ?: activeOppBlendedProfile.primaryFastMove.takeIf { it.isNotBlank() } ?: oppMeta.defaultFastMove
         val oppFastTurns = OverlayService.resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns)
         val activeOppFastStatus = oppFastMoveStatus.getOrElse(activeOppSlotClamped) { "unconfirmed" }
 
@@ -17795,6 +18313,7 @@ class OverlayService : LifecycleService() {
             oppAtkStage: Int,
             confirmedSet: Set<String>
         ): OpponentChargedMoveSelection {
+            val oppBlendedProfile = getCachedBlendedSpeciesMovesetForLiveHud(meta.name, activeLeague)
             val plusMove = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
                 ?: OverlayService.resolveMegaPlusMoveStatic(oppNameRaw, activeLeague)
             val confirmedRegular = if (plusMove != null) {
@@ -17839,6 +18358,7 @@ class OverlayService : LifecycleService() {
 
             val poolCharged = OverlayService.getAvailableMovePoolForSpeciesStatic(meta.name, activeLeague).second
             val orderedCandidates = (
+                oppBlendedProfile.orderedChargedMoves +
                 listOf(meta.chargedMove1, meta.chargedMove2) +
                 poolCharged +
                 listOf(meta.chargedMove3, meta.chargedMove4, fallbackThird) +
@@ -17866,7 +18386,7 @@ class OverlayService : LifecycleService() {
             } else {
                 val nextThreeCandidates = orderedCandidates
                     .filter { cand -> rec2.none { it.equals(cand, ignoreCase = true) } }
-                    .take(3)
+                    .take(4)
                 if (nextThreeCandidates.isNotEmpty()) {
                     chosenThird = nextThreeCandidates.maxByOrNull { candMove ->
                         val mStats = OverlayService.resolveChargedMoveStatsStatic(candMove, meta.types.firstOrNull() ?: "normal")
@@ -17882,7 +18402,11 @@ class OverlayService : LifecycleService() {
                         )
                         val canKoNow = dmgPct >= uHpForRisk
                         val dpeScore = (dmgPct.toDouble() * 50.0) / cost.toDouble()
-                        (if (canKoNow) 10000.0 + (100 - cost) * 10.0 else 0.0) + dmgPct.toDouble() + dpeScore * 0.65
+                        val blendedUsagePct = (oppBlendedProfile.chargedMoveWeights[candMove] ?: 0.0) * 100.0
+                        (if (canKoNow) 10000.0 + (100 - cost) * 10.0 else 0.0) +
+                            blendedUsagePct * 4.0 +
+                            dmgPct.toDouble() +
+                            dpeScore * 0.65
                     }
                     isRiskBadgeThird = chosenThird != null
                 }
@@ -17959,8 +18483,9 @@ class OverlayService : LifecycleService() {
             }.minOrNull() ?: 45
             val isThisOppMoveReady = thisOppHpPct > 0 && thisOppEnergy >= cheapestOppMoveEnergy
             val thisOppEnergyLabel = if (isThisOppMoveReady) "${thisOppEnergy}E READY" else "${thisOppEnergy}E"
+            val slotProfile = getCachedBlendedSpeciesMovesetForLiveHud(meta.name, activeLeague)
             val slotFastOverride = detectedOppFastMoveOverride.getOrNull(idx)?.takeIf { it.isNotBlank() }
-            val slotFastMove = slotFastOverride ?: meta.defaultFastMove
+            val slotFastMove = slotFastOverride ?: slotProfile.primaryFastMove.takeIf { it.isNotBlank() } ?: meta.defaultFastMove
             val slotFastTurns = OverlayService.resolveFastTurnsStatic(slotFastMove, meta.fastTurns)
             val slotFastStatus = oppFastMoveStatus.getOrElse(idx) { "unconfirmed" }
             mapOf(
@@ -19267,6 +19792,7 @@ class OverlayService : LifecycleService() {
                 } else {
                     kotlin.math.ceil((myTurnsNeed - turnsSurv).toDouble() / userFastTurns.toDouble()).toInt().coerceAtLeast(1)
                 }
+                val pctUsage = ((activeOppBlendedProfile.chargedMoveWeights[mName] ?: 0.0) * 100.0).roundToInt().coerceIn(0, 100)
                 ShieldOverlayMoveRow(
                     moveName = mName,
                     energyCost = cost,
@@ -19277,7 +19803,8 @@ class OverlayService : LifecycleService() {
                     canReachNextMoveIfTanked = canReach,
                     fastsToNextMoveIfTanked = myFastsNeededForNextMove,
                     fastsShortIfTanked = fastsShort,
-                    userTargetMoveShort = myBestMoveShort
+                    userTargetMoveShort = myBestMoveShort,
+                    usagePct = pctUsage
                 )
             }
             val minCost = rawRows.minOfOrNull { it.energyCost } ?: 35
@@ -19306,9 +19833,9 @@ class OverlayService : LifecycleService() {
             }
             val normRows = rawRows.map { it.copy(isFunded = effBankedE >= it.energyCost) }
             val allFunded = normRows.filter { it.isFunded }
-                .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
+                .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.usagePct >= 15 }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
             val allUnfunded = normRows.filter { !it.isFunded }
-                .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
+                .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.usagePct >= 15 }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
 
             // v6.50 Overflow Guard: show up to 6 funded moves and up to 4 highest-threat unfunded moves
             val funded = allFunded.take(6)
@@ -19380,7 +19907,8 @@ class OverlayService : LifecycleService() {
                         "canReachNextMoveIfTanked" to m.canReachNextMoveIfTanked,
                         "fastsToNextMoveIfTanked" to m.fastsToNextMoveIfTanked,
                         "fastsShortIfTanked" to m.fastsShortIfTanked,
-                        "userTargetMoveShort" to m.userTargetMoveShort
+                        "userTargetMoveShort" to m.userTargetMoveShort,
+                        "usagePct" to m.usagePct
                     )
                 },
                 "unfundedMoves" to unfunded.map { m ->
@@ -19391,7 +19919,8 @@ class OverlayService : LifecycleService() {
                         "dmgPct" to m.dmgPct,
                         "remHpPct" to m.remHpPct,
                         "isKo" to m.isKo,
-                        "isFunded" to false
+                        "isFunded" to false,
+                        "usagePct" to m.usagePct
                     )
                 }
             )
@@ -19731,6 +20260,7 @@ class OverlayService : LifecycleService() {
             OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
         }
         battleLoopJob?.cancel()
+        stopIdleStandbyEloMonitorLoop()
         try {
             textRecognizer.close()
         } catch (_: Exception) {}

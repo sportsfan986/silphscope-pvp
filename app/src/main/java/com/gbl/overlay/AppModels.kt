@@ -66,6 +66,13 @@ data class TeamPreset(
     val combatMode: String = "gbl"
 )
 
+data class OpponentObservedMoves(
+    val species: String = "",
+    val fastMove: String? = null,
+    val fastStatus: String? = null,
+    val chargedMoves: List<String> = emptyList()
+)
+
 data class BattleLogEntry(
     val id: String = UUID.randomUUID().toString(),
     val timestampMs: Long = System.currentTimeMillis(),
@@ -96,7 +103,9 @@ data class BattleLogEntry(
     val switchAdvantage: String? = null,
     val adherenceRatePct: Int? = null,
     val recommendationsIssuedCount: Int? = null,
-    val recommendationsFollowedCount: Int? = null
+    val recommendationsFollowedCount: Int? = null,
+    val userElo: Int? = null,
+    val oppObservedMoves: List<OpponentObservedMoves>? = null
 )
 
 data class GblSeasonInfo(

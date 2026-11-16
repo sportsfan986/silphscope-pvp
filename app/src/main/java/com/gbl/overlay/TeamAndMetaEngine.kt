@@ -79,6 +79,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 import com.gbl.overlay.OverlayService.*
+import com.gbl.overlay.OverlayService.Companion.activeCurrentUserElo
 import com.gbl.overlay.OverlayService.Companion.activeGblMetaDecayFactor
 import com.gbl.overlay.OverlayService.Companion.activeGblMetaLogWeightPct
 import com.gbl.overlay.OverlayService.Companion.activeLimitedStdBlendPctGbl
@@ -96,11 +97,16 @@ import com.gbl.overlay.OverlayService.Companion.BATTLE_FRONTIER_CORES_MAP
 import com.gbl.overlay.OverlayService.Companion.BlendedMetaCoreEntry
 import com.gbl.overlay.OverlayService.Companion.BlendedMetaPokemonEntry
 import com.gbl.overlay.OverlayService.Companion.BlendedSeasonMetaDistribution
+import com.gbl.overlay.OverlayService.Companion.BlendedSpeciesMovesetProfile
 import com.gbl.overlay.OverlayService.Companion.CACHED_GBL_STD_SEASON_LOGS
+import com.gbl.overlay.OverlayService.Companion.CLOUDFLARE_TELEMETRY_WORKER_URL
 import com.gbl.overlay.OverlayService.Companion.CRITICAL_META_TYPES
+import com.gbl.overlay.OverlayService.Companion.CrowdEloMetaSnapshot
+import com.gbl.overlay.OverlayService.Companion.CrowdSpeciesMoveEntry
 import com.gbl.overlay.OverlayService.Companion.DYNAMIC_POKEMON_DATABASE
 import com.gbl.overlay.OverlayService.Companion.FeaturedRankRangeSpec
 import com.gbl.overlay.OverlayService.Companion.FormResolver
+import com.gbl.overlay.OverlayService.Companion.getCurrentUserEloStatic
 import com.gbl.overlay.OverlayService.Companion.getLeagueCpCapStatic
 import com.gbl.overlay.OverlayService.Companion.isBattleFrontierLeagueStatic
 import com.gbl.overlay.OverlayService.Companion.isMegaAllowedInLeagueStatic
@@ -111,12 +117,14 @@ import com.gbl.overlay.OverlayService.Companion.normalizeLeagueKeyStatic
 import com.gbl.overlay.OverlayService.Companion.POKEMON_META_DATABASE
 import com.gbl.overlay.OverlayService.Companion.PRECOMPUTED_TOP200_9X9_CACHE
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_BATTLE_LOGS
+import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_CROWD_ELO_META_CACHE_JSON
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_GBL_SEASONS_JSON
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_SHOW6_BATTLE_LOGS
 import com.gbl.overlay.OverlayService.Companion.remapLegacyLeagueForModeStatic
 import com.gbl.overlay.OverlayService.Companion.resolveCachedSameCpStandardLogsForCupStatic
 import com.gbl.overlay.OverlayService.Companion.RoleUpgradeSuggestion
 import com.gbl.overlay.OverlayService.Companion.RoleWeightedTop100MetaDist
+import com.gbl.overlay.OverlayService.Companion.sanitizeUserEloStatic
 import com.gbl.overlay.OverlayService.Companion.SilphScopeTopMetaEntry
 import com.gbl.overlay.OverlayService.Companion.SyncBattleLogRecord
 import com.gbl.overlay.OverlayService.Companion.TeamArchetypeEvaluationResult
@@ -1206,6 +1214,418 @@ internal fun OverlayService.Companion.computePositionWeightedBrStatic(
     }
 }
 
+private val CACHED_CROWD_ELO_META_BY_LEAGUE = java.util.concurrent.ConcurrentHashMap<String, CrowdEloMetaSnapshot>()
+private val CACHED_CROWD_META_LAST_FETCH_MS = java.util.concurrent.ConcurrentHashMap<String, Long>()
+private val CROWD_META_HTTP_CLIENT: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+        .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+}
+
+internal fun OverlayService.Companion.loadSeasonSyncLogsForLeagueStatic(
+    prefs: SharedPreferences?,
+    gson: Gson,
+    league: String,
+    isShow6: Boolean = false,
+    empiricalLimit: Int? = null
+): List<SyncBattleLogRecord> {
+    if (prefs == null) return emptyList()
+    val prefKey = if (isShow6) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
+    val rawJson = prefs.getString(prefKey, "[]") ?: "[]"
+    if (rawJson.length <= 2) return emptyList()
+
+    val targetNorm = normalizeLeagueKeyStatic(league)
+    val targetRemapped = remapLegacyLeagueForModeStatic(league, isShow6)
+    val seasonStartMs = loadCurrentSeasonStartMsStatic(prefs)
+
+    val records: List<SyncBattleLogRecord> = synchronized(seasonLogsParseCacheLock) {
+        if (isShow6) {
+            if (rawJson == cachedShow6LogsRawJson) {
+                cachedShow6LogsParsed
+            } else {
+                val parsed: List<SyncBattleLogRecord> = try {
+                    gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                cachedShow6LogsRawJson = rawJson
+                cachedShow6LogsParsed = parsed
+                parsed
+            }
+        } else {
+            if (rawJson == cachedGblLogsRawJson) {
+                cachedGblLogsParsed
+            } else {
+                val parsed: List<SyncBattleLogRecord> = try {
+                    gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                cachedGblLogsRawJson = rawJson
+                cachedGblLogsParsed = parsed
+                parsed
+            }
+        }
+    }
+    if (records.isEmpty()) return emptyList()
+
+    val matching = records.filter { rec ->
+        val recNorm = normalizeLeagueKeyStatic(rec.league)
+        val recRemap = remapLegacyLeagueForModeStatic(rec.league, isShow6)
+        val leagueMatches = rec.league.equals(league, ignoreCase = true) ||
+            recNorm.equals(targetNorm, ignoreCase = true) ||
+            recRemap.equals(targetRemapped, ignoreCase = true)
+        val validOpps = rec.opponents.any { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
+        val inSeason = if (empiricalLimit != null) true else rec.timestampMs >= seasonStartMs
+        leagueMatches && validOpps && inSeason
+    }.sortedByDescending { it.timestampMs }
+
+    return if (empiricalLimit != null && empiricalLimit > 0) matching.take(empiricalLimit) else matching
+}
+
+internal fun OverlayService.Companion.resolveNonStandardObservedMovesStatic(
+    opp: OpponentObservedMoves,
+    league: String
+): Pair<String?, List<String>> {
+    val sp = opp.species.trim()
+    if (sp.isEmpty() || sp.equals("Waiting...", ignoreCase = true)) return null to emptyList()
+    val normLeague = normalizeLeagueKeyStatic(league)
+    val stdMeta = resolveRecommendedMovesForSpecies(sp, normLeague)
+    val stdFast = stdMeta?.defaultFastMove?.trim().orEmpty()
+    val stdC1 = stdMeta?.chargedMove1?.trim().orEmpty()
+    val stdC2 = stdMeta?.chargedMove2?.trim().orEmpty()
+
+    val statusUpper = opp.fastStatus?.trim()?.uppercase().orEmpty()
+    val obsFast = opp.fastMove?.trim().orEmpty()
+    val nonStdFast: String? = when {
+        statusUpper == "CONFIRMED_NONSTD" && obsFast.isNotEmpty() && !obsFast.equals("UNKNOWN", ignoreCase = true) -> obsFast
+        obsFast.isNotEmpty() &&
+            !obsFast.equals("UNKNOWN", ignoreCase = true) &&
+            statusUpper != "UNCONFIRMED" &&
+            stdFast.isNotEmpty() &&
+            !obsFast.equals(stdFast, ignoreCase = true) -> obsFast
+        else -> null
+    }
+
+    val nonStdCharged = opp.chargedMoves
+        .map { it.trim() }
+        .filter { cm ->
+            cm.isNotEmpty() &&
+                !cm.endsWith("+") &&
+                (stdC1.isEmpty() || !cm.equals(stdC1, ignoreCase = true)) &&
+                (stdC2.isEmpty() || !cm.equals(stdC2, ignoreCase = true))
+        }
+        .distinctBy { it.lowercase() }
+
+    return nonStdFast to nonStdCharged
+}
+
+internal fun parseCrowdEloMetaResponseJson(
+    rawJson: String,
+    fetchedAtMs: Long = System.currentTimeMillis()
+): CrowdEloMetaSnapshot? {
+    if (rawJson.isBlank()) return null
+    return try {
+        val root = JsonParser.parseString(rawJson).asJsonObject
+        if (root.has("ok") && !root.get("ok").asBoolean) return null
+        val league = root.get("league")?.asString?.trim().orEmpty()
+        if (league.isEmpty()) return null
+        val seasonId = root.get("seasonId")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+        val combatMode = root.get("combatMode")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifEmpty { "gbl" } ?: "gbl"
+        val eloBucket = root.get("eloBucket")?.takeIf { !it.isJsonNull }?.asInt
+        val totalRows = root.get("totalRows")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+        val eloTaggedRows = root.get("eloTaggedRows")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+        val effectiveSampleSize = root.get("effectiveSampleSize")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
+        val uniqueTrainers = root.get("uniqueTrainers")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+
+        fun readShareMap(objName: String): Map<String, Double> {
+            val out = LinkedHashMap<String, Double>()
+            val obj = root.get(objName)?.takeIf { it.isJsonObject }?.asJsonObject ?: return out
+            for ((k, v) in obj.entrySet()) {
+                val d = if (v != null && !v.isJsonNull && v.isJsonPrimitive) v.asDouble else 0.0
+                if (k.isNotBlank() && d > 0.0) out[k] = d
+            }
+            return out
+        }
+
+        val speciesMovesOut = LinkedHashMap<String, CrowdSpeciesMoveEntry>()
+        val smObj = root.get("speciesMoves")?.takeIf { it.isJsonObject }?.asJsonObject
+        if (smObj != null) {
+            for ((spName, rawEl) in smObj.entrySet()) {
+                if (spName.isBlank() || rawEl == null || !rawEl.isJsonObject) continue
+                val recObj = rawEl.asJsonObject
+                val fastW = recObj.get("fastTotalWeight")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
+                val chargedW = recObj.get("chargedTotalWeight")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
+                val fastMap = LinkedHashMap<String, Double>()
+                recObj.get("fast")?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.forEach { (mk, mv) ->
+                    val dv = if (mv != null && !mv.isJsonNull) mv.asDouble else 0.0
+                    if (mk.isNotBlank() && dv > 0.0) fastMap[mk] = dv
+                }
+                val chargedMap = LinkedHashMap<String, Double>()
+                recObj.get("charged")?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.forEach { (mk, mv) ->
+                    val dv = if (mv != null && !mv.isJsonNull) mv.asDouble else 0.0
+                    if (mk.isNotBlank() && dv > 0.0) chargedMap[mk] = dv
+                }
+                speciesMovesOut[spName] = CrowdSpeciesMoveEntry(
+                    fastTotalWeight = fastW,
+                    chargedTotalWeight = chargedW,
+                    fast = fastMap,
+                    charged = chargedMap
+                )
+            }
+        }
+
+        CrowdEloMetaSnapshot(
+            league = league,
+            seasonId = seasonId,
+            combatMode = combatMode,
+            eloBucket = eloBucket,
+            totalRows = totalRows,
+            eloTaggedRows = eloTaggedRows,
+            effectiveSampleSize = effectiveSampleSize,
+            uniqueTrainers = uniqueTrainers,
+            fetchedAtMs = fetchedAtMs,
+            leadShares = readShareMap("leadShares"),
+            backShares = readShareMap("backShares"),
+            fieldShares = readShareMap("fieldShares"),
+            speciesMoves = speciesMovesOut
+        )
+    } catch (_: Exception) {
+        null
+    }
+}
+
+internal fun OverlayService.Companion.loadCrowdEloMetaForLeagueStatic(
+    prefs: SharedPreferences?,
+    league: String,
+    userElo: Int? = activeCurrentUserElo
+): CrowdEloMetaSnapshot? {
+    val normLeague = normalizeLeagueKeyStatic(league)
+    val eloBucket = userElo?.takeIf { it in 300..3800 }?.let { ((it / 50.0).roundToInt() * 50).coerceIn(300, 3800) }
+    val exactKey = "$normLeague|${eloBucket ?: "all"}"
+    CACHED_CROWD_ELO_META_BY_LEAGUE[exactKey]?.let { return it }
+
+    if (prefs != null) {
+        try {
+            val rawMapJson = prefs.getString(PREFS_KEY_CROWD_ELO_META_CACHE_JSON, null)
+            if (!rawMapJson.isNullOrBlank()) {
+                val rootObj = JsonParser.parseString(rawMapJson).asJsonObject
+                val bestEl = rootObj.get(exactKey) ?: rootObj.get("$normLeague|all")
+                if (bestEl != null && bestEl.isJsonObject) {
+                    val obj = bestEl.asJsonObject
+                    val snap = Gson().fromJson(obj, CrowdEloMetaSnapshot::class.java)
+                    if (snap != null && snap.league.isNotBlank()) {
+                        CACHED_CROWD_ELO_META_BY_LEAGUE[exactKey] = snap
+                        return snap
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    return CACHED_CROWD_ELO_META_BY_LEAGUE.entries.firstOrNull { (k, v) ->
+        k.startsWith("$normLeague|") && v.fieldShares.isNotEmpty()
+    }?.value
+}
+
+internal fun OverlayService.Companion.refreshCrowdEloMetaCacheAsync(
+    prefs: SharedPreferences,
+    league: String,
+    userElo: Int? = activeCurrentUserElo,
+    forceRefresh: Boolean = false,
+    onUpdated: (() -> Unit)? = null
+) {
+    val normLeague = normalizeLeagueKeyStatic(league)
+    val eloBucket = userElo?.takeIf { it in 300..3800 }?.let { ((it / 50.0).roundToInt() * 50).coerceIn(300, 3800) }
+    val cacheKey = "$normLeague|${eloBucket ?: "all"}"
+    val nowMs = System.currentTimeMillis()
+    val lastFetch = CACHED_CROWD_META_LAST_FETCH_MS[cacheKey] ?: 0L
+    if (!forceRefresh && (nowMs - lastFetch) < 5 * 60_000L && CACHED_CROWD_ELO_META_BY_LEAGUE.containsKey(cacheKey)) {
+        return
+    }
+    CACHED_CROWD_META_LAST_FETCH_MS[cacheKey] = nowMs
+
+    Thread {
+        try {
+            val encodedLeague = java.net.URLEncoder.encode(normLeague, "UTF-8")
+            val eloQuery = if (eloBucket != null) "&elo=$eloBucket" else ""
+            val url = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/meta/crowd-elo?league=$encodedLeague$eloQuery&mode=gbl"
+            val req = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .build()
+            CROWD_META_HTTP_CLIENT.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@Thread
+                val body = resp.body?.string().orEmpty()
+                val parsed = parseCrowdEloMetaResponseJson(body, System.currentTimeMillis()) ?: return@Thread
+                CACHED_CROWD_ELO_META_BY_LEAGUE[cacheKey] = parsed
+                CACHED_CROWD_ELO_META_BY_LEAGUE["$normLeague|latest"] = parsed
+                try {
+                    val existingRaw = prefs.getString(PREFS_KEY_CROWD_ELO_META_CACHE_JSON, null)
+                    val rootObj = if (!existingRaw.isNullOrBlank()) {
+                        try { JsonParser.parseString(existingRaw).asJsonObject } catch (_: Exception) { com.google.gson.JsonObject() }
+                    } else {
+                        com.google.gson.JsonObject()
+                    }
+                    val gsonInst = Gson()
+                    rootObj.add(cacheKey, JsonParser.parseString(gsonInst.toJson(parsed)))
+                    rootObj.add("$normLeague|all", JsonParser.parseString(gsonInst.toJson(parsed)))
+                    prefs.edit().putString(PREFS_KEY_CROWD_ELO_META_CACHE_JSON, rootObj.toString()).apply()
+                } catch (_: Exception) {}
+                simulationCacheEpoch++
+                clearTeamAndMetaCachesStatic()
+                if (onUpdated != null) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try { onUpdated.invoke() } catch (_: Exception) {}
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }.start()
+}
+
+internal fun OverlayService.Companion.resolveBlendedSpeciesMovesetStatic(
+    oppName: String,
+    league: String,
+    seasonSyncLogs: List<SyncBattleLogRecord> = emptyList(),
+    crowdSnapshot: CrowdEloMetaSnapshot? = null,
+    prefs: SharedPreferences? = null,
+    userElo: Int? = activeCurrentUserElo
+): BlendedSpeciesMovesetProfile {
+    val normLeague = normalizeLeagueKeyStatic(league)
+    val meta = resolveRecommendedMovesForSpecies(oppName, normLeague)
+    val canonicalSpecies = meta?.name?.takeIf { it.isNotBlank() } ?: oppName.trim()
+    val stdFast = meta?.defaultFastMove?.trim().orEmpty()
+    val stdC1 = meta?.chargedMove1?.trim().orEmpty()
+    val stdC2 = meta?.chargedMove2?.trim().orEmpty()
+    val (poolFastRaw, poolChargedRaw) = getAvailableMovePoolForSpeciesStatic(canonicalSpecies, normLeague)
+    val legalFastList: List<String> = (listOf(stdFast) + poolFastRaw)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.equals("Struggle", ignoreCase = true) }
+        .distinctBy { it.lowercase() }
+    val legalChargedList: List<String> = (listOf(stdC1, stdC2) + poolChargedRaw)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.endsWith("+") && !it.equals("Struggle", ignoreCase = true) && !it.equals("Frustration", ignoreCase = true) }
+        .distinctBy { it.lowercase() }
+
+    val fastCanonicalByLower = legalFastList.associateBy { it.lowercase() }
+    val chargedCanonicalByLower = legalChargedList.associateBy { it.lowercase() }
+
+    val fastCounts = LinkedHashMap<String, Double>()
+    val chargedCounts = LinkedHashMap<String, Double>()
+
+    // 1. PvPoke Baseline Dirichlet Prior
+    for (fm in legalFastList) {
+        fastCounts[fm] = if (fm.equals(stdFast, ignoreCase = true)) 3.0 else 0.20
+    }
+    for (cm in legalChargedList) {
+        val isStd = cm.equals(stdC1, ignoreCase = true) || cm.equals(stdC2, ignoreCase = true)
+        chargedCounts[cm] = if (isStd) 3.5 else 0.25
+    }
+
+    // 2. Personal Current-Season Battle Logs (Recency-weighted, NEVER filtered by ELO)
+    val isShow6Mode = prefs?.getString("gbl_app_combat_mode_v1", "gbl") == "show6"
+    val lambda = (if (isShow6Mode) activeShow6MetaDecayFactor else activeGblMetaDecayFactor).toDouble().coerceIn(0.0, 0.25)
+    val targetBase = FormResolver.extractBaseSpecies(canonicalSpecies).lowercase()
+    val targetIsShadow = canonicalSpecies.contains("Shadow", ignoreCase = true)
+
+    val matchingSeasonLogs = seasonSyncLogs
+        .filter { rec ->
+            normalizeLeagueKeyStatic(rec.league).equals(normLeague, ignoreCase = true) &&
+                !rec.oppObservedMoves.isNullOrEmpty()
+        }
+        .sortedByDescending { it.timestampMs }
+
+    matchingSeasonLogs.forEachIndexed { idx, rec ->
+        val recW = kotlin.math.exp(-lambda * idx.toDouble())
+        val obsList = rec.oppObservedMoves ?: return@forEachIndexed
+        for (obs in obsList) {
+            val obsSp = obs.species.trim()
+            if (obsSp.isEmpty()) continue
+            val sameExact = obsSp.equals(canonicalSpecies, ignoreCase = true) || obsSp.equals(oppName.trim(), ignoreCase = true)
+            val sameBase = FormResolver.extractBaseSpecies(obsSp).lowercase() == targetBase
+            if (!sameExact && !(sameBase && obsSp.contains("Shadow", ignoreCase = true) == targetIsShadow)) continue
+
+            val fStatus = obs.fastStatus?.trim()?.uppercase().orEmpty()
+            val obsFastRaw = obs.fastMove?.trim().orEmpty()
+            if (obsFastRaw.isNotEmpty() && !obsFastRaw.equals("UNKNOWN", ignoreCase = true) &&
+                (fStatus == "CONFIRMED_STD" || fStatus == "CONFIRMED_NONSTD" || fStatus.startsWith("CONFIRMED"))
+            ) {
+                val canonF = fastCanonicalByLower[obsFastRaw.lowercase()] ?: obsFastRaw
+                fastCounts[canonF] = (fastCounts[canonF] ?: 0.0) + recW * 1.6
+            }
+            for (cmRaw in obs.chargedMoves.distinctBy { it.lowercase() }) {
+                val cm = cmRaw.trim()
+                if (cm.isEmpty() || cm.endsWith("+")) continue
+                val canonC = chargedCanonicalByLower[cm.lowercase()] ?: cm
+                chargedCounts[canonC] = (chargedCounts[canonC] ?: 0.0) + recW * 1.6
+            }
+        }
+    }
+
+    // 3. Crowd D1 ELO-Weighted Telemetry (includes user's own uploaded logs)
+    val resolvedCrowd = crowdSnapshot ?: loadCrowdEloMetaForLeagueStatic(prefs, normLeague, userElo)
+    val crowdEntry = resolvedCrowd?.speciesMoves?.entries?.firstOrNull { (spK, _) ->
+        spK.equals(canonicalSpecies, ignoreCase = true) ||
+            spK.equals(oppName.trim(), ignoreCase = true) ||
+            (FormResolver.extractBaseSpecies(spK).lowercase() == targetBase && spK.contains("Shadow", ignoreCase = true) == targetIsShadow)
+    }?.value
+    if (crowdEntry != null) {
+        val fTot = crowdEntry.fastTotalWeight
+        if (fTot > 0.0 && crowdEntry.fast.isNotEmpty()) {
+            val cStrengthF = min(7.5, fTot * 0.55)
+            for ((fmRaw, fmW) in crowdEntry.fast) {
+                val canonF = fastCanonicalByLower[fmRaw.lowercase()] ?: fmRaw
+                fastCounts[canonF] = (fastCounts[canonF] ?: 0.0) + cStrengthF * (fmW / fTot).coerceIn(0.0, 1.0)
+            }
+        }
+        val cTot = crowdEntry.chargedTotalWeight
+        if (cTot > 0.0 && crowdEntry.charged.isNotEmpty()) {
+            val cStrengthC = min(13.0, cTot * 0.55)
+            for ((cmRaw, cmW) in crowdEntry.charged) {
+                val canonC = chargedCanonicalByLower[cmRaw.lowercase()] ?: cmRaw
+                val shareOfSpecies = (cmW / cTot).coerceIn(0.0, 1.0)
+                chargedCounts[canonC] = (chargedCounts[canonC] ?: 0.0) + cStrengthC * shareOfSpecies * 0.5
+            }
+        }
+    }
+
+    val fastSum = fastCounts.values.sum().takeIf { it > 0.0 } ?: 1.0
+    val fastWeights = fastCounts.entries
+        .sortedByDescending { it.value }
+        .associate { it.key to (it.value / fastSum) }
+    val chargedSum = chargedCounts.values.sum().takeIf { it > 0.0 } ?: 1.0
+    val chargedWeights = chargedCounts.entries
+        .sortedByDescending { it.value }
+        .associate { it.key to (it.value / chargedSum) }
+
+    val orderedFast: List<String> = fastWeights.keys.toList()
+    val orderedCharged: List<String> = chargedWeights.keys.toList()
+    val primaryFast = orderedFast.firstOrNull() ?: stdFast
+    val primaryC1 = orderedCharged.getOrNull(0) ?: stdC1
+    val primaryC2 = orderedCharged.getOrNull(1) ?: stdC2.ifBlank { primaryC1 }
+
+    val altFastCand = orderedFast.getOrNull(1)?.takeIf { (fastWeights[it] ?: 0.0) >= 0.16 }
+    val altChargedCand = orderedCharged.getOrNull(2)?.takeIf { (chargedWeights[it] ?: 0.0) >= 0.15 }
+    val altShare = max(altFastCand?.let { fastWeights[it] } ?: 0.0, (altChargedCand?.let { chargedWeights[it] } ?: 0.0) * 1.4).coerceIn(0.0, 0.40)
+
+    return BlendedSpeciesMovesetProfile(
+        species = canonicalSpecies,
+        primaryFastMove = primaryFast,
+        primaryCharged1 = primaryC1,
+        primaryCharged2 = primaryC2,
+        fastMoveWeights = fastWeights,
+        chargedMoveWeights = chargedWeights,
+        orderedFastMoves = orderedFast,
+        orderedChargedMoves = orderedCharged,
+        altComboFastMove = if (altFastCand != null || altChargedCand != null) (altFastCand ?: primaryFast) else null,
+        altComboCharged1 = if (altFastCand != null || altChargedCand != null) primaryC1 else null,
+        altComboCharged2 = if (altFastCand != null || altChargedCand != null) (altChargedCand ?: primaryC2) else null,
+        altComboShare = if (altFastCand != null || altChargedCand != null) altShare else 0.0
+    )
+}
+
 internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
     league: String,
     seasonLogs: List<Pair<Long, List<String>>>,
@@ -1216,7 +1636,8 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
     customLimitedStdBlendPct: Int? = null,
     customLimitedStdDecay: Double? = null,
     customSheetWeightPct: Int? = null,
-    empiricalOnlyLimit: Int? = null
+    empiricalOnlyLimit: Int? = null,
+    crowdSnapshot: CrowdEloMetaSnapshot? = null
 ): BlendedSeasonMetaDistribution {
     val normKey = normalizeLeagueKeyStatic(league)
     val rankedPool = TOP_30_RANKED_POOL_CACHE[normKey] ?: run {
@@ -1245,7 +1666,7 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
     }
     val pMeta = rawMeta.mapValues { (_, v) -> if (rawMetaSum > 0.0) v / rawMetaSum else 0.0 }
 
-    // Sort current-season logs newest-first
+    // Sort current-season logs newest-first (Personal Logs = Recency weighted only, NOT ELO-filtered)
     val sortedAllLogs = seasonLogs
         .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
         .sortedByDescending { it.first }
@@ -1340,6 +1761,29 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
         }
     }
 
+    // Crowd D1 ELO-Weighted distribution (includes caller's own D1 uploads)
+    val effCrowd = if (!isShow6 && empiricalOnlyLimit == null) {
+        crowdSnapshot ?: loadCrowdEloMetaForLeagueStatic(null, normKey, activeCurrentUserElo)
+    } else null
+    val hasValidCrowd = effCrowd != null && effCrowd.effectiveSampleSize >= 5.0 && effCrowd.fieldShares.isNotEmpty()
+    val crowdLeadShares = LinkedHashMap<String, Double>()
+    val crowdBackShares = LinkedHashMap<String, Double>()
+    val crowdFieldShares = LinkedHashMap<String, Double>()
+    if (hasValidCrowd && effCrowd != null) {
+        for ((sp, sh) in effCrowd.leadShares) {
+            val canon = eligibleLowerMap[sp.lowercase()] ?: sp
+            crowdLeadShares[canon] = (crowdLeadShares[canon] ?: 0.0) + sh
+        }
+        for ((sp, sh) in effCrowd.backShares) {
+            val canon = eligibleLowerMap[sp.lowercase()] ?: sp
+            crowdBackShares[canon] = (crowdBackShares[canon] ?: 0.0) + sh
+        }
+        for ((sp, sh) in effCrowd.fieldShares) {
+            val canon = eligibleLowerMap[sp.lowercase()] ?: sp
+            crowdFieldShares[canon] = (crowdFieldShares[canon] ?: 0.0) + sh
+        }
+    }
+
     val maxLogW = ((customLogWeightPct ?: if (isShow6) activeShow6MetaLogWeightPct else activeGblMetaLogWeightPct).coerceIn(0, 100)) / 100.0
     val stdBlendMaxW = ((customLimitedStdBlendPct ?: activeLimitedStdBlendPctGbl).coerceIn(0, 100)) / 100.0
     val stdDecayBeta = (customLimitedStdDecay ?: activeLimitedStdDecayGbl.toDouble()).coerceIn(0.01, 0.30)
@@ -1348,12 +1792,14 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
     val wHist: Double
     val wStdCup: Double
     val wSheet: Double
+    val wCrowd: Double
     val wMeta: Double
 
     if (empiricalOnlyLimit != null) {
         wHist = if (nMatches > 0) 1.0 else 0.0
         wStdCup = 0.0
         wSheet = 0.0
+        wCrowd = 0.0
         wMeta = if (nMatches > 0) 0.0 else 1.0
     } else {
         val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
@@ -1365,18 +1811,23 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
         val rawWSheet = if (isShow6 && rawSheetSum > 0.0) {
             remAfterStd * sheetPrefW
         } else 0.0
-        val rawWMeta = (remAfterStd - rawWSheet).coerceAtLeast(0.0)
-        val sumW = (rawWHist + rawWStd + rawWSheet + rawWMeta).takeIf { it > 0.0 } ?: 1.0
+        val remAfterSheet = (remAfterStd - rawWSheet).coerceAtLeast(0.0)
+        val rawWCrowd = if (hasValidCrowd && effCrowd != null) {
+            remAfterSheet * (0.65 * min(1.0, effCrowd.effectiveSampleSize / 80.0)).coerceIn(0.0, 0.65)
+        } else 0.0
+        val rawWMeta = (remAfterSheet - rawWCrowd).coerceAtLeast(0.0)
+        val sumW = (rawWHist + rawWStd + rawWSheet + rawWCrowd + rawWMeta).takeIf { it > 0.0 } ?: 1.0
         wHist = rawWHist / sumW
         wStdCup = rawWStd / sumW
         wSheet = rawWSheet / sumW
+        wCrowd = rawWCrowd / sumW
         wMeta = rawWMeta / sumW
     }
 
     val allSpecies = if (empiricalOnlyLimit != null && nMatches > 0) {
         (rawHistField.keys + rawHistLead.keys + rawHistBack.keys).distinct()
     } else {
-        (pMeta.keys + rawHistLead.keys + rawHistField.keys + rawStdField.keys + rawSheetField.keys).distinct()
+        (pMeta.keys + rawHistLead.keys + rawHistField.keys + rawStdField.keys + rawSheetField.keys + crowdFieldShares.keys + crowdLeadShares.keys).distinct()
     }
 
     val leadWeights = LinkedHashMap<String, Double>()
@@ -1394,9 +1845,13 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
         val fStdProb = if (rawStdFieldSum > 0.0) (rawStdField[sp] ?: 0.0) / rawStdFieldSum else mProb
         val bStdProb = if (rawStdBackSum > 0.0) (rawStdBack[sp] ?: 0.0) / rawStdBackSum else fStdProb
 
-        leadWeights[sp] = wHist * lHistProb + wStdCup * lStdProb + wSheet * sProb + wMeta * mProb
-        fieldWeights[sp] = wHist * fHistProb + wStdCup * fStdProb + wSheet * sProb + wMeta * mProb
-        backWeights[sp] = wHist * bHistProb + wStdCup * bStdProb + wSheet * sProb + wMeta * mProb
+        val fCrowdProb = if (hasValidCrowd) (crowdFieldShares[sp] ?: 0.0) else mProb
+        val lCrowdProb = if (hasValidCrowd && crowdLeadShares.isNotEmpty()) (crowdLeadShares[sp] ?: 0.0) else fCrowdProb
+        val bCrowdProb = if (hasValidCrowd && crowdBackShares.isNotEmpty()) (crowdBackShares[sp] ?: 0.0) else fCrowdProb
+
+        leadWeights[sp] = wHist * lHistProb + wStdCup * lStdProb + wSheet * sProb + wCrowd * lCrowdProb + wMeta * mProb
+        fieldWeights[sp] = wHist * fHistProb + wStdCup * fStdProb + wSheet * sProb + wCrowd * fCrowdProb + wMeta * mProb
+        backWeights[sp] = wHist * bHistProb + wStdCup * bStdProb + wSheet * sProb + wCrowd * bCrowdProb + wMeta * mProb
     }
 
     val lTotal = leadWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
@@ -1414,7 +1869,10 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaStatic(
         sheetWeightPct = (wSheet * 100.0).roundToInt(),
         metaWeightPct = (wMeta * 100.0).roundToInt(),
         rawSeenCounts = rawSeenCounts,
-        pvpokeRankMap = pvpokeRankMap
+        pvpokeRankMap = pvpokeRankMap,
+        crowdWeightPct = (wCrowd * 100.0).roundToInt(),
+        crowdMatchCount = if (hasValidCrowd) (effCrowd?.totalRows ?: 0) else 0,
+        crowdTargetElo = effCrowd?.eloBucket
     )
 }
 
@@ -3218,7 +3676,8 @@ internal fun OverlayService.Companion.formatAntiMetaDefaultTeamNameStatic(league
 
 internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
     normLeague: String,
-    seasonLogs: List<Pair<Long, List<String>>>
+    seasonLogs: List<Pair<Long, List<String>>>,
+    crowdSnapshot: CrowdEloMetaSnapshot? = null
 ): RoleWeightedTop100MetaDist {
     val top100Candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 100)
     val top100Species = ArrayList<String>(100)
@@ -3379,6 +3838,32 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
         }
     }
 
+    val effCrowd = crowdSnapshot ?: loadCrowdEloMetaForLeagueStatic(null, normLeague, activeCurrentUserElo)
+    val hasValidCrowd = effCrowd != null && effCrowd.effectiveSampleSize >= 5.0 && effCrowd.fieldShares.isNotEmpty()
+    val crowdByBaseOrLower = HashMap<String, String>()
+    for (sp in top100Species) {
+        crowdByBaseOrLower.putIfAbsent(sp.lowercase(), sp)
+    }
+    val crowdLead = LinkedHashMap<String, Double>()
+    val crowdSwap = LinkedHashMap<String, Double>()
+    val crowdCloser = LinkedHashMap<String, Double>()
+    val crowdField = LinkedHashMap<String, Double>()
+    if (hasValidCrowd && effCrowd != null) {
+        for ((sp, sh) in effCrowd.fieldShares) {
+            val canon = crowdByBaseOrLower[sp.lowercase()] ?: sp
+            crowdField[canon] = (crowdField[canon] ?: 0.0) + sh
+        }
+        for ((sp, sh) in effCrowd.leadShares) {
+            val canon = crowdByBaseOrLower[sp.lowercase()] ?: sp
+            crowdLead[canon] = (crowdLead[canon] ?: 0.0) + sh
+        }
+        for ((sp, sh) in effCrowd.backShares) {
+            val canon = crowdByBaseOrLower[sp.lowercase()] ?: sp
+            crowdSwap[canon] = (crowdSwap[canon] ?: 0.0) + sh
+            crowdCloser[canon] = (crowdCloser[canon] ?: 0.0) + sh
+        }
+    }
+
     val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
     val remAfterHist = (1.0 - rawWHist).coerceAtLeast(0.0)
     val stdBlendMaxW = (activeLimitedStdBlendPctGbl.coerceIn(0, 100)) / 100.0
@@ -3386,20 +3871,26 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
     val rawWStd = if (isLimCup && sumSF > 0.0) {
         min(remAfterHist, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
     } else 0.0
-    val rawWMeta = (remAfterHist - rawWStd).coerceAtLeast(0.0)
-    val sumWeights = (rawWHist + rawWStd + rawWMeta).takeIf { it > 0.0 } ?: 1.0
+    val remAfterStd = (remAfterHist - rawWStd).coerceAtLeast(0.0)
+    val rawWCrowd = if (hasValidCrowd && effCrowd != null) {
+        remAfterStd * (0.65 * min(1.0, effCrowd.effectiveSampleSize / 80.0)).coerceIn(0.0, 0.65)
+    } else 0.0
+    val rawWMeta = (remAfterStd - rawWCrowd).coerceAtLeast(0.0)
+    val sumWeights = (rawWHist + rawWStd + rawWCrowd + rawWMeta).takeIf { it > 0.0 } ?: 1.0
     val wHist = rawWHist / sumWeights
     val wStd = rawWStd / sumWeights
+    val wCrowd = rawWCrowd / sumWeights
     val wMeta = rawWMeta / sumWeights
 
-    val allSpecies = (top100Species + histField.keys + histLead.keys + stdField.keys).distinct()
+    val allSpecies = (top100Species + histField.keys + histLead.keys + stdField.keys + crowdField.keys + crowdLead.keys).distinct()
 
     fun blendRoleMap(
         synMap: Map<String, Double>,
         hMap: Map<String, Double>,
         hSum: Double,
         sMap: Map<String, Double>,
-        sSum: Double
+        sSum: Double,
+        cMap: Map<String, Double>
     ): Map<String, Double> {
         val out = LinkedHashMap<String, Double>()
         var total = 0.0
@@ -3415,7 +3906,12 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
                 sumSF > 0.0 -> (stdField[sp] ?: 0.0) / sumSF
                 else -> mP
             }
-            val v = wHist * hP + wStd * sP + wMeta * mP
+            val cP = when {
+                !hasValidCrowd -> mP
+                cMap.isNotEmpty() -> cMap[sp] ?: 0.0
+                else -> crowdField[sp] ?: 0.0
+            }
+            val v = wHist * hP + wStd * sP + wCrowd * cP + wMeta * mP
             if (v > 0.0) {
                 out[sp] = v
                 total += v
@@ -3425,10 +3921,10 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
         return out.mapValues { it.value / denom }
     }
 
-    val leadWeights = blendRoleMap(pSynL, histLead, sumHL, stdLead, sumSL)
-    val swapWeights = blendRoleMap(pSynS, histSwap, sumHS, stdSwap, sumSS)
-    val closerWeights = blendRoleMap(pSynC, histCloser, sumHC, stdCloser, sumSC)
-    val fieldWeights = blendRoleMap(pSynF, histField, sumHF, stdField, sumSF)
+    val leadWeights = blendRoleMap(pSynL, histLead, sumHL, stdLead, sumSL, crowdLead)
+    val swapWeights = blendRoleMap(pSynS, histSwap, sumHS, stdSwap, sumSS, crowdSwap)
+    val closerWeights = blendRoleMap(pSynC, histCloser, sumHC, stdCloser, sumSC, crowdCloser)
+    val fieldWeights = blendRoleMap(pSynF, histField, sumHF, stdField, sumSF, crowdField)
 
     val sortedField = fieldWeights.entries.sortedByDescending { it.value }.map { it.key }
     val top50Threats = sortedField.take(50).ifEmpty { top100Species.take(50) }
@@ -3469,7 +3965,7 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
         top50MetaList = top50MetaList,
         top100Species = top100Species,
         wHistPct = (wHist * 100.0).roundToInt(),
-        wMetaPct = (wMeta * 100.0).roundToInt(),
+        wMetaPct = ((wMeta + wCrowd) * 100.0).roundToInt(),
         seasonMatchCount = nMatches
     )
 }
@@ -3487,7 +3983,10 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
     featuredPokemonNames: List<String>,
     seasonLogs: List<Pair<Long, List<String>>> = emptyList(),
     maxTeamsPerArchetype: Int = 5,
-    allowAltMovesets: Boolean = true
+    allowAltMovesets: Boolean = true,
+    seasonSyncLogs: List<SyncBattleLogRecord> = emptyList(),
+    crowdSnapshot: CrowdEloMetaSnapshot? = null,
+    prefsForCrowd: SharedPreferences? = null
 ): AntiMetaTeamBuilderResult {
     val t0 = System.currentTimeMillis()
     val normLeague = normalizeLeagueKeyStatic(league)
@@ -3496,7 +3995,15 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
     val isGreat = cpCap <= 1500
     val isUltra = cpCap == 2500
 
-    val roleMeta = computeRoleWeightedTop100MetaStatic(normLeague, seasonLogs)
+    val effCrowd = crowdSnapshot ?: loadCrowdEloMetaForLeagueStatic(prefsForCrowd, normLeague, activeCurrentUserElo)
+    val effSyncLogs = if (seasonSyncLogs.isNotEmpty()) {
+        seasonSyncLogs
+    } else if (prefsForCrowd != null) {
+        loadSeasonSyncLogsForLeagueStatic(prefsForCrowd, Gson(), normLeague, isShow6 = false, empiricalLimit = null)
+    } else {
+        emptyList()
+    }
+    val roleMeta = computeRoleWeightedTop100MetaStatic(normLeague, seasonLogs, effCrowd)
     val extendedRankedPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 360)
     val rankByNameLower = HashMap<String, Int>(extendedRankedPool.size)
     extendedRankedPool.forEachIndexed { index, member ->
@@ -3606,6 +4113,17 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
     }
 
     val allOpps = (roleMeta.leadWeights.keys + roleMeta.fieldWeights.keys + top50MetaThreats).distinct()
+    val oppMovesetProfiles = HashMap<String, BlendedSpeciesMovesetProfile>(allOpps.size)
+    for (opp in allOpps) {
+        oppMovesetProfiles[opp] = resolveBlendedSpeciesMovesetStatic(
+            oppName = opp,
+            league = normLeague,
+            seasonSyncLogs = effSyncLogs,
+            crowdSnapshot = effCrowd,
+            prefs = prefsForCrowd,
+            userElo = activeCurrentUserElo
+        )
+    }
 
     data class CandidateSlotEval(
         val member: TeamMember,
@@ -3635,13 +4153,42 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
         val closerByOpp = HashMap<String, Double>(allOpps.size)
 
         for (opp in allOpps) {
-            val b00 = calculateMatchupRatingStatic(cand.name, opp, 0, 0, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-            val b01 = calculateMatchupRatingStatic(cand.name, opp, 0, 1, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-            val b10 = calculateMatchupRatingStatic(cand.name, opp, 1, 0, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-            val b11 = calculateMatchupRatingStatic(cand.name, opp, 1, 1, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-            val b12 = calculateMatchupRatingStatic(cand.name, opp, 1, 2, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-            val b21 = calculateMatchupRatingStatic(cand.name, opp, 2, 1, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-            val b22 = calculateMatchupRatingStatic(cand.name, opp, 2, 2, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
+            val prof = oppMovesetProfiles[opp]
+            val pFast = prof?.primaryFastMove?.takeIf { it.isNotBlank() }
+            val pC1 = prof?.primaryCharged1?.takeIf { it.isNotBlank() }
+            val pC2 = prof?.primaryCharged2?.takeIf { it.isNotBlank() }
+            val altShare = prof?.altComboShare?.coerceIn(0.0, 0.45) ?: 0.0
+            val aFast = prof?.altComboFastMove?.takeIf { it.isNotBlank() } ?: pFast
+            val aC1 = prof?.altComboCharged1?.takeIf { it.isNotBlank() } ?: pC1
+            val aC2 = prof?.altComboCharged2?.takeIf { it.isNotBlank() } ?: pC2
+            val hasAltCombo = prof != null && altShare >= 0.16 && (
+                !aFast.equals(pFast, ignoreCase = true) ||
+                    !aC1.equals(pC1, ignoreCase = true) ||
+                    !aC2.equals(pC2, ignoreCase = true)
+                )
+
+            fun blendedOppRating(sUser: Int, sOpp: Int): Double {
+                val primary = calculateMatchupRatingStatic(
+                    cand.name, opp, sUser, sOpp, normLeague,
+                    cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs,
+                    oppFastMove = pFast, oppCharged1 = pC1, oppCharged2 = pC2
+                ).toDouble()
+                if (!hasAltCombo) return primary
+                val alt = calculateMatchupRatingStatic(
+                    cand.name, opp, sUser, sOpp, normLeague,
+                    cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs,
+                    oppFastMove = aFast, oppCharged1 = aC1, oppCharged2 = aC2
+                ).toDouble()
+                return (1.0 - altShare) * primary + altShare * alt
+            }
+
+            val b00 = blendedOppRating(0, 0)
+            val b01 = blendedOppRating(0, 1)
+            val b10 = blendedOppRating(1, 0)
+            val b11 = blendedOppRating(1, 1)
+            val b12 = blendedOppRating(1, 2)
+            val b21 = blendedOppRating(2, 1)
+            val b22 = blendedOppRating(2, 2)
 
             leadByOpp[opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
             swapByOpp[opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00

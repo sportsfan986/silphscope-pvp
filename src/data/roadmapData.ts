@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.41',
+    codename: '3-Way ELO-Weighted Crowd Meta Fusion, Non-Standard Moveset Spice Detection & In-App APK Update Notifier',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Introduces 3-way ELO-weighted crowd meta and moveset blending across Android, Web Simulator, and Cloudflare D1, idle-only GBL ELO Auto-OCR with Rank-20 reveal backfill, Spice Badge non-standard moveset highlights on Battle Log cards, and automated in-app APK update alerts.',
+    icon: '🎯',
+    accentColor: '#F59E0B',
+    highlights: [
+      'Idle-only GBL ELO Auto-OCR on End-of-Set modals & scrolled Current Season badges (plus 120s Rank-20 backfill & cross-device D1 sync), zero active-combat CPU overhead',
+      '3-way meta & moveset fusion blending Recency-weighted personal season logs, ELO-weighted Cloudflare D1 crowd telemetry (/v1/meta/crowd-elo), and PvPoke baselines for Anti-Meta Team Generation & Live HUD / Shield Decision Overlays',
+      'Observed opponent fast & charged moveset persistence on battle logs with clean 🌶️ Spice badges for confirmed non-standard moves',
+      'Automated In-App APK Update Notifier (/v1/version/latest) in MainActivity with release changelog highlights, manual Settings check, and 1-tap dl.silphscopepvp.com download'
+    ]
+  },
+  {
     version: 'v7.40',
     codename: '45s Switch Clock, 15Hz High-Perf Burst Vision, Instant Shield OCR, Cutscene Swap-Catch & Back-to-Back Charge HP Sync',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Upgrades GBL live combat telemetry across Android and Web Simulator with the 45s switch cooldown, default High-Perf 15Hz vision + 150ms burst OCR (with optional Battery Saver toggle), early 3-2-1 lead locking & Turn-0 swap preservation, immediate mid-cutscene BLOCKED! shield decrements, cutscene swap-catch tracking, back-to-back charge HP commits, and synchronous backline prediction updates.',
     icon: '⚡',
@@ -303,21 +317,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
     ]
   },
   {
-    id: 'non-std-moves-elo',
-    title: 'Non-Standard Movesets & ELO-Weighted Meta Feeding',
-    badge: 'ADAPTIVE META',
-    status: 'Planned',
-    statusColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    category: 'Analytics & Team Builder',
-    icon: '🎯',
-    description: 'Detect spicy/off-meta movesets, weight moveset frequencies by player ELO band, and feed real-world ladder data into the Anti-Meta Generator and Expected Moveset HUD.',
-    keyGoals: [
-      'Dynamic ELO bracket moveset weighting (actual ladder vs. paper PvPoke)',
-      'Spice Badge highlight in Battle Log cards (zero clutter if standard)',
-      'Adaptive shield bait vs. nuke probability matrices in the live HUD'
-    ]
-  },
-  {
     id: 'dual-screen-telemetry',
     title: 'Real-Time Dual-Screen Telemetry Streaming',
     badge: 'COACH & STREAMER',
@@ -348,21 +347,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
     ]
   },
   {
-    id: 'in-app-apk-update-checker',
-    title: 'In-App APK Update Notifications, Changelog Summary & Direct Download',
-    badge: 'ANDROID NATIVE',
-    status: 'In Design',
-    statusColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    category: 'HUD / Combat Engine',
-    icon: '📲',
-    description: 'Automated in-app alert inside MainActivity notifying players when a newer APK is available, displaying high-level release notes and a 1-tap download link to dl.silphscopepvp.com.',
-    keyGoals: [
-      'Remote version check against GitHub Releases / Cloudflare API on startup',
-      'Dismissible update card with bulleted highlights of fixes and new features',
-      '1-tap direct APK download and install trigger via dl.silphscopepvp.com'
-    ]
-  },
-  {
     id: 'cross-platform-theme-persistence',
     title: 'Unified Cross-Platform Theme Persistence (Shiny Dialga Default + User Sync)',
     badge: 'DESIGN & SYNC',
@@ -374,7 +358,7 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
     keyGoals: [
       'Shiny Origin Dialga Midnight invariant default for first load & anonymous sessions',
       'Dynamic CSS theme variables applied consistently across Marketing site & Simulator',
-      'User theme preference synced across devices via Cloudflare profile metadata & GitHub vault'
+      'User theme preference synced across devices via Cloudflare D1 Vault Sync'
     ]
   }
 ];
