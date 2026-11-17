@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.51',
+    codename: 'Shield Carryover & Mimikyu Disguise Hardening, Non-GBL Screen Exclusion, Shadow Aura Lock & Minigame Timeout Fix',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Hardens live battle shield tracking against stale outgoing "BLOCKED!" banner carryover and 0–3% Protect Shield deadlocks, fixes Mimikyu Disguise double-debuffing (-2 DEF) and premature Disguise busts, blocks false battle starts/species locks on Pokédex & catch summary cards with clean aborted-Stop resets, guards against false non-aura Shadow DHP flips, and stops victory-fade duplicate KO events and mid-swipe minigame splits.',
+    icon: '🛡️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Timestamp-burst & incoming-prompt carryover suppression prevents fading outgoing "BLOCKED!" banners from deducting your Protect Shield on an immediate incoming opponent charge',
+      'Fixed 26.6s user shield decrement deadlock by aligning 0–3% Protect Shield chip handling and fixing the post-finalization "BLOCKED!" provisional-shield guard',
+      'Always refreshes Mimikyu Disguise callout deduplication timers, suppresses trailing Disguise "DEFENSE FELL!" double-debuffs (-2 DEF), and holds ambiguous 0–3% shield hits until shield pixel confirmation',
+      'Excludes Pokédex/Storage/Catch cards (POKÉDEX, POWER UP, APPRAISE, TRANSFER, NEW ATTACK), clears stray detections on aborted <10s Stop taps, resets cleanly on 3-2-1, guards non-aura Shadow DHP flips, and fixes victory-fade duplicate moves & slow minigame timeouts'
+    ]
+  },
+  {
     version: 'v7.50',
     codename: '3D HSV Shadow Aura Detection, Bidirectional ΔHP & Joint Fast-Move Verification, Observed-CP Best-Guess IVs & Live Breakpoints/Bulkpoints',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Completes Roadmap Features #1 and #2 with zero-allocation 3D HSV + temporal-motion Shadow aura detection (with purple-species, foreground Shadow bleed, and Ghost VFX confounder rejection), stat-stage-aware Joint (FastMove × ShadowState) + turn-cadence verification, observed-CP Best-Guess Opponent IV charged damage deltas, and live integer HP Breakpoint/Bulkpoint pills across Full & Compact HUDs.',
     icon: '🟣',

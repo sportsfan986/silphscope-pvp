@@ -810,6 +810,26 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
+  // 3b. v7.51 (2026-11-17 Audit) Verified DVR Resolutions (recVerNum <= 750)
+  if (
+    curVerNum >= 751 &&
+    recVerNum > 0 &&
+    recVerNum <= 750 &&
+    (bidStr === "log-1794873302017-668" ||
+      bidStr === "log-1794877307416-787" ||
+      bidStr === "log-1794892907780-289" ||
+      bidStr === "log-1794874274164-261" ||
+      /disguise|mimikyu|-2 not -1|decrementing my shields|subtracted a shield|caught before name stayed/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.51",
+      verificationMethod: "v7.51 Shield Carryover, Mimikyu -1 DEF, Non-GBL Screen & Minigame Fixes",
+      explanation:
+        "Resolved in v7.51: stale outgoing BLOCKED! carryover suppression & charge-entry reset (Areas A/C), Mimikyu Disguise -1 DEF deduplication + ambiguous-shield hold (Area B), Pokedex/catch screen exclusion & clean Stop/3-2-1 reset (Area D), and non-aura Shadow DHP + KO victory-fade + minigame window fixes (Area E).",
+    };
+  }
+
   // 4. Check pre-v7.04 legacy anomalies recorded on v6.x
   if (recVerNum > 0 && recVerNum < 704 && curVerNum >= 708 && !anomalyOrBundle.manuallyFlagged) {
     return {
