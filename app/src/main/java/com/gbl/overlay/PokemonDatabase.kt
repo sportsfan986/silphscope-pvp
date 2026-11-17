@@ -97,6 +97,7 @@ import com.gbl.overlay.OverlayService.Companion.DYNAMIC_MOVE_BUFF_TABLE
 import com.gbl.overlay.OverlayService.Companion.DYNAMIC_MOVE_DATABASE
 import com.gbl.overlay.OverlayService.Companion.DYNAMIC_MOVE_ID_TO_NAME
 import com.gbl.overlay.OverlayService.Companion.DYNAMIC_POKEMON_DATABASE
+import com.gbl.overlay.OverlayService.Companion.DYNAMIC_SHADOW_ELIGIBLE_KEYS
 import com.gbl.overlay.OverlayService.Companion.FALLBACK_SPECIES_CHARGED_POOL
 import com.gbl.overlay.OverlayService.Companion.FALLBACK_SPECIES_FAST_POOL
 import com.gbl.overlay.OverlayService.Companion.FAST_MOVE_ENERGY
@@ -139,6 +140,62 @@ import com.gbl.overlay.OverlayService.Companion.TOP_META_POOL_CACHE
 // =============================================================================
 
 internal object PokemonStaticData {
+    // Compiled baseline of released Shadow Pokémon from PvPoke gamemaster.json (extended OTA by OverlayService.DYNAMIC_SHADOW_ELIGIBLE_KEYS)
+    val STATIC_RELEASED_SHADOW_KEYS: Set<String> = setOf(
+        "abomasnow", "abra", "absol", "accelgor", "aerodactyl", "aggron", "aipom", "alakazam", "altaria", "amaura",
+        "ambipom", "amoonguss", "ampharos", "annihilape", "anorith", "araquanid", "arbok", "arcanine", "archen", "archeops",
+        "armaldo", "aron", "articuno", "aurorus", "axew", "bagon", "baltoy", "banette", "barboach", "bastiodon",
+        "bayleef", "beedrill", "beldum", "bellossom", "bellsprout", "bewear", "bibarel", "bidoof", "blastoise", "blaziken",
+        "blitzle", "boldore", "braixen", "bulbasaur", "bunnelby", "butterfree", "cacnea", "cacturne", "camerupt", "carracosta",
+        "carvanha", "caterpie", "chandelure", "charizard", "charjabug", "charmander", "charmeleon", "chesnaught", "chespin", "chikorita",
+        "chimchar", "claydol", "cloyster", "cofagrigus", "combusken", "conkeldurr", "corphish", "corviknight", "corvisquire", "cradily",
+        "cranidos", "crawdaunt", "cresselia", "croagunk", "crobat", "croconaw", "crustle", "cubone", "cyndaquil", "darkrai",
+        "darmanitan (standard)", "darmanitan_standard", "darumaka", "deino", "delibird", "delphox", "dewgong", "dewott", "dewpider", "dialga",
+        "diggersby", "diglett", "diglett (alolan)", "diglett_alolan", "donphan", "dragonair", "dragonite", "drapion", "dratini", "drifblim",
+        "drifloon", "drilbur", "drowzee", "ducklett", "dugtrio", "dugtrio (alolan)", "dugtrio_alolan", "duosion", "dusclops", "dusknoir",
+        "duskull", "dwebble", "ekans", "electabuzz", "electivire", "electrike", "electrode", "emboar", "empoleon", "entei",
+        "escavalier", "excadrill", "exeggcute", "exeggutor", "exeggutor (alolan)", "exeggutor_alolan", "exploud", "feebas", "fennekin", "feraligatr",
+        "ferroseed", "ferrothorn", "flaaffy", "fletchinder", "fletchling", "flygon", "fomantis", "foongus", "forretress", "fraxure",
+        "froakie", "frogadier", "froslass", "gabite", "gallade", "galvantula", "garbodor", "garchomp", "gardevoir", "gastly",
+        "gengar", "geodude", "geodude (alolan)", "geodude_alolan", "gible", "gigalith", "girafarig", "giratina (altered)", "giratina_altered", "glalie",
+        "glameow", "gligar", "gliscor", "gloom", "golbat", "golduck", "golem", "golem (alolan)", "golem_alolan", "golett",
+        "golisopod", "golurk", "gothita", "gothitelle", "gothorita", "granbull", "graveler", "graveler (alolan)", "graveler_alolan", "greninja",
+        "grimer", "grimer (alolan)", "grimer_alolan", "grotle", "groudon", "grovyle", "growlithe", "grubbin", "grumpig", "gurdurr",
+        "gyarados", "hariyama", "haunter", "haxorus", "heatran", "heliolisk", "helioptile", "hippopotas", "hippowdon", "hitmonchan",
+        "hitmonlee", "hitmontop", "ho-oh", "ho_oh", "honchkrow", "hoothoot", "hoppip", "horsea", "houndoom", "houndour",
+        "hydreigon", "hypno", "infernape", "inkay", "ivysaur", "joltik", "jumpluff", "kabuto", "kabutops", "kadabra",
+        "kakuna", "karrablast", "kingdra", "kingler", "kirlia", "koffing", "krabby", "kyogre", "lairon", "lampent",
+        "landorus (incarnate)", "landorus_incarnate", "lapras", "larvitar", "latias", "latios", "ledian", "ledyba", "liepard", "lileep",
+        "linoone (galarian)", "linoone_galarian", "litwick", "loudred", "lugia", "lurantis", "luxio", "luxray", "machamp", "machoke",
+        "machop", "magikarp", "magmar", "magmortar", "magnemite", "magneton", "magnezone", "makuhita", "malamar", "mamoswine",
+        "manectric", "mankey", "mareep", "marowak", "marowak (alolan)", "marowak_alolan", "marshtomp", "mawile", "meganium", "meowth",
+        "metagross", "metang", "metapod", "mewtwo", "mightyena", "milotic", "misdreavus", "mismagius", "moltres", "monferno",
+        "mudkip", "muk", "muk (alolan)", "muk_alolan", "murkrow", "natu", "nidoking", "nidoqueen", "nidoran female", "nidoran male",
+        "nidoran_female", "nidoran_male", "nidorina", "nidorino", "ninetales", "ninetales (alolan)", "ninetales_alolan", "noctowl", "noibat", "noivern",
+        "nosepass", "numel", "nuzleaf", "obstagoon", "oddish", "omanyte", "omastar", "onix", "oshawott", "palkia",
+        "palossand", "pancham", "pangoro", "patrat", "persian", "phanpy", "phantump", "pidgeot", "pidgeotto", "pidgey",
+        "pidove", "pignite", "pikipek", "piloswine", "pineco", "pinsir", "piplup", "politoed", "poliwag", "poliwhirl",
+        "poliwrath", "ponyta", "poochyena", "porygon", "porygon-z", "porygon2", "porygon_z", "primeape", "prinplup", "probopass",
+        "psyduck", "pupitar", "purrloin", "purugly", "quagsire", "quilava", "quilladin", "qwilfish", "raikou", "ralts",
+        "rampardos", "rapidash", "raticate", "raticate (alolan)", "raticate_alolan", "rattata", "rattata (alolan)", "rattata_alolan", "regice", "regigigas",
+        "regirock", "registeel", "reshiram", "reuniclus", "rhydon", "rhyhorn", "rhyperior", "roggenrola", "rookidee", "sableye",
+        "salamence", "samurott", "sandshrew", "sandshrew (alolan)", "sandshrew_alolan", "sandslash", "sandslash (alolan)", "sandslash_alolan", "sandygast", "sawk",
+        "sceptile", "scizor", "scolipede", "scyther", "seadra", "sealeo", "seedot", "seel", "serperior", "servine",
+        "sharpedo", "shelgon", "shellder", "shelmet", "shieldon", "shiftry", "shiinotic", "shinx", "shuckle", "shuppet",
+        "skarmory", "skiploom", "skorupi", "skuntank", "slaking", "slakoth", "slowbro", "slowking", "slowpoke", "sneasel",
+        "sneasel (hisuian)", "sneasel_hisuian", "sneasler", "snivy", "snorlax", "snorunt", "snover", "snubbull", "solosis", "spheal",
+        "spoink", "squirtle", "stantler", "staraptor", "staravia", "starly", "starmie", "staryu", "steelix", "stufful",
+        "stunky", "sudowoodo", "suicune", "swablu", "swampert", "swanna", "swellow", "swinub", "taillow", "talonflame",
+        "tangela", "tangrowth", "teddiursa", "tentacool", "tentacruel", "tepig", "throh", "thundurus (incarnate)", "thundurus_incarnate", "timburr",
+        "tirtouga", "torchic", "tornadus (incarnate)", "tornadus_incarnate", "torterra", "totodile", "toucannon", "toxicroak", "tranquill", "trapinch",
+        "treecko", "trevenant", "trubbish", "trumbeak", "turtwig", "typhlosion", "tyranitar", "tyrantrum", "tyrunt", "unfezant",
+        "ursaluna", "ursaring", "venipede", "venomoth", "venonat", "venusaur", "vibrava", "victreebel", "vigoroth", "vikavolt",
+        "vileplume", "voltorb", "vulpix", "vulpix (alolan)", "vulpix_alolan", "wailmer", "wailord", "walrein", "wartortle", "watchog",
+        "weavile", "weedle", "weepinbell", "weezing", "weezing (galarian)", "weezing_galarian", "whirlipede", "whiscash", "whismur", "wimpod",
+        "wobbuffet", "wooper", "xatu", "yamask", "zapdos", "zebstrika", "zekrom", "zigzagoon (galarian)", "zigzagoon_galarian", "zubat",
+        "zweilous"
+    )
+
     // Default catalog aligned with live compiled PvPoke src/data/gamemaster.json formats
     val DEFAULT_LIMITED_META_CATALOG: List<LimitedMetaFormat> = listOf(
         // Forced Show 6 Battle Frontier Cups (ALL CAPS, dynamically matched via "Battle Frontier")
@@ -2260,6 +2317,9 @@ internal fun OverlayService.Companion.parseRankingsJsonStatic(leagueKey: String,
                 if (!el.isJsonObject) continue
                 val obj = el.asJsonObject
                 val speciesId = obj.optString("speciesId")?.takeIf { it.isNotBlank() } ?: continue
+                if (speciesId.endsWith("_shadow", ignoreCase = true)) {
+                    DYNAMIC_SHADOW_ELIGIBLE_KEYS.add(speciesId.lowercase().removeSuffix("_shadow"))
+                }
                 val score = obj.optDouble("score") ?: 80.0
                 val entryRank = rankCounter++
                 val movesObj = obj.optJsonObject("moves")
@@ -2986,6 +3046,35 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                     val existingStatic = existingById[speciesId.lowercase()]
 
                     val rawSpeciesName = obj.optString("speciesName")?.takeIf { it.isNotBlank() } ?: continue
+                    val idLowerRaw = speciesId.trim().lowercase()
+                    val isMegaOrPrimalGm = idLowerRaw.contains("_mega") || idLowerRaw.contains("_primal") ||
+                        rawSpeciesName.startsWith("Mega ", ignoreCase = true) ||
+                        rawSpeciesName.startsWith("Primal ", ignoreCase = true)
+                    if (!isMegaOrPrimalGm) {
+                        val tagsArr = obj.optJsonArray("tags")
+                        var hasShadowTag = idLowerRaw.endsWith("_shadow")
+                        if (!hasShadowTag && tagsArr != null) {
+                            for (ti in 0 until tagsArr.size()) {
+                                val tEl = tagsArr.get(ti)
+                                if (tEl != null && !tEl.isJsonNull && tEl.isJsonPrimitive &&
+                                    tEl.asString.equals("shadoweligible", ignoreCase = true)
+                                ) {
+                                    hasShadowTag = true
+                                    break
+                                }
+                            }
+                        }
+                        if (hasShadowTag) {
+                            val cleanBaseId = idLowerRaw.removeSuffix("_shadow").trim()
+                            if (cleanBaseId.isNotEmpty()) DYNAMIC_SHADOW_ELIGIBLE_KEYS.add(cleanBaseId)
+                            val cleanDisplay = rawSpeciesName
+                                .replace(Regex("\\s*\\(Shadow\\)\\s*$", RegexOption.IGNORE_CASE), "")
+                                .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                                .trim()
+                                .lowercase()
+                            if (cleanDisplay.isNotEmpty()) DYNAMIC_SHADOW_ELIGIBLE_KEYS.add(cleanDisplay)
+                        }
+                    }
                     val speciesName = if (rawSpeciesName.endsWith(" (Shadow)")) {
                         "Shadow " + rawSpeciesName.removeSuffix(" (Shadow)").trim()
                     } else {

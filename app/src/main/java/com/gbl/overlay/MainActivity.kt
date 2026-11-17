@@ -15970,14 +15970,16 @@ class MainActivity : AppCompatActivity() {
             dbStatusText.text = "Loading cached PvPoke GameMaster & Selected League Rankings..."
             lifecycleScope.launch(Dispatchers.IO) {
                 var didDownloadMissing = false
+                val nowMs = System.currentTimeMillis()
                 try {
                     for ((leagueKey, fileName, url) in RANKINGS_ENDPOINTS) {
                         val rFile = File(filesDir, fileName)
-                        if (rFile.exists() && rFile.length() > 200) {
-                            if (OverlayService.LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) {
-                                OverlayService.parseRankingsJsonStatic(leagueKey, rFile.readText())
-                            }
-                        } else {
+                        val hasValidCache = rFile.exists() && rFile.length() > 200
+                        val isStale = !hasValidCache || (nowMs - rFile.lastModified()) > OverlayService.PVPOKE_OTA_REFRESH_TTL_MS
+                        if (hasValidCache && OverlayService.LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) {
+                            OverlayService.parseRankingsJsonStatic(leagueKey, rFile.readText())
+                        }
+                        if (isStale) {
                             try {
                                 val rReq = Request.Builder().url(url).build()
                                 client.newCall(rReq).execute().use { rResp ->
@@ -15994,8 +15996,24 @@ class MainActivity : AppCompatActivity() {
                     if (OverlayService.DYNAMIC_POKEMON_DATABASE.isEmpty() || OverlayService.DYNAMIC_MOVE_DATABASE.isEmpty()) {
                         OverlayService.parseGamemasterJsonStatic(cacheFile.readText())
                     }
+                    if ((nowMs - cacheFile.lastModified()) > OverlayService.PVPOKE_OTA_REFRESH_TTL_MS) {
+                        try {
+                            val gmReq = Request.Builder().url(GAMEMASTER_URL).build()
+                            client.newCall(gmReq).execute().use { gmResp ->
+                                val gmBody = gmResp.body?.string()
+                                if (gmResp.isSuccessful && !gmBody.isNullOrBlank() && gmBody.length > 1000) {
+                                    cacheFile.writeText(gmBody)
+                                    OverlayService.parseGamemasterJsonStatic(gmBody)
+                                    didDownloadMissing = true
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
                     if (didDownloadMissing || prefs.getLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, 0L) == 0L) {
-                        prefs.edit().putLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, cacheFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()).apply()
+                        prefs.edit().putLong(
+                            PREFS_KEY_LAST_SYNC_TIMESTAMP,
+                            if (didDownloadMissing) System.currentTimeMillis() else (cacheFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis())
+                        ).apply()
                     }
                 } catch (_: Exception) {}
                 runOneTimeAiLogSplitAndCleanup(silent = true)

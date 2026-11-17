@@ -46,8 +46,6 @@
             border: 1px solid rgba(var(--panel-border-rgb), var(--panel-border-alpha));
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 6px rgba(var(--header-accent-rgb), 0.14);
-            backdrop-filter: blur(var(--panel-blur));
-            -webkit-backdrop-filter: blur(var(--panel-blur));
             padding: 5px 6px;
             display: flex;
             flex-direction: column;
@@ -314,13 +312,13 @@
                 background: rgba(220, 38, 38, 0.94);
                 border-color: #fef08a;
                 color: #ffffff;
-                box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
+                opacity: 1;
             }
             50% {
                 background: rgba(217, 119, 6, 0.94);
                 border-color: #ffffff;
                 color: #fef9c3;
-                box-shadow: 0 0 8px rgba(245, 158, 11, 0.85);
+                opacity: 0.92;
             }
         }
         @keyframes throwImmediateBlink {
@@ -328,13 +326,13 @@
                 background: rgba(185, 28, 28, 0.96);
                 border-color: #fde047;
                 color: #ffffff;
-                box-shadow: 0 0 10px rgba(248, 113, 113, 0.95);
+                opacity: 1;
             }
             50% {
                 background: rgba(127, 29, 29, 0.96);
                 border-color: #fca5a5;
                 color: #fef08a;
-                box-shadow: 0 0 4px rgba(220, 38, 38, 0.75);
+                opacity: 0.86;
             }
         }
         .tactical-rec-row {
@@ -390,28 +388,31 @@
         .tactical-rec-row.timing-blink-1 {
             animation: throwBlink 0.35s infinite !important;
             border-width: 1.5px !important;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
         }
         .tactical-rec-row.timing-immediate-0 {
             animation: throwImmediateBlink 0.22s infinite !important;
             border-width: 1.5px !important;
+            box-shadow: 0 0 9px rgba(248, 113, 113, 0.9);
         }
         @keyframes oppSwapWarnBlink {
             0%, 100% {
                 background-color: rgba(244, 63, 94, 0.88);
                 border-color: #fda4af;
                 color: #ffffff;
-                box-shadow: 0 0 7px rgba(244, 63, 94, 0.85);
+                opacity: 1;
             }
             50% {
                 background-color: rgba(245, 158, 11, 0.38);
                 border-color: #fde047;
                 color: #fef08a;
-                box-shadow: 0 0 4px rgba(250, 204, 21, 0.55);
+                opacity: 0.88;
             }
         }
         .opp-swap-blink-warning {
             animation: oppSwapWarnBlink 0.42s infinite !important;
             font-weight: 900 !important;
+            box-shadow: 0 0 6px rgba(244, 63, 94, 0.8) !important;
         }
         .tactical-rec-line1 {
             display: flex;
@@ -631,6 +632,17 @@
             border-color: #d8b4fe;
             color: #ffffff;
             box-shadow: 0 0 5px rgba(168, 85, 247, 0.5);
+        }
+
+        .hud-btn.btn-shadow:disabled,
+        .hud-btn.btn-shadow.disabled {
+            background: rgba(100, 116, 139, 0.16);
+            border-color: rgba(148, 163, 184, 0.18);
+            color: #64748b;
+            opacity: 0.55;
+            box-shadow: none;
+            cursor: default;
+            transform: none;
         }
 
         .hud-btn.btn-form {
@@ -1001,6 +1013,46 @@
             padding: 0 3px;
             line-height: 1.15;
             box-shadow: 0 0 4px rgba(var(--secondary-accent-rgb), 0.35);
+        }
+        .bp-micro-pill {
+            display: inline-flex;
+            align-items: center;
+            font-size: 7.5px;
+            font-weight: 800;
+            padding: 0 3px;
+            margin-left: 2px;
+            border-radius: 3px;
+            line-height: 1.25;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .bp-pos {
+            background: rgba(16, 185, 129, 0.22);
+            border: 1px solid rgba(52, 211, 153, 0.7);
+            color: #6ee7b7;
+        }
+        .bp-blk {
+            background: rgba(56, 189, 248, 0.20);
+            border: 1px solid rgba(56, 189, 248, 0.65);
+            color: #7dd3fc;
+        }
+        .bp-warn {
+            background: rgba(245, 158, 11, 0.24);
+            border: 1px solid rgba(251, 191, 36, 0.72);
+            color: #fde68a;
+        }
+        .compact-shad-pill {
+            font-size: 7.5px;
+            font-weight: 800;
+            color: #e9d5ff;
+            background: rgba(126, 34, 206, 0.42);
+            border: 1px solid rgba(192, 132, 252, 0.65);
+            border-radius: 3px;
+            padding: 0 3px;
+            margin-left: 3px;
+            line-height: 1.25;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .move-sub-line {
@@ -1375,6 +1427,55 @@
             padding: 2px 4px;
         }
 
+        .menu-btn-elo-scan {
+            background: linear-gradient(90deg, #2dd4bf, #facc15);
+            color: #020617;
+            border-color: rgba(250, 204, 21, 0.85);
+            font-weight: 900;
+        }
+
+        .idle-elo-group {
+            display: inline-flex;
+            align-items: stretch;
+            gap: 1px;
+            flex-shrink: 0;
+        }
+
+        .idle-elo-chip {
+            font-size: 7.2px;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 3px 0 0 3px;
+            line-height: 1.15;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            color: #99f6e4;
+            background: rgba(20, 184, 166, 0.22);
+            border: 1px solid rgba(45, 212, 191, 0.58);
+        }
+
+        .idle-elo-chip.due {
+            color: #fde68a;
+            background: rgba(217, 119, 6, 0.34);
+            border-color: #fbbf24;
+            box-shadow: 0 0 5px rgba(251, 191, 36, 0.55);
+        }
+
+        .idle-elo-edit-btn {
+            font-size: 7.2px;
+            font-weight: 800;
+            padding: 1px 3.5px;
+            border-radius: 0 3px 3px 0;
+            line-height: 1.15;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            color: #fde68a;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.5);
+        }
+
         .hud-btn.btn-dvr {
             background: rgba(30, 41, 59, 0.85);
             color: #cbd5e1;
@@ -1543,6 +1644,7 @@
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
                 title="Tap: Switch between Full ↔ Compact HUD • Hold 2s: Toggle Log-Only Stealth Mode">⚔️</button>
+            <span id="sky-top-opp-shad-pill" class="compact-shad-pill hidden" style="margin-left:1px;" title="Opponent Verified Shadow Status"></span>
             <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge ocr-inactive" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">OCR:---/---ms</span>
             <div class="header-badges-cluster">
                 <div class="header-side-group">
@@ -1571,6 +1673,7 @@
                 <span class="swap-clock-badge player-swap-badge" id="sky-compact-player-swap" title="Player Switch/Swap Cooldown Timer">Swap: 0s</span>
                 <span id="sky-compact-my-cmp" class="cmp-pill" title="Your Charged Move Priority (CMP)">CMP—</span>
             </div>
+            <span id="sky-compact-pacing-center" style="display:none; font-size:8px; font-weight:700; gap:2px; align-items:center; flex-shrink:0;"></span>
             <div style="display:flex; align-items:center; gap:3px;">
                 <span id="sky-compact-opp-cmp" class="cmp-pill" title="Opponent Charged Move Priority (CMP)">CMP—</span>
                 <span class="swap-clock-badge opp-swap-badge" id="sky-compact-opp-swap" title="Opponent Switch/Swap Cooldown Timer">Swap: 0s</span>
@@ -1603,6 +1706,9 @@
 
         <!-- Idle Waiting Banner: Displays Active League & Selected Team Pokémon across Full & Compact HUD modes -->
         <div id="sky-idle-team-banner" class="idle-team-banner hidden"></div>
+
+        <!-- v7.44: 5-Battle ELO Set Reprompt, Guided Scroll-to-Scan Banner & Confirmation Strip -->
+        <div id="sky-elo-set-banner" class="start-battle-menu hidden" style="flex-direction:column; align-items:stretch; gap:2.5px;"></div>
 
         <!-- In-Overlay Post-Stop Log Result Action Bar -->
         <div id="start-battle-menu" class="start-battle-menu hidden" style="flex-direction:column; align-items:stretch; gap:3px;">
@@ -1692,6 +1798,7 @@
                     <div class="section-header-line1">
                         <div style="display:flex; align-items:center; gap:2.5px; min-width:0; flex-shrink:0;">
                             <span style="flex-shrink:0;">Opp Attacks</span>
+                            <span id="sky-opp-hdr-shad-pill" class="compact-shad-pill hidden" title="Opponent Verified Shadow Status"></span>
                             <span id="sky-opp-atk-hp-pill" class="hp-slot-pill hp-high" style="margin-left:1px;" title="Opponent Active Pokémon Live HP%">100%</span>
                             <button id="btn-opp-atk-shields" type="button" class="hud-shield-btn opp-shield atk-hdr-shield-btn" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
                                 <span class="shield-glyph">🛡️</span><span id="txt-opp-atk-shields" class="shield-val">2</span>
@@ -2442,7 +2549,7 @@
                 skyEl.classList.remove("hidden");
             }
             applyProportionalScale();
-            notifyHeight();
+            notifyHeight(true);
         }
 
         let activeAiAdviceHudPosition = "bottom";
@@ -2487,7 +2594,34 @@
             } catch (e) {}
         }
 
-        function notifyHeight() {
+        function setHtmlIfChanged(el, html) {
+            if (!el) return false;
+            if (el.__lastHtml === html) return false;
+            el.__lastHtml = html;
+            el.innerHTML = html;
+            return true;
+        }
+
+        let lastSentInteractiveRegionsKey = "";
+        let notifyHeightRafPending = false;
+
+        function scheduleNotifyHeight() {
+            if (notifyHeightRafPending) return;
+            notifyHeightRafPending = true;
+            if (window.requestAnimationFrame) {
+                window.requestAnimationFrame(function() {
+                    notifyHeightRafPending = false;
+                    notifyHeight(false);
+                });
+            } else {
+                setTimeout(function() {
+                    notifyHeightRafPending = false;
+                    notifyHeight(false);
+                }, 16);
+            }
+        }
+
+        function notifyHeight(forcePush) {
             try {
                 applyProportionalScale();
                 const el = document.getElementById(currentMode === "option1" ? "mode-sky-trench" : "mode-horizon-belt");
@@ -2535,6 +2669,12 @@
                         }
                     }
                 }
+
+                const geomKey = `${currentMode}|${totalHeightDp}|${topZoneHeightDp}|${oppX},${oppY},${oppW},${oppH}|${myX},${myY},${myW},${myH}`;
+                if (!forcePush && geomKey === lastSentInteractiveRegionsKey) {
+                    return;
+                }
+                lastSentInteractiveRegionsKey = geomKey;
 
                 if (window.AndroidOverlay && window.AndroidOverlay.updateInteractiveRegions) {
                     window.AndroidOverlay.updateInteractiveRegions(
@@ -2653,6 +2793,8 @@
             }
         }
 
+        let lastSwapStateKey = "";
+
         function refreshSwapClocks() {
             const now = Date.now();
             let playerSec = 0;
@@ -2671,6 +2813,14 @@
 
             const oppLatched = battleData.oppSwitchValidityLatched !== false;
             const playerLatched = battleData.playerSwitchValidityLatched !== false;
+            const warnSec = (typeof battleData.hapticOppSwapWarnSec === "number" && battleData.hapticOppSwapWarnSec >= 2)
+                ? battleData.hapticOppSwapWarnSec
+                : 5;
+            const stateKey = `${playerSec}|${oppSec}|${playerLatched ? 1 : 0}|${oppLatched ? 1 : 0}|${warnSec}|${battleData.oppSwapEndTimeMs || 0}`;
+            if (stateKey === lastSwapStateKey) {
+                return;
+            }
+            lastSwapStateKey = stateKey;
 
             const oppClockEl = document.getElementById("sky-opp-swap-clock");
             const playerClockEl = document.getElementById("sky-player-swap-clock");
@@ -2898,6 +3048,48 @@
             updateBattleButtonUi();
         }
 
+        function startGuidedEloScanHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.startGuidedEloScan) {
+                window.AndroidOverlay.startGuidedEloScan();
+            }
+        }
+
+        function cancelGuidedEloScanHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.cancelGuidedEloScan) {
+                window.AndroidOverlay.cancelGuidedEloScan();
+            }
+        }
+
+        function confirmSameEloHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.confirmSameOverlayElo) {
+                window.AndroidOverlay.confirmSameOverlayElo();
+            }
+        }
+
+        function snoozeEloPromptHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.snoozeOverlayEloPrompt) {
+                window.AndroidOverlay.snoozeOverlayEloPrompt();
+            }
+        }
+
+        function openEloTypeDialogHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.openOverlayEloTypeDialog) {
+                window.AndroidOverlay.openOverlayEloTypeDialog();
+            }
+        }
+
+        function dismissEloConfirmHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.dismissEloConfirmBanner) {
+                window.AndroidOverlay.dismissEloConfirmBanner();
+            }
+        }
+
         function deleteLastBattleDvrPrompt(explicitBattleId) {
             const bId = explicitBattleId !== undefined
                 ? explicitBattleId
@@ -3117,6 +3309,7 @@
         }
 
         function toggleShadow() {
+            if (battleData && battleData.oppShadowEligible === false) return;
             battleData.isOpponentShadow = !battleData.isOpponentShadow;
             render();
             if (window.AndroidOverlay && window.AndroidOverlay.toggleOpponentShadow) {
@@ -3226,13 +3419,34 @@
             const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1"));
 
             try {
-                // Update Shadow Toggle Button (2-row stacked: Shadow:\nON or OFF)
+                // Update Shadow Toggle Button (2-row stacked + verified ✓ / locked 🔒 provenance)
                 const shadowBtn = document.getElementById("btn-toggle-shadow");
                 if (shadowBtn) {
-                    const isShad = !!battleData.isOpponentShadow;
-                    shadowBtn.innerHTML = `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${isShad ? "ON" : "OFF"}</span>`;
-                    if (isShad) shadowBtn.classList.add("active");
-                    else shadowBtn.classList.remove("active");
+                    const isShadEligible = isWaitingState || battleData.oppShadowEligible !== false;
+                    const isShad = isShadEligible && !!battleData.isOpponentShadow;
+                    const isShadLocked = isShadEligible && !!battleData.oppShadowLocked;
+                    const isShadVerified = isShadEligible && !!battleData.oppShadowVerified;
+                    const shadSrc = String(battleData.oppShadowSource || "");
+                    const bgIvs = String(battleData.oppBestGuessIvs || "");
+                    if (!isShadEligible) {
+                        setHtmlIfChanged(shadowBtn, `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">N/A</span>`);
+                        shadowBtn.classList.remove("active");
+                        shadowBtn.disabled = true;
+                        shadowBtn.classList.add("disabled");
+                        shadowBtn.title = "Shadow form not released in Pokémon GO (auto-updates via PvPoke sync)";
+                    } else {
+                        shadowBtn.disabled = false;
+                        shadowBtn.classList.remove("disabled");
+                        const shadSub = isShad
+                            ? (isShadLocked ? "🟣 ON 🔒" : (isShadVerified ? "🟣 ON ✓" : "🟣 ON"))
+                            : (isShadLocked ? "OFF 🔒" : (isShadVerified ? "OFF ✓" : "OFF"));
+                        setHtmlIfChanged(shadowBtn, `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${shadSub}</span>`);
+                        if (isShad) shadowBtn.classList.add("active");
+                        else shadowBtn.classList.remove("active");
+                        const provNote = shadSrc ? ` • Source: ${shadSrc}` : "";
+                        const ivNote = bgIvs ? ` • Est IVs: ${bgIvs}` : "";
+                        shadowBtn.title = `Toggle 1.2x Atk / 0.833x Def Shadow modifier (Tap locks for battle)${provNote}${ivNote}`;
+                    }
                 }
 
                 // Update Form Cycle Button (2-row stacked: Form:\n<form name>)
@@ -3240,7 +3454,7 @@
                 if (formBtn) {
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
-                    formBtn.innerHTML = `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel)}</span>`;
+                    setHtmlIfChanged(formBtn, `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel)}</span>`);
                     if (forms.length > 1 && !isWaitingState) {
                         formBtn.disabled = false;
                         formBtn.classList.remove("disabled");
@@ -3269,7 +3483,7 @@
                 const hpTrackingOnForChips = !!battleData.enableHpTracking;
                 if (teamChipsContainer && battleData.team) {
                     const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
-                    teamChipsContainer.innerHTML = battleData.team.map((member, mIdx) => {
+                    setHtmlIfChanged(teamChipsContainer, battleData.team.map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
                         const rawCode = String(member.code || "").replace(/^S(?=[A-Z]{3})/i, "").trim();
                         const poke3 = (rawCode.length === 3 ? rawCode.toUpperCase() : abbrPoke3Only(fullName));
@@ -3282,7 +3496,7 @@
                         const subText = hpTrackingOnForChips ? `${slotHp}%` : (isFainted ? "0%" : (isActive ? "ACT" : "RDY"));
                         const subColor = hpTrackingOnForChips || isFainted ? hpColor : (isActive ? "#67e8f9" : "#94a3b8");
                         return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${escapeHtml(fullName)}${isFainted ? ' (Fainted 0% HP)' : (hpTrackingOnForChips ? ' (' + slotHp + '% HP)' : '')}"><span class="btn-row-top">${escapeHtml(poke3)}:</span><span class="btn-row-sub" style="color:${subColor};">${subText}</span></button>`;
-                    }).join("");
+                    }).join(""));
                 }
             } catch (e) {
                 console.error("Toolbar render error", e);
@@ -3417,7 +3631,7 @@
                     const prefixAb = ab.isAutoDetected ? "⚡ Auto" : "✓ Logged";
                     const colorAb = isWinAb ? "#4ade80" : "#f87171";
                     if (stEl) {
-                        stEl.innerHTML = `<span style="color:${colorAb};">${prefixAb} ${ab.result}</span>${ab.telemetryIgnored ? ' <span style="color:#fca5a5;">(AI Ignored)</span>' : ''}`;
+                        setHtmlIfChanged(stEl, `<span style="color:${colorAb};">${prefixAb} ${ab.result}</span>${ab.telemetryIgnored ? ' <span style="color:#fca5a5;">(AI Ignored)</span>' : ''}`);
                     }
                     if (ignBtn) {
                         if (ab.telemetryIgnored) {
@@ -3495,44 +3709,44 @@
 
                             if (dynOpts && dynPrompt) {
                                 const cleanPrompt = dynPrompt.replace(/\{leadMs\}/g, String(leadMs));
-                                tuningLblEl.innerHTML = chosen
+                                setHtmlIfChanged(tuningLblEl, chosen
                                     ? `${escapeHtml(cleanPrompt)} <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
-                                    : escapeHtml(cleanPrompt);
-                                tuningBtnsEl.innerHTML = dynOpts.map(o => {
+                                    : escapeHtml(cleanPrompt));
+                                setHtmlIfChanged(tuningBtnsEl, dynOpts.map(o => {
                                     const valStr = String(o.val || "");
                                     const lblStr = String(o.label || valStr);
                                     const isSel = chosen === valStr;
                                     const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
                                     return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('${escapeHtml(qType)}','${escapeHtml(valStr)}')">${escapeHtml(lblStr)}</button>`;
-                                }).join("");
+                                }).join(""));
                             } else if (qType === "shield_energy") {
-                                tuningLblEl.innerHTML = chosen
+                                setHtmlIfChanged(tuningLblEl, chosen
                                     ? `🛡️ HP Shield Call: <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
-                                    : `🛡️ HP Shield Call Energy:`;
+                                    : `🛡️ HP Shield Call Energy:`);
                                 const opts = [
                                     { val: "UNDERCOUNTED", label: "⬇️ Under" },
                                     { val: "ACCURATE", label: "✅ Spot-On" },
                                     { val: "OVERCOUNTED", label: "⬆️ Over" }
                                 ];
-                                tuningBtnsEl.innerHTML = opts.map(o => {
+                                setHtmlIfChanged(tuningBtnsEl, opts.map(o => {
                                     const isSel = chosen === o.val;
                                     const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
                                     return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('shield_energy','${o.val}')">${o.label}</button>`;
-                                }).join("");
+                                }).join(""));
                             } else {
-                                tuningLblEl.innerHTML = chosen
+                                setHtmlIfChanged(tuningLblEl, chosen
                                     ? `📳 Haptic (${leadMs}ms): <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
-                                    : `📳 Haptic Timing (${leadMs}ms):`;
+                                    : `📳 Haptic Timing (${leadMs}ms):`);
                                 const opts = [
                                     { val: "TOO_EARLY", label: "⏪ Early" },
                                     { val: "IDEAL", label: "✅ Ideal" },
                                     { val: "TOO_LATE", label: "⏩ Late" }
                                 ];
-                                tuningBtnsEl.innerHTML = opts.map(o => {
+                                setHtmlIfChanged(tuningBtnsEl, opts.map(o => {
                                     const isSel = chosen === o.val;
                                     const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
                                     return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('haptic_timing','${o.val}')">${o.label}</button>`;
-                                }).join("");
+                                }).join(""));
                             }
                         } else {
                             tuningRowEl.classList.add("hidden");
@@ -3705,10 +3919,20 @@
             }
 
             const my3Letter = abbrPoke(battleData.userActivePokemon || "Lead", false);
-            const userFastTelemetry = battleData.userFastTelemetry || `${abbrMove5(battleData.userFastMoveName || "Fast")} ${battleData.userFastMoveTurns || 2}t`;
+            const rawUserFastTelemetry = battleData.userFastTelemetry || `${abbrMove5(battleData.userFastMoveName || "Fast")} ${battleData.userFastMoveTurns || 2}t`;
+            const userFastTelemetry = hpTrackingEnabled ? String(rawUserFastTelemetry).replace(/\/\d+%$/, "") : rawUserFastTelemetry;
             if (myShortEl) {
                 const myHpSuffix = hpTrackingEnabled ? ` ${activeUserHpVal}%` : "";
-                myShortEl.textContent = isWaitingState ? `${my3Letter}${myHpSuffix}` : `${my3Letter}${myHpSuffix} · ${userFastTelemetry}`;
+                const myBpDelta = Number(battleData.liveMyBpDeltaHp) || 0;
+                const myBpHtml = !isWaitingState && myBpDelta !== 0
+                    ? (myBpDelta > 0
+                        ? `<span class="bp-micro-pill bp-pos" title="Live Attack Breakpoint: +${myBpDelta} HP/hit vs Opp IVs">⚡BP+${myBpDelta}</span>`
+                        : `<span class="bp-micro-pill bp-blk" title="Opp Bulkpoint holds: ${myBpDelta} HP/hit vs standard">🛡️BLK${myBpDelta}</span>`)
+                    : "";
+                const myHtml = isWaitingState
+                    ? `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)}`
+                    : `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)} · ${escapeHtml(userFastTelemetry)}${myBpHtml}`;
+                setHtmlIfChanged(myShortEl, myHtml);
             }
 
             const dvrBtnEl = document.getElementById("btn-dvr-rec-one");
@@ -3725,21 +3949,36 @@
                     dvrBtnEl.classList.toggle("recording", isRec);
                     dvrBtnEl.classList.toggle("armed", !isRec && isArmed);
                     if (isRec) {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🔴 REC</span><span class="btn-row-sub">F#${recFrames}</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🔴 REC</span><span class="btn-row-sub">F#${recFrames}</span>`);
                     } else if (isArmed) {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">ARMED</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">ARMED</span>`);
                     } else if (isVipAuto) {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">AUTO</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">AUTO</span>`);
                     } else {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>`);
                     }
                 }
             }
 
             const idleTeamBannerEl = document.getElementById("sky-idle-team-banner");
-            const activeLeagueStr = String(battleData.activeLeague || "MASTER LEAGUE").toUpperCase();
+            const activeLeagueStr = String(battleData.activeLeague || "MASTER LEAGUE")
+                .replace(/\s*\((?:≤|<=)?\s*(?:500|1500|2500|10000)(?:\s*CP)?\)\s*$/i, "")
+                .replace(/\bBATTLE\s+FRONTIER\b/gi, "BF")
+                .trim()
+                .toUpperCase();
             const activeTeamNameStr = String(battleData.activeTeamName || "").trim();
             const activeArchStr = String(battleData.teamArchetype || "ABC").toUpperCase();
+
+            const eloBannerEl = document.getElementById("sky-elo-set-banner");
+            const eloState = (!isReplay && battleData && battleData.eloScanState) ? battleData.eloScanState : null;
+            const isGblCombatMode = String((battleData && battleData.combatMode) || "gbl").toLowerCase() !== "show6";
+            const curEloVal = (eloState && typeof eloState.currentElo === "number" && eloState.currentElo >= 300) ? eloState.currentElo : null;
+            const battlesSinceVal = eloState && typeof eloState.battlesSinceCheck === "number" ? Math.max(0, Math.round(eloState.battlesSinceCheck)) : 0;
+            const unrankedMutedVal = !!(eloState && eloState.unrankedMuted);
+            const guidedActiveVal = !!(eloState && eloState.guidedScanActive);
+            const guidedRemSec = eloState && typeof eloState.guidedRemainingSec === "number" ? eloState.guidedRemainingSec : 0;
+            const confirmTextVal = eloState && eloState.confirmBannerText ? String(eloState.confirmBannerText).trim() : "";
+            const promptDueVal = !!(eloState && eloState.promptDue) && !startBattleMenuOpen;
 
             if (isWaitingState) {
                 if (idleTeamBannerEl) {
@@ -3752,34 +3991,110 @@
                     const teamSubLabel = activeTeamNameStr
                         ? `${escapeHtml(activeTeamNameStr)} [${escapeHtml(activeArchStr)}]`
                         : `[${escapeHtml(activeArchStr)}]`;
+                    const eloBadgeText = curEloVal !== null
+                        ? (battlesSinceVal >= 5 ? `🎯 ${curEloVal.toLocaleString()} • 5/5!` : `🎯 ${curEloVal.toLocaleString()} (${battlesSinceVal}/5)`)
+                        : (unrankedMutedVal ? "🎯 <R20" : `🎯 Scan ELO (${Math.min(5, battlesSinceVal)}/5)`);
+                    const dueCls = ((battlesSinceVal >= 5 || promptDueVal) && !unrankedMutedVal) ? "due" : "";
+                    const eloChipHtml = (!isReplay && isGblCombatMode)
+                        ? `<span class="idle-elo-group"><button type="button" class="idle-elo-chip ${dueCls}" onclick="startGuidedEloScanHud(event)" title="Tap to scroll-scan ELO (250ms Live OCR)">${escapeHtml(eloBadgeText)}</button><button type="button" class="idle-elo-edit-btn" onclick="openEloTypeDialogHud(event)" title="Set ELO manually with touch keypad">✏️</button></span>`
+                        : "";
                     const pokePillsHtml = teamList.slice(0, 3).map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
                         const isActLead = (mIdx === activeSlotIdx);
                         const prefix = isActLead ? "★ " : "";
                         return `<span class="idle-poke-pill ${isActLead ? 'active-lead' : ''}" onclick="selectUserPokemonByIndex(${mIdx})" title="${isActLead ? 'Active Lead: ' : 'Tap to set as Lead: '}${escapeHtml(fullName)}">${prefix}${escapeHtml(fullName)}</span>`;
                     }).join("");
-                    idleTeamBannerEl.innerHTML = `
+                    setHtmlIfChanged(idleTeamBannerEl, `
                         <div class="idle-team-line1">
                             <span class="idle-league-pill" title="Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}">🏆 ${escapeHtml(activeLeagueStr)} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
-                            ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
+                            <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
+                                ${eloChipHtml}
+                                ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
+                            </div>
                         </div>
-                        <div class="idle-team-line2">${pokePillsHtml}</div>
-                    `;
+                        ${guidedActiveVal ? "" : `<div class="idle-team-line2">${pokePillsHtml}</div>`}
+                    `);
+                }
+                if (eloBannerEl) {
+                    const guidedHintVal = eloState && eloState.guidedHintText ? String(eloState.guidedHintText).trim() : "";
+                    if (!isReplay && isGblCombatMode && guidedActiveVal) {
+                        const wasHidden = eloBannerEl.classList.contains("hidden");
+                        eloBannerEl.classList.remove("hidden");
+                        eloBannerEl.style.borderColor = "rgba(45, 212, 191, 0.85)";
+                        eloBannerEl.style.background = "rgba(13, 148, 136, 0.28)";
+                        const guidedMsgHtml = guidedHintVal && guidedHintVal.indexOf("CURRENT SEASON") === -1
+                            ? `<span style="color:#fde047;">${escapeHtml(guidedHintVal)}</span>`
+                            : `Scroll down to <span style="color:#fde047;">CURRENT SEASON</span>`;
+                        const scanHtml = `
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                                <span style="font-size:8.1px; font-weight:900; color:#5eead4;">🔍 Live OCR (${guidedRemSec}s) — ${guidedMsgHtml}</span>
+                                <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
+                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Set ELO manually with touch keypad">✏️ Keypad</button>
+                                    <button type="button" class="menu-btn menu-btn-close" onclick="cancelGuidedEloScanHud(event)" title="Cancel ELO Scan">✕</button>
+                                </div>
+                            </div>
+                        `;
+                        const changed = setHtmlIfChanged(eloBannerEl, scanHtml);
+                        if (wasHidden || changed) scheduleNotifyHeight();
+                    } else if (!isReplay && isGblCombatMode && confirmTextVal) {
+                        const wasHidden = eloBannerEl.classList.contains("hidden");
+                        eloBannerEl.classList.remove("hidden");
+                        eloBannerEl.style.borderColor = "rgba(52, 211, 153, 0.78)";
+                        eloBannerEl.style.background = "rgba(6, 78, 59, 0.42)";
+                        const confHtml = `
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                                <span style="font-size:8px; font-weight:900; color:#6ee7b7;">${escapeHtml(confirmTextVal)}</span>
+                                <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
+                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Adjust ELO manually with touch keypad">✏️ Keypad</button>
+                                    <button type="button" class="menu-btn menu-btn-close" onclick="dismissEloConfirmHud(event)" title="Dismiss">✕</button>
+                                </div>
+                            </div>
+                        `;
+                        const changed = setHtmlIfChanged(eloBannerEl, confHtml);
+                        if (wasHidden || changed) scheduleNotifyHeight();
+                    } else if (!isReplay && isGblCombatMode && promptDueVal) {
+                        const wasHidden = eloBannerEl.classList.contains("hidden");
+                        eloBannerEl.classList.remove("hidden");
+                        eloBannerEl.style.borderColor = "rgba(250, 204, 21, 0.72)";
+                        eloBannerEl.style.background = "rgba(120, 53, 15, 0.36)";
+                        const sameBtnHtml = curEloVal !== null
+                            ? `<button type="button" class="menu-btn menu-btn-win" onclick="confirmSameEloHud(event)" title="Confirm rating is unchanged">✓ Same (${curEloVal.toLocaleString()})</button>`
+                            : "";
+                        const promptPrefix = battlesSinceVal >= 5 ? "5/5 Set Complete!" : "Set Complete!";
+                        const promptHtml = `
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; flex-wrap:wrap;">
+                                <span style="font-size:8px; font-weight:900; color:#fde68a;">🎯 ${promptPrefix} Scan updated ELO?</span>
+                                <div style="display:flex; gap:3px; align-items:center; flex-wrap:wrap;">
+                                    <button type="button" class="menu-btn menu-btn-elo-scan" onclick="startGuidedEloScanHud(event)" title="Arm 250ms OCR and scroll down to CURRENT SEASON">📷 Scan ELO</button>
+                                    ${sameBtnHtml}
+                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Enter ELO with touch keypad or mark Unranked < R20">✏️ Keypad</button>
+                                    <button type="button" class="menu-btn menu-btn-close" onclick="snoozeEloPromptHud(event)" title="Snooze prompt for this set">✕ Snooze</button>
+                                </div>
+                            </div>
+                        `;
+                        const changed = setHtmlIfChanged(eloBannerEl, promptHtml);
+                        if (wasHidden || changed) scheduleNotifyHeight();
+                    } else {
+                        const wasShown = !eloBannerEl.classList.contains("hidden");
+                        eloBannerEl.classList.add("hidden");
+                        setHtmlIfChanged(eloBannerEl, "");
+                        if (wasShown) scheduleNotifyHeight();
+                    }
                 }
                 if (oppNameEl) oppNameEl.textContent = "WAITING FOR OPPONENT...";
-                if (oppMoveEl) oppMoveEl.textContent = "—";
+                if (oppMoveEl) setHtmlIfChanged(oppMoveEl, "—");
                 if (oppCmpBadgeEl) {
-                    oppCmpBadgeEl.textContent = "CMP—";
+                    setHtmlIfChanged(oppCmpBadgeEl, "CMP—");
                     oppCmpBadgeEl.className = "cmp-pill";
                 }
                 if (myCmpBadgeEl) {
-                    myCmpBadgeEl.textContent = "CMP—";
+                    setHtmlIfChanged(myCmpBadgeEl, "CMP—");
                     myCmpBadgeEl.className = "cmp-pill";
                 }
-                if (oppDmgHeadersEl) oppDmgHeadersEl.innerHTML = "";
-                if (myDmgHeadersEl) myDmgHeadersEl.innerHTML = "";
-                if (timingRowsEl) timingRowsEl.innerHTML = "";
-                if (myTimingRowsEl) myTimingRowsEl.innerHTML = "";
+                if (oppDmgHeadersEl) setHtmlIfChanged(oppDmgHeadersEl, "");
+                if (myDmgHeadersEl) setHtmlIfChanged(myDmgHeadersEl, "");
+                if (timingRowsEl) setHtmlIfChanged(timingRowsEl, "");
+                if (myTimingRowsEl) setHtmlIfChanged(myTimingRowsEl, "");
                 const recRowWait = document.getElementById("sky-tactical-rec-row");
                 const showRecWait = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                 if (recRowWait) {
@@ -3806,62 +4121,78 @@
                 }
 
                 if (matrixBody) {
-                    matrixBody.innerHTML = "";
+                    setHtmlIfChanged(matrixBody, "");
                     matrixBody.classList.add("hidden");
                 }
             } else {
                 if (idleTeamBannerEl) {
                     idleTeamBannerEl.classList.add("hidden");
                 }
+                if (eloBannerEl) {
+                    const wasShown = !eloBannerEl.classList.contains("hidden");
+                    eloBannerEl.classList.add("hidden");
+                    setHtmlIfChanged(eloBannerEl, "");
+                    if (wasShown) scheduleNotifyHeight();
+                }
                 const shadPrefix = battleData.isOpponentShadow ? "SHADOW " : "";
                 if (oppNameEl) oppNameEl.textContent = "VS " + shadPrefix + (battleData.activeOpponent || "").toUpperCase();
 
                 const opp3Letter = abbrPoke(battleData.activeOpponent || "Opp", false);
-                const oppFastTelemetry = battleData.oppFastTelemetry
+                const rawOppFastTelemetry = battleData.oppFastTelemetry
                     || `${abbrMove5(battleData.activeOpponentFastMove || "Fast")} ${battleData.activeOpponentTurns || 2}t`;
+                const oppFastTelemetry = hpTrackingEnabled ? String(rawOppFastTelemetry).replace(/\/\d+%$/, "") : rawOppFastTelemetry;
                 const oppHpSuffix = hpTrackingEnabled ? ` ${activeOppHpVal}%` : "";
                 const oppFastStatus = String(battleData.oppFastMoveStatus || "unconfirmed");
                 const oppFastSpanCls = oppFastStatus === "confirmed_non_standard"
                     ? "opp-fast-nonstd-badge"
                     : (oppFastStatus === "confirmed_standard" ? "opp-fast-confirmed-std" : "opp-fast-unconfirmed");
+                const oppFastMark = oppFastStatus === "confirmed_non_standard"
+                    ? " !"
+                    : (oppFastStatus === "confirmed_standard" ? " ✓" : "");
                 const oppFastTitle = oppFastStatus === "confirmed_non_standard"
-                    ? "Confirmed Non-Standard Fast Move (>=10% HP damage check)"
+                    ? "Confirmed Non-Standard Fast Move (Joint ΔHP + Turn Cadence)"
                     : (oppFastStatus === "confirmed_standard"
-                        ? "Confirmed Standard Fast Move (>=10% HP damage check)"
-                        : "Unconfirmed Standard Fast Move (awaiting >=10% HP damage check)");
+                        ? "Confirmed Standard Fast Move (Joint ΔHP + Turn Cadence)"
+                        : "Unconfirmed Standard Fast Move (awaiting ΔHP + Cadence check)");
+                const oppBpDelta = Number(battleData.liveOppBpDeltaHp) || 0;
+                const oppBpHtml = oppBpDelta !== 0
+                    ? (oppBpDelta > 0
+                        ? `<span class="bp-micro-pill bp-warn" title="Opponent hits Attack Breakpoint: +${oppBpDelta} HP/hit vs your IVs">⚠️BP+${oppBpDelta}</span>`
+                        : `<span class="bp-micro-pill bp-blk" title="Your Defense Bulkpoint holds: ${oppBpDelta} HP/hit vs Opp standard">🛡️BLK${oppBpDelta}</span>`)
+                    : "";
                 if (oppMoveEl) {
-                    oppMoveEl.innerHTML = `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}</span>`;
+                    setHtmlIfChanged(oppMoveEl, `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}${oppFastMark}</span>${oppBpHtml}`);
                 }
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
                 const oppWinsCmp = !winsCmp;
                 if (oppCmpBadgeEl) {
-                    oppCmpBadgeEl.innerHTML = oppWinsCmp
+                    setHtmlIfChanged(oppCmpBadgeEl, oppWinsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     oppCmpBadgeEl.className = "cmp-pill " + (oppWinsCmp ? "win" : "loss");
                     oppCmpBadgeEl.title = oppWinsCmp ? "Opponent wins CMP tie" : "Opponent loses CMP tie";
                 }
                 if (myCmpBadgeEl) {
-                    myCmpBadgeEl.innerHTML = winsCmp
+                    setHtmlIfChanged(myCmpBadgeEl, winsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     myCmpBadgeEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
                     myCmpBadgeEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
                 const compactOppCmpEl = document.getElementById("sky-compact-opp-cmp");
                 const compactMyCmpEl = document.getElementById("sky-compact-my-cmp");
                 if (compactOppCmpEl) {
-                    compactOppCmpEl.innerHTML = oppWinsCmp
+                    setHtmlIfChanged(compactOppCmpEl, oppWinsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     compactOppCmpEl.className = "cmp-pill " + (oppWinsCmp ? "win" : "loss");
                     compactOppCmpEl.title = oppWinsCmp ? "Opponent wins CMP tie" : "Opponent loses CMP tie";
                 }
                 if (compactMyCmpEl) {
-                    compactMyCmpEl.innerHTML = winsCmp
+                    setHtmlIfChanged(compactMyCmpEl, winsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     compactMyCmpEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
                     compactMyCmpEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
@@ -4020,7 +4351,7 @@
                             </div>
                         </div>
                         `;
-                        matrixBody.innerHTML = matrixHeaderHtml + battleData.scannedOpponents.map((opp, idx) => {
+                        setHtmlIfChanged(matrixBody, matrixHeaderHtml + battleData.scannedOpponents.map((opp, idx) => {
                             const isActiveOpp = (opp.isActive !== undefined) ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isOppShad = (opp.isShadow !== undefined) ? !!opp.isShadow : (isActiveOpp && battleData.isOpponentShadow);
                             const fullOppDisplay = (isOppShad ? "S-" : "") + (opp.name || opp.code);
@@ -4065,7 +4396,7 @@
                                 </div>
                             </div>
                             `;
-                        }).join("");
+                        }).join(""));
                     }
                 } catch (e) {
                     console.error("Matrix render error", e);
@@ -4074,7 +4405,7 @@
                 // 2. Render Opponent Attacks 3-Column Header & Segmented Range Rows
                 try {
                     if (oppDmgHeadersEl) {
-                        oppDmgHeadersEl.innerHTML = teamList.slice(0, 3).map((member, idx) => {
+                        setHtmlIfChanged(oppDmgHeadersEl, teamList.slice(0, 3).map((member, idx) => {
                             const code = member.code || abbrPoke(member.name, false);
                             const isAct = (idx === activeSlotIdx);
                             const rawHp = typeof member.hpPct === "number" ? member.hpPct : (typeof pSlotHpArr[idx] === "number" ? pSlotHpArr[idx] : 100);
@@ -4083,12 +4414,12 @@
                             const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5"));
                             const faintCls = isFainted ? "col-fainted" : "";
                             return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}" onclick="selectUserPokemonByIndex(${idx})" style="cursor:pointer;" title="${escapeHtml(member.name || code)} (${slotHp}% HP)"><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${slotHp}%</span></span>`;
-                        }).join("");
+                        }).join(""));
                     }
 
                     if (timingRowsEl) {
                         const rows = battleData.oppMoveTimingRows || [];
-                        timingRowsEl.innerHTML = rows.map(row => {
+                        setHtmlIfChanged(timingRowsEl, rows.map(row => {
                             const shortMove = row.shortName || abbrMove5(row.name || "Move");
                             const actvPct = row.activeDmgPct || 35;
                             const actvEff = row.activeEff || 1.0;
@@ -4149,8 +4480,15 @@
                                 const targetHp = typeof pSlotHpArr[idx] === "number" ? pSlotHpArr[idx] : 100;
                                 const isKo = !isFainted && targetHp > 0 && td.dmgPct >= targetHp;
                                 const koCls = isKo ? "dmg-ko" : "";
+                                const ivDelta = Number(td.ivDeltaPct) || 0;
+                                const ivArrow = Math.abs(ivDelta) >= 3
+                                    ? `<span style="font-size:6.5px;opacity:0.88;margin-left:1px;">${ivDelta > 0 ? "↑" : "↓"}</span>`
+                                    : "";
+                                const ivTitleNote = ivDelta !== 0
+                                    ? ` • IV Δ ${ivDelta > 0 ? "+" : ""}${ivDelta}% (${escapeHtml(battleData.oppBestGuessIvs || "Best-Guess IVs")})`
+                                    : "";
                                 const labelTxt = isKo ? `${td.dmgPct}% KO` : `${td.dmgPct}%`;
-                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${escapeHtml(td.code || '')}: ${td.dmgPct}% dmg vs ${targetHp}% HP">${labelTxt}</div>`;
+                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${escapeHtml(td.code || '')}: ${td.dmgPct}% dmg vs ${targetHp}% HP${ivTitleNote}">${labelTxt}${ivArrow}</div>`;
                             }).join("");
 
                             const isConfirmedMove = !!row.isConfirmedMove || (
@@ -4173,7 +4511,7 @@
                                     <div class="move-col-right-grid">${rightGridHtml}</div>
                                 </div>
                             `;
-                        }).join("");
+                        }).join(""));
                     }
                 } catch (e) {
                     console.error("Opponent attacks render error", e);
@@ -4183,7 +4521,7 @@
                 try {
                     const scanned = battleData.scannedOpponents || [];
                     if (myDmgHeadersEl) {
-                        myDmgHeadersEl.innerHTML = [0, 1, 2].map(idx => {
+                        setHtmlIfChanged(myDmgHeadersEl, [0, 1, 2].map(idx => {
                             const opp = scanned[idx];
                             const isAct = opp && opp.isActive !== undefined ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isShad = opp && opp.isShadow !== undefined ? !!opp.isShadow : (isAct && battleData.isOpponentShadow);
@@ -4196,12 +4534,12 @@
                             const faintCls = isFainted ? "col-fainted" : "";
                             const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${escapeHtml(opp.name || code)} (${slotHp}% HP)"` : "";
                             return `<span class="dmg-col-hdr ${opp && isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${hpText}</span></span>`;
-                        }).join("");
+                        }).join(""));
                     }
 
                     if (myTimingRowsEl) {
                         const myRows = battleData.myMoveTimingRows || [];
-                        myTimingRowsEl.innerHTML = myRows.map(row => {
+                        setHtmlIfChanged(myTimingRowsEl, myRows.map(row => {
                             const shortMove = row.shortName || abbrMove5(row.name || "Move");
                             const dmgPct = row.dmgPct || 40;
                             const eff = row.eff || 1.0;
@@ -4275,8 +4613,15 @@
                                 const targetHp = typeof oSlotHpArr[idx] === "number" ? oSlotHpArr[idx] : 100;
                                 const isKo = !isFainted && targetHp > 0 && od.dmgPct >= targetHp;
                                 const koCls = isKo ? "dmg-ko" : "";
+                                const ivDelta = Number(od.ivDeltaPct) || 0;
+                                const ivArrow = Math.abs(ivDelta) >= 3
+                                    ? `<span style="font-size:6.5px;opacity:0.88;margin-left:1px;">${ivDelta > 0 ? "↑" : "↓"}</span>`
+                                    : "";
+                                const ivTitleNote = ivDelta !== 0
+                                    ? ` • IV Δ ${ivDelta > 0 ? "+" : ""}${ivDelta}% (${escapeHtml(battleData.oppBestGuessIvs || "Best-Guess IVs")})`
+                                    : "";
                                 const text = od.dmgPct >= 100 ? "KO!" : (isKo ? `${od.dmgPct}% KO` : `${od.dmgPct}%`);
-                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${escapeHtml(od.code || '')}: ${od.dmgPct}% dmg vs ${targetHp}% HP">${text}</div>`;
+                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${escapeHtml(od.code || '')}: ${od.dmgPct}% dmg vs ${targetHp}% HP${ivTitleNote}">${text}${ivArrow}</div>`;
                             }).join("");
 
                             return `
@@ -4289,7 +4634,7 @@
                                     <div class="move-col-right-grid">${rightGridHtml}</div>
                                 </div>
                             `;
-                        }).join("");
+                        }).join(""));
                     }
                 } catch (e) {
                     console.error("My attacks render error", e);
@@ -4305,7 +4650,7 @@
 
                 if (isWaitingState) {
                     if (horizonTitle) horizonTitle.textContent = `[${activeLeagueStr}] Waiting...`;
-                    if (horizonDots) horizonDots.textContent = "1 Hz OCR active...";
+                    if (horizonDots) setHtmlIfChanged(horizonDots, "1 Hz OCR active...");
                     if (horizonThrow) horizonThrow.textContent = "—";
                     if (horizonDmg) {
                         const idleTeamNames = teamList.slice(0, 3).map((m, idx) => (idx === activeSlotIdx ? `★${m.name}` : m.name)).join(" • ");
@@ -4317,10 +4662,10 @@
                     if (horizonTitle) horizonTitle.textContent = `[${battleData.activeOpponent}: ${oppFastTelemetry}]`;
                     if (horizonThrow) horizonThrow.textContent = battleData.throwHorizonText || "1st, 3rd, 5th";
                     if (horizonDots && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
-                        horizonDots.innerHTML = battleData.scannedOpponents.map((opp, idx) => `
+                        setHtmlIfChanged(horizonDots, battleData.scannedOpponents.map((opp, idx) => `
                             <strong>${escapeHtml(opp.name)}</strong> <span class="shield-dots">${renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L")}</span>
                             ${idx < battleData.scannedOpponents.length - 1 ? ' • ' : ''}
-                        `).join("");
+                        `).join(""));
                         if (horizonDmg) {
                             horizonDmg.textContent = `Opp: ${abbrMoveSummary(battleData.scannedOpponents[0].c1)} • My: ${abbrMoveSummary(battleData.myMove1Summary || '—')}`;
                         }
@@ -4342,7 +4687,7 @@
                         !!sd.visible;
                     if (!canShowSd) {
                         shieldCardEl.className = "shield-decision-card hidden";
-                        shieldCardEl.innerHTML = "";
+                        setHtmlIfChanged(shieldCardEl, "");
                     } else {
                         const buildShieldHpPillHtml = (remHpPct, isKo, isFunded) => {
                             const clampedRem = isKo ? 0 : Math.max(0, Math.min(100, Math.round(Number(remHpPct) || 0)));
@@ -4417,12 +4762,12 @@
                         shieldCardEl.className = "shield-decision-card";
                         shieldCardEl.style.background = sd.bgColorHex || "rgba(6, 78, 59, 0.95)";
                         shieldCardEl.style.borderColor = sd.strokeColorHex || "#10B981";
-                        shieldCardEl.innerHTML =
+                        setHtmlIfChanged(shieldCardEl,
                             `<div class="shield-dec-header">${escapeHtml(sd.headerLineText || "🛡️ SHIELD DECISION")}</div>` +
                             `<div class="shield-dec-divider"></div>` +
                             fundedRowsHtml +
                             unfundedRowsHtml +
-                            overflowSummaryHtml;
+                            overflowSummaryHtml);
                     }
                 }
             } catch (e) {
@@ -4430,15 +4775,12 @@
             }
 
             applyActiveHudModeVisibility(isWaitingState, isReplay);
-            if (window.requestAnimationFrame) {
-                window.requestAnimationFrame(notifyHeight);
-            }
-            setTimeout(notifyHeight, 40);
+            scheduleNotifyHeight();
         }
 
         window.addEventListener("resize", function() {
             applyProportionalScale();
-            notifyHeight();
+            notifyHeight(true);
         });
 
         window.replayHudMode = "live";
@@ -4469,6 +4811,7 @@
 
             const isCompact = (effectiveMode === "compact");
             const isDiag = (effectiveMode === "diagnostic");
+            const isGuidedEloScan = !isReplay && isWaitingState && !!(battleData && battleData.eloScanState && battleData.eloScanState.guidedScanActive);
             const cfg = window.compactHudConfig || {
                 showOppAttacks: false,
                 showMyAttacks: false,
@@ -4480,10 +4823,10 @@
             const isBattleActive = !!(battleData && battleData.isBattleActive);
 
             // 1. DVR / Action Toolbar visibility
-            let hideToolbar = false;
+            let hideToolbar = isGuidedEloScan;
             if (isDiag) {
                 hideToolbar = true;
-            } else if (isCompact) {
+            } else if (isCompact && !hideToolbar) {
                 if (isReplay) {
                     hideToolbar = (cfg.toolbarMode !== "always");
                 } else if (cfg.toolbarMode === "always") {
@@ -4498,14 +4841,14 @@
 
             // 2. Opponent Attacks & Player Attacks tables
             if (oppAttacksEl) {
-                oppAttacksEl.style.display = isDiag ? "none" : (isCompact ? (cfg.showOppAttacks ? "" : "none") : "");
+                oppAttacksEl.style.display = (isDiag || isGuidedEloScan) ? "none" : (isCompact ? (cfg.showOppAttacks ? "" : "none") : "");
             }
             if (myAttacksEl) {
-                myAttacksEl.style.display = isDiag ? "none" : (isCompact ? (cfg.showMyAttacks ? "" : "none") : "");
+                myAttacksEl.style.display = (isDiag || isGuidedEloScan) ? "none" : (isCompact ? (cfg.showMyAttacks ? "" : "none") : "");
             }
 
             // 3. 2-Line AI Tactical Coach slots
-            const hideCoach = isDiag || (isCompact && !cfg.showCoach);
+            const hideCoach = isDiag || isGuidedEloScan || (isCompact && !cfg.showCoach);
             if (recTopSlot) recTopSlot.style.display = hideCoach ? "none" : "";
             if (recBotSlot) recBotSlot.style.display = hideCoach ? "none" : "";
 
@@ -4520,6 +4863,65 @@
             atkHeaderPacingBadges.forEach(el => {
                 el.style.display = (isCompact && !showPacingInCompact) ? "none" : "";
             });
+
+            // 4b. Verified Shadow & Compact Pacing BP/Alt-Fast Pills (zero extra vertical height)
+            const topShadPillEl = document.getElementById("sky-top-opp-shad-pill");
+            const oppHdrShadPillEl = document.getElementById("sky-opp-hdr-shad-pill");
+            const pacingCenterEl = document.getElementById("sky-compact-pacing-center");
+            const isShadEligibleComp = !battleData || battleData.oppShadowEligible !== false;
+            const isOppShad = isShadEligibleComp && !!(battleData && battleData.isOpponentShadow);
+            const isShadVerified = isShadEligibleComp && !!(battleData && battleData.oppShadowVerified);
+            const isShadLocked = isShadEligibleComp && !!(battleData && battleData.oppShadowLocked);
+            const compactShadText = !isWaitingState && battleData
+                ? (isShadLocked
+                    ? (isOppShad ? "🟣S🔒" : "⚪🔒")
+                    : (isShadVerified
+                        ? (isOppShad ? "🟣S✓" : "⚪✓")
+                        : (isOppShad ? "🟣S" : "")))
+                : "";
+            const oppFastNonStd = !isWaitingState && battleData && String(battleData.oppFastMoveStatus || "") === "confirmed_non_standard";
+            const cmpMyBp = battleData ? (Number(battleData.liveMyBpDeltaHp) || 0) : 0;
+            const cmpOppBp = battleData ? (Number(battleData.liveOppBpDeltaHp) || 0) : 0;
+
+            if (oppHdrShadPillEl) {
+                if (isCompact && cfg.showOppAttacks && hideToolbar && compactShadText) {
+                    oppHdrShadPillEl.textContent = compactShadText;
+                    oppHdrShadPillEl.classList.remove("hidden");
+                } else {
+                    oppHdrShadPillEl.classList.add("hidden");
+                }
+            }
+            if (topShadPillEl) {
+                if (isCompact && !cfg.showOppAttacks && !isDiag && compactShadText) {
+                    topShadPillEl.textContent = compactShadText;
+                    topShadPillEl.classList.remove("hidden");
+                } else {
+                    topShadPillEl.classList.add("hidden");
+                }
+            }
+            if (pacingCenterEl) {
+                const needStripShown = pacingStripEl && !pacingStripEl.classList.contains("hidden");
+                if (isCompact && !isDiag && needStripShown && (oppFastNonStd || cmpMyBp !== 0 || cmpOppBp !== 0)) {
+                    let centerHtml = "";
+                    if (oppFastNonStd) {
+                        centerHtml += `<span class="bp-micro-pill bp-warn" title="Confirmed Non-Standard Opponent Fast Move">${escapeHtml(abbrMove5(battleData.activeOpponentFastMove || "Fast"))}!</span>`;
+                    }
+                    if (cmpMyBp !== 0) {
+                        centerHtml += cmpMyBp > 0
+                            ? `<span class="bp-micro-pill bp-pos">⚡BP+${cmpMyBp}</span>`
+                            : `<span class="bp-micro-pill bp-blk">🛡️BLK${cmpMyBp}</span>`;
+                    }
+                    if (cmpOppBp !== 0) {
+                        centerHtml += cmpOppBp > 0
+                            ? `<span class="bp-micro-pill bp-warn">⚠️BP+${cmpOppBp}</span>`
+                            : `<span class="bp-micro-pill bp-blk">🛡️${cmpOppBp}</span>`;
+                    }
+                    setHtmlIfChanged(pacingCenterEl, centerHtml);
+                    pacingCenterEl.style.display = "inline-flex";
+                } else {
+                    pacingCenterEl.style.display = "none";
+                }
+            }
 
             // 5. 3x3 Matchup Matrix
             if (matrixEl) {
@@ -4566,7 +4968,7 @@
             if (window.AndroidOverlay && window.AndroidOverlay.onOverlayReady) {
                 window.AndroidOverlay.onOverlayReady();
             }
-            notifyHeight();
+            notifyHeight(true);
         };
     </script>
 </body>

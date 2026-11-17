@@ -3070,10 +3070,17 @@ internal fun OverlayService.scanOpponent3dShadowAura(
 
     val fastLower = userFastMoveName.trim().lowercase()
     val recentPlayerFast = (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) in 0L..2200L)
+    val cleanPostOppEntryBeforePlayerFast = lastOppSwitchTimeMs > 0L &&
+        (nowMs - lastOppSwitchTimeMs) in 180L..1400L &&
+        (confirmedPhasePlayerTurns == 0 || lastConfirmedPlayerFastMoveMs < lastOppSwitchTimeMs)
+    val frozenDuringShieldPrompt = isAttackIncomingPromptActive &&
+        (lastConfirmedPlayerFastMoveMs <= 0L || (nowMs - lastConfirmedPlayerFastMoveMs) > 650L)
     if (fastLower in PURPLE_VFX_FAST_MOVES &&
         hasBattleStarted &&
         !isPlayerInIdleFallback &&
-        (phasePlayerTurns > 0 || recentPlayerFast)
+        (phasePlayerTurns > 0 || recentPlayerFast) &&
+        !cleanPostOppEntryBeforePlayerFast &&
+        !frozenDuringShieldPrompt
     ) {
         oppAuraHasPrevRgb = false
         return ShadowAuraScanSample(

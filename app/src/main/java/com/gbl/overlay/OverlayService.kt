@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.51"
-        const val APP_VERSION_CODE = 1751
+        const val APP_VERSION = "7.52"
+        const val APP_VERSION_CODE = 1752
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -1777,6 +1777,7 @@ class OverlayService : LifecycleService() {
             val oppSlotConfirmedChargedMoves: List<List<String>> = emptyList(),
             val revealedOppSpecies: List<String> = emptyList(),
             val userSlotEverOnField: List<Boolean> = emptyList(),
+            val oppShadowEligible: Boolean = true,
             val oppShadowVerified: Boolean = false,
             val oppShadowLocked: Boolean = false,
             val oppShadowSource: String = "",
@@ -2071,12 +2072,24 @@ class OverlayService : LifecycleService() {
             private fun normalizeLeagueKey(activeLeague: String): String = normalizeLeagueKeyStatic(activeLeague)
 
             fun isShadowEligibleVariant(variant: PokemonMeta): Boolean {
-                val idLower = variant.speciesId.lowercase().removeSuffix("_shadow")
+                val idLower = variant.speciesId.lowercase().removeSuffix("_shadow").trim()
                 val nameLower = variant.name.lowercase()
                 if (idLower == "mewtwo_armored" || nameLower.contains("armored")) return false
                 if (idLower.contains("_mega") || idLower.contains("_primal") || nameLower.startsWith("mega ") || nameLower.startsWith("primal ")) return false
                 if (idLower.startsWith("zacian") || idLower.startsWith("zamazenta") || idLower.startsWith("zygarde") || idLower.startsWith("necrozma") || idLower.startsWith("keldeo") || idLower.startsWith("urshifu") || idLower == "mew" || idLower.startsWith("morpeko") || idLower.startsWith("mimikyu") || idLower.startsWith("aegislash") || idLower.startsWith("cramorant")) return false
-                return true
+                val idHyphen = idLower.replace("-", "_")
+                val formQualId = variant.formLabel.trim().lowercase()
+                    .takeIf { it.isNotEmpty() && it != "base" && it != "shadow" }
+                    ?.let { "${idHyphen}_${it.replace(Regex("[^a-z0-9]+"), "_")}" }
+                val cleanName = nameLower
+                    .replace(Regex("^shadow\\s+"), "")
+                    .replace(Regex("\\s*\\(shadow\\)$"), "")
+                    .trim()
+                val staticKeys = PokemonStaticData.STATIC_RELEASED_SHADOW_KEYS
+                return (idLower.isNotEmpty() && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(idLower) || staticKeys.contains(idLower))) ||
+                    (idHyphen.isNotEmpty() && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(idHyphen) || staticKeys.contains(idHyphen))) ||
+                    (formQualId != null && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(formQualId) || staticKeys.contains(formQualId))) ||
+                    (cleanName.isNotEmpty() && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(cleanName) || staticKeys.contains(cleanName)))
             }
 
             /**
@@ -2328,6 +2341,8 @@ class OverlayService : LifecycleService() {
 
         val LIVE_RANKINGS_MAP = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<String, PokemonRankingEntry>>()
         val DYNAMIC_MOVE_ID_TO_NAME = java.util.concurrent.ConcurrentHashMap<String, String>()
+        val DYNAMIC_SHADOW_ELIGIBLE_KEYS: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        const val PVPOKE_OTA_REFRESH_TTL_MS: Long = 24L * 60L * 60L * 1000L
 
         val CANONICAL_MOVE_ID_MAP: Map<String, String> = mapOf(
             "SUPER_POWER" to "Superpower",
@@ -3412,6 +3427,13 @@ class OverlayService : LifecycleService() {
     internal val oppSlotLiveOutBpDeltaHp = IntArray(3) { 0 }
     internal val oppSlotBpToastEmitted = BooleanArray(3) { false }
     internal val oppSlotOutBpToastEmitted = BooleanArray(3) { false }
+    internal val oppSlotFastShadowTrend = BooleanArray(3) { false }
+    internal var lastOppChargeHpSettleLatched: Boolean = false
+    internal var oppChargePostSettleStableFrames: Int = 0
+    internal var oppChargeLastSettlingPlayerHp: Int = -1
+    internal var lastUserChargeHpSettleLatched: Boolean = false
+    internal var userChargePostSettleStableFrames: Int = 0
+    internal var userChargeLastSettlingOppHp: Int = -1
     internal var lastFastEvalPairKey: String = ""
 
     internal fun resetAutoShadowAndBidirectionalFastState() {
@@ -3451,6 +3473,13 @@ class OverlayService : LifecycleService() {
         oppSlotLiveOutBpDeltaHp.fill(0)
         oppSlotBpToastEmitted.fill(false)
         oppSlotOutBpToastEmitted.fill(false)
+        oppSlotFastShadowTrend.fill(false)
+        lastOppChargeHpSettleLatched = false
+        oppChargePostSettleStableFrames = 0
+        oppChargeLastSettlingPlayerHp = -1
+        lastUserChargeHpSettleLatched = false
+        userChargePostSettleStableFrames = 0
+        userChargeLastSettlingOppHp = -1
         lastFastEvalPairKey = ""
     }
     internal var oppFastEvalAnchorPlayerHp: Int = 100
@@ -4765,16 +4794,24 @@ class OverlayService : LifecycleService() {
         val slotMeta = getPokemonMeta(rawSlotName, activeLeague, newShadow)
         if (newShadow && !FormResolver.isShadowEligibleVariant(slotMeta)) return false
         val isSingleChargeDhpFlip = provenanceCode == "IN_CHG_DHP" || provenanceCode == "OUT_CHG_DHP"
-        if (newShadow &&
-            isSingleChargeDhpFlip &&
-            slotIdx in 0..2 &&
-            oppSlotAuraPosFrames[slotIdx] == 0 &&
-            oppSlotAuraClearFrames[slotIdx] >= 6
-        ) {
-            return false
-        }
-
         val prevEffective = resolveEffectiveOpponentShadow(baseKey, isOpponentShadow)
+        if (isSingleChargeDhpFlip) {
+            if (newShadow &&
+                slotIdx in 0..2 &&
+                oppSlotAuraPosFrames[slotIdx] == 0 &&
+                oppSlotAuraClearFrames[slotIdx] >= 6
+            ) {
+                return false
+            }
+            if (newShadow && !prevEffective) {
+                val hasCorroboration = slotIdx in 0..2 &&
+                    (oppSlotAuraPosFrames[slotIdx] >= 1 || oppSlotFastShadowTrend[slotIdx])
+                if (!hasCorroboration) return false
+            }
+            if (!newShadow && prevEffective && slotIdx in 0..2 && oppSlotAuraPosFrames[slotIdx] >= 1) {
+                return false
+            }
+        }
         val wasVerifiedSame = autoVerifiedShadowStates[baseKey] == newShadow
         autoVerifiedShadowStates[baseKey] = newShadow
         val prevProv = autoShadowProvenance[baseKey].orEmpty()
@@ -5857,50 +5894,47 @@ class OverlayService : LifecycleService() {
                     Triple("BATTLE FRONTIER (MASTER)", "pvpoke_rankings_bf_master.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json")
                 )
 
+                val nowMs = System.currentTimeMillis()
                 var didDownloadAny = false
                 for ((leagueKey, fileName, url) in rankingTargets) {
                     try {
-                        if (!LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) continue
                         val rFile = File(filesDir, fileName)
-                        val rJson = if (rFile.exists() && rFile.length() > 200) {
-                            rFile.readText()
-                        } else {
+                        val hasValidCache = rFile.exists() && rFile.length() > 200
+                        val isStale = !hasValidCache || (nowMs - rFile.lastModified()) > PVPOKE_OTA_REFRESH_TTL_MS
+                        if (hasValidCache && LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) {
+                            OverlayService.parseRankingsJsonStatic(leagueKey, rFile.readText())
+                        }
+                        if (isStale) {
                             val req = Request.Builder().url(url).build()
                             client.newCall(req).execute().use { resp ->
                                 val body = resp.body?.string()
                                 if (resp.isSuccessful && !body.isNullOrBlank()) {
                                     rFile.writeText(body)
+                                    OverlayService.parseRankingsJsonStatic(leagueKey, body)
                                     didDownloadAny = true
-                                    body
-                                } else null
+                                }
                             }
-                        }
-                        if (!rJson.isNullOrBlank()) {
-                            OverlayService.parseRankingsJsonStatic(leagueKey, rJson)
                         }
                     } catch (_: Exception) {}
                 }
 
-                if (DYNAMIC_POKEMON_DATABASE.isEmpty() || DYNAMIC_MOVE_DATABASE.isEmpty()) {
-                    val mainCache = File(filesDir, "pvpoke_gamemaster.json")
-                    val cacheFile = if (mainCache.exists() && mainCache.length() > 1000) mainCache else File(filesDir, "pvpoke_gamemaster_cache.json")
-                    val jsonStr = if (cacheFile.exists() && cacheFile.length() > 1000) {
-                        cacheFile.readText()
-                    } else {
-                        val req = Request.Builder()
-                            .url("https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json")
-                            .build()
-                        client.newCall(req).execute().use { resp ->
-                            val body = resp.body?.string()
-                            if (resp.isSuccessful && !body.isNullOrBlank()) {
-                                cacheFile.writeText(body)
-                                didDownloadAny = true
-                                body
-                            } else null
+                val mainCache = File(filesDir, "pvpoke_gamemaster.json")
+                val cacheFile = if (mainCache.exists() && mainCache.length() > 1000) mainCache else File(filesDir, "pvpoke_gamemaster_cache.json")
+                val hasValidGmCache = cacheFile.exists() && cacheFile.length() > 1000
+                if (hasValidGmCache && (DYNAMIC_POKEMON_DATABASE.isEmpty() || DYNAMIC_MOVE_DATABASE.isEmpty())) {
+                    parseGamemasterJson(cacheFile.readText())
+                }
+                if (!hasValidGmCache || (nowMs - cacheFile.lastModified()) > PVPOKE_OTA_REFRESH_TTL_MS) {
+                    val req = Request.Builder()
+                        .url("https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json")
+                        .build()
+                    client.newCall(req).execute().use { resp ->
+                        val body = resp.body?.string()
+                        if (resp.isSuccessful && !body.isNullOrBlank() && body.length > 1000) {
+                            mainCache.writeText(body)
+                            parseGamemasterJson(body)
+                            didDownloadAny = true
                         }
-                    }
-                    if (!jsonStr.isNullOrBlank()) {
-                        parseGamemasterJson(jsonStr)
                     }
                 }
                 if (didDownloadAny || prefs.getLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, 0L) == 0L) {
@@ -10306,6 +10340,7 @@ class OverlayService : LifecycleService() {
                     oppSlotAuraPosFrames[activeOppIdx] = 0
                     oppSlotAuraClearFrames[activeOppIdx] = 0
                     oppSlotAuraFirstCleanMs[activeOppIdx] = 0L
+                    oppSlotFastShadowTrend[activeOppIdx] = false
                 }
                 if (!oppFastMoveConfirmed[activeOppIdx]) {
                     oppCumulativeFastDmgPct[activeOppIdx] = 0
@@ -10814,14 +10849,11 @@ class OverlayService : LifecycleService() {
                 }
 
                 // v6.04: Retroactive unshielded opponent move confirmation AND HP delta update (with defender slot verification & provisional chip-shield override)
-                val recentOppChargeMs = max(
-                    if (lastChargedPromptActor == "opp") lastChargedAttackLoggedMs else 0L,
-                    lastOppChargedAttackLoggedMs
-                )
+                val recentOppChargeMs = lastOppChargedAttackLoggedMs
                 val userChargeIntervenedAfterOppThrow = pendingChargedAttackActor == "user" ||
-                    (lastUserChargedAttackLoggedMs > 0L && recentOppChargeMs > 0L && lastUserChargedAttackLoggedMs >= recentOppChargeMs - 500L)
+                    (lastUserChargedAttackLoggedMs > 0L && recentOppChargeMs > 0L && lastUserChargedAttackLoggedMs in (recentOppChargeMs - 500L)..(recentOppChargeMs + 6500L))
                 val maxRetroOppHpSettleWindowMs = if (userChargeIntervenedAfterOppThrow) 12000L else 4500L
-                val preUserHpRef = if (lastOppChargedAttackLoggedMs > 0L && (nowMs - lastOppChargedAttackLoggedMs) <= maxRetroOppHpSettleWindowMs) {
+                val preUserHpRef = if (recentOppChargeMs > 0L && (nowMs - recentOppChargeMs) <= maxRetroOppHpSettleWindowMs) {
                     lastOppChargedPreUserHp
                 } else {
                     pendingChargedAttackPreUserHp
@@ -10829,7 +10861,17 @@ class OverlayService : LifecycleService() {
                 val postChargeDropFromPre = preUserHpRef - confirmedPlayerHp
                 val sameDefendingUserSlot = (lastOppChargedDefenderUserSlotIdx == -1 || activeUserIdx == lastOppChargedDefenderUserSlotIdx) &&
                     (lastPlayerSwitchTimeMs <= recentOppChargeMs)
+                val oppFastAfterOppCharge = activeOppIdx in 0..2 && oppLastFastCreditedAtMs[activeOppIdx] > recentOppChargeMs + 900L
+                val playerFastAfterOppCharge = lastConfirmedPlayerFastMoveMs > recentOppChargeMs + 900L
+                if (!lastOppChargeHpSettleLatched &&
+                    recentOppChargeMs > 0L &&
+                    oppChargePostSettleStableFrames >= 1 &&
+                    (oppFastAfterOppCharge || playerFastAfterOppCharge)
+                ) {
+                    lastOppChargeHpSettleLatched = true
+                }
                 if (pendingChargedAttackActor != "opp" &&
+                    !lastOppChargeHpSettleLatched &&
                     recentOppChargeMs > 0L &&
                     (nowMs - recentOppChargeMs) in 1L..maxRetroOppHpSettleWindowMs &&
                     sameDefendingUserSlot &&
@@ -10974,76 +11016,101 @@ class OverlayService : LifecycleService() {
                             hpChanged = true
                         }
                     }
+                    val isPostCutsceneOppSettleFrame = !isShieldCallWindowEarly &&
+                        !isAttackIncomingPromptActive &&
+                        !isTopCountdownCircleActive &&
+                        !hasUserChargedBannerText &&
+                        missingBothHpBarsFrames == 0 &&
+                        (sampledLeftChargeBtnFillPct >= 0 || sampledRightChargeBtnFillPct >= 0)
+                    if (isPostCutsceneOppSettleFrame) {
+                        oppChargePostSettleStableFrames = if (
+                            oppChargeLastSettlingPlayerHp >= 0 &&
+                            kotlin.math.abs(confirmedPlayerHp - oppChargeLastSettlingPlayerHp) <= 1
+                        ) {
+                            (oppChargePostSettleStableFrames + 1).coerceAtMost(10)
+                        } else {
+                            1
+                        }
+                        oppChargeLastSettlingPlayerHp = confirmedPlayerHp
+                    }
                     val chgSlot = lastOppChargedAttackerSlotIdx.coerceIn(0, 2)
                     val chgRawName = detectedOpponents.getOrNull(chgSlot) ?: lastOppChargedAttackerRawName.ifBlank { activeOpponentName }
                     val chgBase = FormResolver.extractBaseSpecies(chgRawName).lowercase()
                     val resolvedOppIdxAfterUpgrade = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
                     val resolvedOppEv = if (resolvedOppIdxAfterUpgrade >= 0) battleTimelineEvents[resolvedOppIdxAfterUpgrade] else null
                     val resolvedMoveName = resolvedOppEv?.inferredMoveName?.trim().orEmpty()
-                    if (resolvedOppEv != null &&
-                        resolvedOppEv.shielded == false &&
-                        resolvedMoveName.isNotEmpty() &&
-                        postChargeDropFromPre in 14..95 &&
-                        confirmedPlayerHp >= 3
-                    ) {
-                        if (oppSlotAtkStage[chgSlot] == 0 && playerSlotDefStage[activeUserIdx] == 0) {
-                            oppSlotKnownInChgObsPct[chgSlot] = postChargeDropFromPre
-                            oppSlotKnownInChgMove[chgSlot] = resolvedMoveName
-                            oppSlotKnownInChgDefenderIdx[chgSlot] = activeUserIdx
-                        }
-                        if (enableAutoShadowDetect &&
-                            resolvedOppEv.moveResolutionSource == "BANNER_OCR" &&
-                            chgBase.isNotEmpty() &&
-                            !userManualShadowLocks.containsKey(chgBase)
+                    if (isPostCutsceneOppSettleFrame && oppChargePostSettleStableFrames >= 2) {
+                        if (resolvedOppEv != null &&
+                            resolvedOppEv.shielded == false &&
+                            resolvedMoveName.isNotEmpty() &&
+                            postChargeDropFromPre in 14..95 &&
+                            confirmedPlayerHp >= 3
                         ) {
-                            val chgStdNormMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(chgRawName, activeLeague, false), activeLeague)
-                            val chgStdShadMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(chgRawName, activeLeague, true), activeLeague)
-                            if (FormResolver.isShadowEligibleVariant(chgStdShadMeta)) {
-                                val dmgNorm = calculateChargedMoveDamagePercent(
-                                    attacker = chgStdNormMeta,
-                                    defender = userMetaForStats,
-                                    moveName = resolvedMoveName,
-                                    isAttackerShadow = false,
-                                    isDefenderShadow = isUserShadForStats,
-                                    attackerAtkStage = oppSlotAtkStage[chgSlot],
-                                    defenderDefStage = playerSlotDefStage[activeUserIdx]
-                                )
-                                val dmgShad = calculateChargedMoveDamagePercent(
-                                    attacker = chgStdShadMeta,
-                                    defender = userMetaForStats,
-                                    moveName = resolvedMoveName,
-                                    isAttackerShadow = true,
-                                    isDefenderShadow = isUserShadForStats,
-                                    attackerAtkStage = oppSlotAtkStage[chgSlot],
-                                    defenderDefStage = playerSlotDefStage[activeUserIdx]
-                                )
-                                if (kotlin.math.abs(dmgShad - dmgNorm) >= 6) {
-                                    val errNorm = kotlin.math.abs(postChargeDropFromPre - dmgNorm)
-                                    val errShad = kotlin.math.abs(postChargeDropFromPre - dmgShad)
-                                    val chosenShad = when {
-                                        errShad + 4 <= errNorm -> true
-                                        errNorm + 4 <= errShad -> false
-                                        else -> null
-                                    }
-                                    if (chosenShad != null) {
-                                        val didFlipOrVerify = applyMidBattleOpponentShadowFlip(
-                                            slotIdx = chgSlot,
-                                            baseKeyRaw = chgBase,
-                                            newShadow = chosenShad,
-                                            provenanceCode = "IN_CHG_DHP",
-                                            reasonText = "$resolvedMoveName ${postChargeDropFromPre}% ΔHP"
-                                        )
-                                        val latestIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
-                                        if (latestIdx >= 0) {
-                                            battleTimelineEvents[latestIdx] = battleTimelineEvents[latestIdx].copy(
-                                                expectedMoveDmgPct = if (chosenShad) dmgShad else dmgNorm
-                                            )
+                            if (oppSlotAtkStage[chgSlot] == 0 && playerSlotDefStage[activeUserIdx] == 0) {
+                                oppSlotKnownInChgObsPct[chgSlot] = postChargeDropFromPre
+                                oppSlotKnownInChgMove[chgSlot] = resolvedMoveName
+                                oppSlotKnownInChgDefenderIdx[chgSlot] = activeUserIdx
+                            }
+                            if (enableAutoShadowDetect &&
+                                resolvedOppEv.moveResolutionSource == "BANNER_OCR" &&
+                                chgBase.isNotEmpty() &&
+                                !userManualShadowLocks.containsKey(chgBase)
+                            ) {
+                                val obsCpIn = oppSlotObservedCp.getOrElse(chgSlot) { -1 }
+                                val baseNormMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(chgRawName, activeLeague, false), activeLeague)
+                                val baseShadMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(chgRawName, activeLeague, true), activeLeague)
+                                val normProfIn = if (obsCpIn > 0) IvMatrixEngine.resolveBestGuessOpponentIvProfile(baseNormMeta.name, activeLeague, false, observedCp = obsCpIn) else null
+                                val shadProfIn = if (obsCpIn > 0) IvMatrixEngine.resolveBestGuessOpponentIvProfile(baseShadMeta.name, activeLeague, true, observedCp = obsCpIn) else null
+                                val chgStdNormMeta = if (normProfIn != null) baseNormMeta.copy(atk = normProfIn.bestGuessAtk, def = normProfIn.bestGuessDef, hp = normProfIn.bestGuessHp, isRawBaseStats = false) else baseNormMeta
+                                val chgStdShadMeta = if (shadProfIn != null) baseShadMeta.copy(atk = shadProfIn.bestGuessAtk, def = shadProfIn.bestGuessDef, hp = shadProfIn.bestGuessHp, isRawBaseStats = false) else baseShadMeta
+                                if (FormResolver.isShadowEligibleVariant(chgStdShadMeta)) {
+                                    val dmgNorm = calculateChargedMoveDamagePercent(
+                                        attacker = chgStdNormMeta,
+                                        defender = userMetaForStats,
+                                        moveName = resolvedMoveName,
+                                        isAttackerShadow = false,
+                                        isDefenderShadow = isUserShadForStats,
+                                        attackerAtkStage = oppSlotAtkStage[chgSlot],
+                                        defenderDefStage = playerSlotDefStage[activeUserIdx]
+                                    )
+                                    val dmgShad = calculateChargedMoveDamagePercent(
+                                        attacker = chgStdShadMeta,
+                                        defender = userMetaForStats,
+                                        moveName = resolvedMoveName,
+                                        isAttackerShadow = true,
+                                        isDefenderShadow = isUserShadForStats,
+                                        attackerAtkStage = oppSlotAtkStage[chgSlot],
+                                        defenderDefStage = playerSlotDefStage[activeUserIdx]
+                                    )
+                                    if (kotlin.math.abs(dmgShad - dmgNorm) >= 6) {
+                                        val errNorm = kotlin.math.abs(postChargeDropFromPre - dmgNorm)
+                                        val errShad = kotlin.math.abs(postChargeDropFromPre - dmgShad)
+                                        val chosenShad = when {
+                                            errShad + 4 <= errNorm -> true
+                                            errNorm + 5 <= errShad -> false
+                                            else -> null
                                         }
-                                        if (didFlipOrVerify) hpChanged = true
+                                        if (chosenShad != null) {
+                                            val didFlipOrVerify = applyMidBattleOpponentShadowFlip(
+                                                slotIdx = chgSlot,
+                                                baseKeyRaw = chgBase,
+                                                newShadow = chosenShad,
+                                                provenanceCode = "IN_CHG_DHP",
+                                                reasonText = "$resolvedMoveName ${postChargeDropFromPre}% ΔHP"
+                                            )
+                                            val latestIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
+                                            if (latestIdx >= 0) {
+                                                battleTimelineEvents[latestIdx] = battleTimelineEvents[latestIdx].copy(
+                                                    expectedMoveDmgPct = if (chosenShad) dmgShad else dmgNorm
+                                                )
+                                            }
+                                            if (didFlipOrVerify) hpChanged = true
+                                        }
                                     }
                                 }
                             }
                         }
+                        lastOppChargeHpSettleLatched = true
                     }
                 }
             }
@@ -11251,14 +11318,11 @@ class OverlayService : LifecycleService() {
 
                 // v5.12 / v5.13 / v6.04 / v7.04: Retroactive unshielded player CHARGED_ATTACK HP delta update & provisional chip-shield override
                 // if opponent HP drop finishes settling 100-4500ms after Section 4 reconciled (or up to 12000ms when a CMP 2nd opponent throw intervened)!
-                val recentUserChargeMs = max(
-                    if (lastChargedPromptActor == "user") lastChargedAttackLoggedMs else 0L,
-                    lastUserChargedAttackLoggedMs
-                )
+                val recentUserChargeMs = lastUserChargedAttackLoggedMs
                 val oppChargeIntervenedAfterUserThrow = pendingChargedAttackActor == "opp" ||
-                    (lastOppChargedAttackLoggedMs > 0L && recentUserChargeMs > 0L && lastOppChargedAttackLoggedMs >= recentUserChargeMs - 500L)
+                    (lastOppChargedAttackLoggedMs > 0L && recentUserChargeMs > 0L && lastOppChargedAttackLoggedMs in (recentUserChargeMs - 500L)..(recentUserChargeMs + 6500L))
                 val maxRetroUserHpSettleWindowMs = if (oppChargeIntervenedAfterUserThrow) 12000L else 4500L
-                val preOppHpRef = if (lastUserChargedAttackLoggedMs > 0L && (nowMs - lastUserChargedAttackLoggedMs) <= maxRetroUserHpSettleWindowMs) {
+                val preOppHpRef = if (recentUserChargeMs > 0L && (nowMs - recentUserChargeMs) <= maxRetroUserHpSettleWindowMs) {
                     lastUserChargedPreOppHp
                 } else {
                     pendingChargedAttackPreOppHp
@@ -11266,7 +11330,17 @@ class OverlayService : LifecycleService() {
                 val postUserChargeDropFromPre = preOppHpRef - confirmedOppHp
                 val sameDefendingOppSlot = (lastUserChargedDefenderOppSlotIdx == -1 || activeOppIdx == lastUserChargedDefenderOppSlotIdx) &&
                     (lastOppSwitchTimeMs <= recentUserChargeMs)
+                val oppFastAfterUserCharge = activeOppIdx in 0..2 && oppLastFastCreditedAtMs[activeOppIdx] > recentUserChargeMs + 900L
+                val playerFastAfterUserCharge = lastConfirmedPlayerFastMoveMs > recentUserChargeMs + 900L
+                if (!lastUserChargeHpSettleLatched &&
+                    recentUserChargeMs > 0L &&
+                    userChargePostSettleStableFrames >= 1 &&
+                    (oppFastAfterUserCharge || playerFastAfterUserCharge)
+                ) {
+                    lastUserChargeHpSettleLatched = true
+                }
                 if (pendingChargedAttackActor != "user" &&
+                    !lastUserChargeHpSettleLatched &&
                     recentUserChargeMs > 0L &&
                     (nowMs - recentUserChargeMs) in 1L..maxRetroUserHpSettleWindowMs &&
                     sameDefendingOppSlot &&
@@ -11316,96 +11390,121 @@ class OverlayService : LifecycleService() {
                             }
                             hpChanged = true
                         }
+                        val isPostCutsceneUserSettleFrame = !isShieldCallWindowEarly &&
+                            !isAttackIncomingPromptActive &&
+                            !isTopCountdownCircleActive &&
+                            !hasUserChargedBannerText &&
+                            missingBothHpBarsFrames == 0 &&
+                            (sampledLeftChargeBtnFillPct >= 0 || sampledRightChargeBtnFillPct >= 0)
+                        if (isPostCutsceneUserSettleFrame) {
+                            userChargePostSettleStableFrames = if (
+                                userChargeLastSettlingOppHp >= 0 &&
+                                kotlin.math.abs(confirmedOppHp - userChargeLastSettlingOppHp) <= 1
+                            ) {
+                                (userChargePostSettleStableFrames + 1).coerceAtMost(10)
+                            } else {
+                                1
+                            }
+                            userChargeLastSettlingOppHp = confirmedOppHp
+                        }
                         val resolvedUserEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "user" }
                         val resolvedUserEv = if (resolvedUserEvIdx >= 0) battleTimelineEvents[resolvedUserEvIdx] else null
                         val resolvedUserMoveName = resolvedUserEv?.inferredMoveName?.trim().orEmpty()
-                        if (resolvedUserEv != null &&
-                            resolvedUserEv.shielded == false &&
-                            resolvedUserMoveName.isNotEmpty() &&
-                            postUserChargeDropFromPre in 14..95 &&
-                            confirmedOppHp >= 3
-                        ) {
-                            if (playerSlotAtkStage[activeUserIdx] == 0 && oppSlotDefStage[activeOppIdx] == 0) {
-                                oppSlotKnownOutChgObsPct[activeOppIdx] = postUserChargeDropFromPre
-                                oppSlotKnownOutChgMove[activeOppIdx] = resolvedUserMoveName
-                                oppSlotKnownOutChgAttackerIdx[activeOppIdx] = activeUserIdx
-                            }
-                            val uPlusLvl = (userSlotCfg?.plusMoveLevel ?: 4).coerceIn(0, 4)
-                            if (enableAutoShadowDetect &&
-                                activeOppBase.isNotEmpty() &&
-                                !userManualShadowLocks.containsKey(activeOppBase)
+                        if (isPostCutsceneUserSettleFrame && userChargePostSettleStableFrames >= 2) {
+                            if (resolvedUserEv != null &&
+                                resolvedUserEv.shielded == false &&
+                                resolvedUserMoveName.isNotEmpty() &&
+                                postUserChargeDropFromPre in 14..95 &&
+                                confirmedOppHp >= 3
                             ) {
-                                val outNormOppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, false), activeLeague)
-                                val outShadOppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, true), activeLeague)
-                                if (FormResolver.isShadowEligibleVariant(outShadOppMeta)) {
-                                    val outDmgNorm = calculateChargedMoveDamagePercent(
-                                        attacker = userMetaForStats,
-                                        defender = outNormOppMeta,
-                                        moveName = resolvedUserMoveName,
-                                        isAttackerShadow = isUserShadForStats,
-                                        isDefenderShadow = false,
-                                        attackerAtkStage = playerSlotAtkStage[activeUserIdx],
-                                        defenderDefStage = oppSlotDefStage[activeOppIdx],
-                                        plusMoveLevel = uPlusLvl
-                                    )
-                                    val outDmgShad = calculateChargedMoveDamagePercent(
-                                        attacker = userMetaForStats,
-                                        defender = outShadOppMeta,
-                                        moveName = resolvedUserMoveName,
-                                        isAttackerShadow = isUserShadForStats,
-                                        isDefenderShadow = true,
-                                        attackerAtkStage = playerSlotAtkStage[activeUserIdx],
-                                        defenderDefStage = oppSlotDefStage[activeOppIdx],
-                                        plusMoveLevel = uPlusLvl
-                                    )
-                                    if (kotlin.math.abs(outDmgShad - outDmgNorm) >= 6) {
-                                        val errNorm = kotlin.math.abs(postUserChargeDropFromPre - outDmgNorm)
-                                        val errShad = kotlin.math.abs(postUserChargeDropFromPre - outDmgShad)
-                                        val chosenShad = when {
-                                            errShad + 4 <= errNorm -> true
-                                            errNorm + 4 <= errShad -> false
-                                            else -> null
-                                        }
-                                        if (chosenShad != null) {
-                                            val didFlipOrVerify = applyMidBattleOpponentShadowFlip(
-                                                slotIdx = activeOppIdx,
-                                                baseKeyRaw = activeOppBase,
-                                                newShadow = chosenShad,
-                                                provenanceCode = "OUT_CHG_DHP",
-                                                reasonText = "Took ${postUserChargeDropFromPre}% from $resolvedUserMoveName"
-                                            )
-                                            if (didFlipOrVerify) hpChanged = true
+                                if (playerSlotAtkStage[activeUserIdx] == 0 && oppSlotDefStage[activeOppIdx] == 0) {
+                                    oppSlotKnownOutChgObsPct[activeOppIdx] = postUserChargeDropFromPre
+                                    oppSlotKnownOutChgMove[activeOppIdx] = resolvedUserMoveName
+                                    oppSlotKnownOutChgAttackerIdx[activeOppIdx] = activeUserIdx
+                                }
+                                val uPlusLvl = (userSlotCfg?.plusMoveLevel ?: 4).coerceIn(0, 4)
+                                if (enableAutoShadowDetect &&
+                                    activeOppBase.isNotEmpty() &&
+                                    !userManualShadowLocks.containsKey(activeOppBase)
+                                ) {
+                                    val obsCpOut = oppSlotObservedCp.getOrElse(activeOppIdx) { -1 }
+                                    val baseOutNormMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, false), activeLeague)
+                                    val baseOutShadMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, true), activeLeague)
+                                    val outNormProf = if (obsCpOut > 0) IvMatrixEngine.resolveBestGuessOpponentIvProfile(baseOutNormMeta.name, activeLeague, false, observedCp = obsCpOut) else null
+                                    val outShadProf = if (obsCpOut > 0) IvMatrixEngine.resolveBestGuessOpponentIvProfile(baseOutShadMeta.name, activeLeague, true, observedCp = obsCpOut) else null
+                                    val outNormOppMeta = if (outNormProf != null) baseOutNormMeta.copy(atk = outNormProf.bestGuessAtk, def = outNormProf.bestGuessDef, hp = outNormProf.bestGuessHp, isRawBaseStats = false) else baseOutNormMeta
+                                    val outShadOppMeta = if (outShadProf != null) baseOutShadMeta.copy(atk = outShadProf.bestGuessAtk, def = outShadProf.bestGuessDef, hp = outShadProf.bestGuessHp, isRawBaseStats = false) else baseOutShadMeta
+                                    if (FormResolver.isShadowEligibleVariant(outShadOppMeta)) {
+                                        val outDmgNorm = calculateChargedMoveDamagePercent(
+                                            attacker = userMetaForStats,
+                                            defender = outNormOppMeta,
+                                            moveName = resolvedUserMoveName,
+                                            isAttackerShadow = isUserShadForStats,
+                                            isDefenderShadow = false,
+                                            attackerAtkStage = playerSlotAtkStage[activeUserIdx],
+                                            defenderDefStage = oppSlotDefStage[activeOppIdx],
+                                            plusMoveLevel = uPlusLvl
+                                        )
+                                        val outDmgShad = calculateChargedMoveDamagePercent(
+                                            attacker = userMetaForStats,
+                                            defender = outShadOppMeta,
+                                            moveName = resolvedUserMoveName,
+                                            isAttackerShadow = isUserShadForStats,
+                                            isDefenderShadow = true,
+                                            attackerAtkStage = playerSlotAtkStage[activeUserIdx],
+                                            defenderDefStage = oppSlotDefStage[activeOppIdx],
+                                            plusMoveLevel = uPlusLvl
+                                        )
+                                        if (kotlin.math.abs(outDmgShad - outDmgNorm) >= 6) {
+                                            val errNorm = kotlin.math.abs(postUserChargeDropFromPre - outDmgNorm)
+                                            val errShad = kotlin.math.abs(postUserChargeDropFromPre - outDmgShad)
+                                            val chosenShad = when {
+                                                errShad + 4 <= errNorm -> true
+                                                errNorm + 5 <= errShad -> false
+                                                else -> null
+                                            }
+                                            if (chosenShad != null) {
+                                                val didFlipOrVerify = applyMidBattleOpponentShadowFlip(
+                                                    slotIdx = activeOppIdx,
+                                                    baseKeyRaw = activeOppBase,
+                                                    newShadow = chosenShad,
+                                                    provenanceCode = "OUT_CHG_DHP",
+                                                    reasonText = "Took ${postUserChargeDropFromPre}% from $resolvedUserMoveName"
+                                                )
+                                                if (didFlipOrVerify) hpChanged = true
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            val (refOppMeta, _) = resolveOpponentCombatMetaPair(
-                                slotIdx = activeOppIdx,
-                                rawOppName = activeOpponentName,
-                                activeLeague = activeLeague,
-                                isOppShadow = isOpponentShadow,
-                                userMeta = userMetaForStats,
-                                isUserShadow = isUserShadForStats,
-                                activeUserSlotIdx = activeUserIdx
-                            )
-                            val updatedExpectedOutDmg = calculateChargedMoveDamagePercent(
-                                attacker = userMetaForStats,
-                                defender = refOppMeta,
-                                moveName = resolvedUserMoveName,
-                                isAttackerShadow = isUserShadForStats,
-                                isDefenderShadow = isOpponentShadow,
-                                attackerAtkStage = playerSlotAtkStage[activeUserIdx],
-                                defenderDefStage = oppSlotDefStage[activeOppIdx],
-                                plusMoveLevel = uPlusLvl
-                            )
-                            val latestUserIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "user" }
-                            if (latestUserIdx >= 0) {
-                                val prevEv = battleTimelineEvents[latestUserIdx]
-                                if (prevEv.expectedMoveDmgPct != updatedExpectedOutDmg) {
-                                    battleTimelineEvents[latestUserIdx] = prevEv.copy(expectedMoveDmgPct = updatedExpectedOutDmg)
-                                    hpChanged = true
+                                val (refOppMeta, _) = resolveOpponentCombatMetaPair(
+                                    slotIdx = activeOppIdx,
+                                    rawOppName = activeOpponentName,
+                                    activeLeague = activeLeague,
+                                    isOppShadow = isOpponentShadow,
+                                    userMeta = userMetaForStats,
+                                    isUserShadow = isUserShadForStats,
+                                    activeUserSlotIdx = activeUserIdx
+                                )
+                                val updatedExpectedOutDmg = calculateChargedMoveDamagePercent(
+                                    attacker = userMetaForStats,
+                                    defender = refOppMeta,
+                                    moveName = resolvedUserMoveName,
+                                    isAttackerShadow = isUserShadForStats,
+                                    isDefenderShadow = isOpponentShadow,
+                                    attackerAtkStage = playerSlotAtkStage[activeUserIdx],
+                                    defenderDefStage = oppSlotDefStage[activeOppIdx],
+                                    plusMoveLevel = uPlusLvl
+                                )
+                                val latestUserIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "user" }
+                                if (latestUserIdx >= 0) {
+                                    val prevEv = battleTimelineEvents[latestUserIdx]
+                                    if (prevEv.expectedMoveDmgPct != updatedExpectedOutDmg) {
+                                        battleTimelineEvents[latestUserIdx] = prevEv.copy(expectedMoveDmgPct = updatedExpectedOutDmg)
+                                        hpChanged = true
+                                    }
                                 }
                             }
+                            lastUserChargeHpSettleLatched = true
                         }
                     }
                 }
@@ -12385,30 +12484,94 @@ class OverlayService : LifecycleService() {
                 else -> 12
             }
 
-            // Phase 1E-1: Outgoing Fast-Move (You -> Opp) ΔHP Shadow Verification (move-independent!)
-            if (enableAutoShadowDetect &&
+            val obsCpFor1E = oppSlotObservedCp.getOrElse(activeOppIdx) { -1 }
+            val canTrendShadow = enableAutoShadowDetect &&
                 activeOppBase.isNotEmpty() &&
                 !userManualShadowLocks.containsKey(activeOppBase) &&
+                FormResolver.isShadowEligibleVariant(oppMetaForStats)
+            val needOutTrendOr1E = canTrendShadow && (
+                (userOutZeroStageMoveCount[activeOppIdx] >= 2 && userOutZeroStageDropSumPct[activeOppIdx] >= 5) ||
+                    ((oppSlotTurnsOnField[activeOppIdx] - oppInMatchupAnchorOppTurns[activeOppIdx]) >= 4 && oppCumulativeFastDmgPct[activeOppIdx] >= 5)
+                )
+            val normBase1E = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, false), activeLeague)
+            val shadBase1E = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, true), activeLeague)
+            val normProfile1E = if (obsCpFor1E > 0 && needOutTrendOr1E) {
+                IvMatrixEngine.resolveBestGuessOpponentIvProfile(oppMetaForStats.name, activeLeague, false, observedCp = obsCpFor1E)
+            } else null
+            val shadProfile1E = if (obsCpFor1E > 0 && needOutTrendOr1E) {
+                IvMatrixEngine.resolveBestGuessOpponentIvProfile(oppMetaForStats.name, activeLeague, true, observedCp = obsCpFor1E)
+            } else null
+            val outNormOppMeta = if (normProfile1E != null) {
+                normBase1E.copy(atk = normProfile1E.bestGuessAtk, def = normProfile1E.bestGuessDef, hp = normProfile1E.bestGuessHp, isRawBaseStats = false)
+            } else normBase1E
+            val outShadOppMeta = if (shadProfile1E != null) {
+                shadBase1E.copy(atk = shadProfile1E.bestGuessAtk, def = shadProfile1E.bestGuessDef, hp = shadProfile1E.bestGuessHp, isRawBaseStats = false)
+            } else shadBase1E
+
+            if (canTrendShadow) {
+                val outTrendShad = if (userOutZeroStageMoveCount[activeOppIdx] >= 2 && userOutZeroStageDropSumPct[activeOppIdx] >= 5) {
+                    val nOutT = userOutZeroStageMoveCount[activeOppIdx].toDouble()
+                    val obsOutT = userOutZeroStageDropSumPct[activeOppIdx].toDouble()
+                    val expOutNormT = nOutT * calculateFastMoveExactDamagePercent(
+                        attacker = userMetaForStats,
+                        defender = outNormOppMeta,
+                        fastMoveName = userFastNameForStats,
+                        fastTurns = userFastTurnsForStats,
+                        isAttackerShadow = isUserShadForStats,
+                        isDefenderShadow = false,
+                        attackerAtkStage = 0,
+                        defenderDefStage = 0
+                    )
+                    val expOutShadT = nOutT * calculateFastMoveExactDamagePercent(
+                        attacker = userMetaForStats,
+                        defender = outShadOppMeta,
+                        fastMoveName = userFastNameForStats,
+                        fastTurns = userFastTurnsForStats,
+                        isAttackerShadow = isUserShadForStats,
+                        isDefenderShadow = true,
+                        attackerAtkStage = 0,
+                        defenderDefStage = 0
+                    )
+                    kotlin.math.abs(obsOutT - expOutShadT) + 1.0 <= kotlin.math.abs(obsOutT - expOutNormT)
+                } else false
+                val elapsedInTurnsForTrend = (oppSlotTurnsOnField[activeOppIdx] - oppInMatchupAnchorOppTurns[activeOppIdx]).coerceAtLeast(0)
+                val inTrendShad = if (elapsedInTurnsForTrend >= 4 && oppCumulativeFastDmgPct[activeOppIdx] >= 5) {
+                    val effTurnsTrend = (elapsedInTurnsForTrend - fastDetectTurnOffset.coerceIn(0, 3)).coerceAtLeast(1)
+                    val compInMoves = (effTurnsTrend / oppFastTurnsForStats).coerceAtLeast(1).toDouble()
+                    val obsInT = oppCumulativeFastDmgPct[activeOppIdx].toDouble()
+                    val expInNormT = compInMoves * calculateFastMoveExactDamagePercent(
+                        attacker = outNormOppMeta,
+                        defender = userMetaForStats,
+                        fastMoveName = oppFastNameForStats,
+                        fastTurns = oppFastTurnsForStats,
+                        isAttackerShadow = false,
+                        isDefenderShadow = isUserShadForStats,
+                        attackerAtkStage = oppSlotAtkStage[activeOppIdx],
+                        defenderDefStage = playerSlotDefStage[activeUserIdx]
+                    )
+                    val expInShadT = compInMoves * calculateFastMoveExactDamagePercent(
+                        attacker = outShadOppMeta,
+                        defender = userMetaForStats,
+                        fastMoveName = oppFastNameForStats,
+                        fastTurns = oppFastTurnsForStats,
+                        isAttackerShadow = true,
+                        isDefenderShadow = isUserShadForStats,
+                        attackerAtkStage = oppSlotAtkStage[activeOppIdx],
+                        defenderDefStage = playerSlotDefStage[activeUserIdx]
+                    )
+                    kotlin.math.abs(obsInT - expInShadT) + 1.0 <= kotlin.math.abs(obsInT - expInNormT)
+                } else false
+                oppSlotFastShadowTrend[activeOppIdx] = outTrendShad || inTrendShad
+            } else {
+                oppSlotFastShadowTrend[activeOppIdx] = false
+            }
+
+            // Phase 1E-1: Outgoing Fast-Move (You -> Opp) ΔHP Shadow Verification (move-independent!)
+            if (canTrendShadow &&
                 !autoShadowProvenance[activeOppBase].orEmpty().contains("DHP") &&
-                FormResolver.isShadowEligibleVariant(oppMetaForStats) &&
                 userOutZeroStageMoveCount[activeOppIdx] >= minOutMoves &&
                 userOutZeroStageDropSumPct[activeOppIdx] >= minOutPct
             ) {
-                val obsCpForOut1E = oppSlotObservedCp.getOrElse(activeOppIdx) { -1 }
-                val normProfile1E = if (obsCpForOut1E > 0) {
-                    IvMatrixEngine.resolveBestGuessOpponentIvProfile(oppMetaForStats.name, activeLeague, false, observedCp = obsCpForOut1E)
-                } else null
-                val shadProfile1E = if (obsCpForOut1E > 0) {
-                    IvMatrixEngine.resolveBestGuessOpponentIvProfile(oppMetaForStats.name, activeLeague, true, observedCp = obsCpForOut1E)
-                } else null
-                val normBase1E = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, false), activeLeague)
-                val shadBase1E = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, true), activeLeague)
-                val outNormOppMeta = if (normProfile1E != null) {
-                    normBase1E.copy(atk = normProfile1E.bestGuessAtk, def = normProfile1E.bestGuessDef, hp = normProfile1E.bestGuessHp, isRawBaseStats = false)
-                } else normBase1E
-                val outShadOppMeta = if (shadProfile1E != null) {
-                    shadBase1E.copy(atk = shadProfile1E.bestGuessAtk, def = shadProfile1E.bestGuessDef, hp = shadProfile1E.bestGuessHp, isRawBaseStats = false)
-                } else shadBase1E
 
                 val nOutMoves = userOutZeroStageMoveCount[activeOppIdx]
                 val obsOutTotal = userOutZeroStageDropSumPct[activeOppIdx].toDouble()
@@ -14141,6 +14304,9 @@ class OverlayService : LifecycleService() {
                 lastOppChargedDefenderUserSlotIdx = defenderUserIdx
                 lastOppChargedWasProvisionalShield = (isChipShielded || ambiguousUserMimikyuHold) && !shieldDropped && (!blockedByBanner || ambiguousUserMimikyuHold)
                 lastOppChargedAutoDecrementedShield = didAutoDecrUserShield
+                lastOppChargeHpSettleLatched = false
+                oppChargePostSettleStableFrames = 0
+                oppChargeLastSettlingPlayerHp = -1
                 postChargeCirclesReturnedAtMs = 0L
                 pendingChargedAttackActor = ""
                 pendingUserChargeConfirmedByOcr = false
@@ -14722,6 +14888,9 @@ class OverlayService : LifecycleService() {
                 lastUserChargedDefenderOppSlotIdx = defenderOppIdx
                 lastUserChargedWasProvisionalShield = (isOppChipShielded || ambiguousOppMimikyuHold) && !shieldDropped && (!oppBlockedByBanner || ambiguousOppMimikyuHold)
                 lastUserChargedAutoDecrementedShield = didAutoDecrOppShield
+                lastUserChargeHpSettleLatched = false
+                userChargePostSettleStableFrames = 0
+                userChargeLastSettlingOppHp = -1
                 awaitingCombatReturnAfterLastUserCharge = true
                 postChargeCirclesReturnedAtMs = 0L
                 pendingChargedAttackActor = ""
@@ -15434,6 +15603,7 @@ class OverlayService : LifecycleService() {
                     oppSlotLiveOutBpDeltaHp.fill(0)
                     oppSlotBpToastEmitted.fill(false)
                     oppSlotOutBpToastEmitted.fill(false)
+                    oppSlotFastShadowTrend.fill(false)
                     lastFastEvalPairKey = ""
                     lastOppSwitchInWallMs = System.currentTimeMillis()
                     confirmedOppSlotHpPct.fill(100)
@@ -17754,11 +17924,17 @@ class OverlayService : LifecycleService() {
         lastUserChargedDefenderOppSlotIdx = -1
         lastUserChargedWasProvisionalShield = false
         lastUserChargedAutoDecrementedShield = false
+        lastUserChargeHpSettleLatched = false
+        userChargePostSettleStableFrames = 0
+        userChargeLastSettlingOppHp = -1
         lastOppChargedAttackLoggedMs = 0L
         lastOppChargedPreUserHp = 100
         lastOppChargedDefenderUserSlotIdx = -1
         lastOppChargedWasProvisionalShield = false
         lastOppChargedAutoDecrementedShield = false
+        lastOppChargeHpSettleLatched = false
+        oppChargePostSettleStableFrames = 0
+        oppChargeLastSettlingPlayerHp = -1
         lastDetectedBlockedBannerMs = 0L
         lastDetectedDisguiseBustedBannerMs = 0L
         confirmedUserBlockedShieldCount = 0
@@ -18696,6 +18872,9 @@ class OverlayService : LifecycleService() {
                 lastUserChargedAttackLoggedMs = nowMs
                 lastUserChargedPreOppHp = hpBefore
                 lastUserChargedDefenderOppSlotIdx = defIdx
+                lastUserChargeHpSettleLatched = false
+                userChargePostSettleStableFrames = 0
+                userChargeLastSettlingOppHp = -1
                 pendingChargedAttackActor = ""
                 pendingChargedAttackDeductedEnergy = 0
                 pendingUserChargeConfirmedByOcr = false
@@ -18778,6 +18957,9 @@ class OverlayService : LifecycleService() {
                 lastOppChargedAttackLoggedMs = nowMs
                 lastOppChargedPreUserHp = hpBefore
                 lastOppChargedDefenderUserSlotIdx = defIdx
+                lastOppChargeHpSettleLatched = false
+                oppChargePostSettleStableFrames = 0
+                oppChargeLastSettlingPlayerHp = -1
                 pendingChargedAttackActor = ""
             } else {
                 syncRecentUnshieldedChargedAttackOnFaint("user", endT)
@@ -19353,6 +19535,13 @@ class OverlayService : LifecycleService() {
     }
 
     fun toggleShadowModifier() {
+        val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+        val checkMeta = getPokemonMeta(activeOpponentName, activeLeague, false)
+        if (!isWaitingForOpponent && activeOpponentName != "Waiting..." && !FormResolver.isShadowEligibleVariant(checkMeta)) {
+            isOpponentShadow = false
+            recalculateAndPushBattleData()
+            return
+        }
         isOpponentShadow = !isOpponentShadow
         val baseKey = activeOpponentSpecies.ifBlank { FormResolver.extractBaseSpecies(activeOpponentName) }.lowercase()
         if (baseKey.isNotBlank()) {
@@ -20416,6 +20605,7 @@ class OverlayService : LifecycleService() {
                 "enableEnergyTracking" to enableEnergyTracking,
                 "fastDetectTurnOffset" to fastDetectTurnOffset,
                 "oppFastMoveStatus" to "unconfirmed",
+                "oppShadowEligible" to true,
                 "oppShadowVerified" to false,
                 "oppShadowLocked" to false,
                 "oppShadowSource" to "",
@@ -22424,6 +22614,7 @@ class OverlayService : LifecycleService() {
             "isOverlayMinimized" to false,
             "maxHorizonTurns" to maxHorizonTurns,
             "isOpponentShadow" to isOpponentShadow,
+            "oppShadowEligible" to (isWaitingForOpponent || FormResolver.isShadowEligibleVariant(oppMeta)),
             "oppShadowVerified" to (userManualShadowLocks.containsKey(activeBaseKey) || autoVerifiedShadowStates.containsKey(activeBaseKey)),
             "oppShadowLocked" to userManualShadowLocks.containsKey(activeBaseKey),
             "oppShadowSource" to (if (userManualShadowLocks.containsKey(activeBaseKey)) "MANUAL" else autoShadowProvenance[activeBaseKey].orEmpty()),

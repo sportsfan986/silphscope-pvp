@@ -634,6 +634,17 @@
             box-shadow: 0 0 5px rgba(168, 85, 247, 0.5);
         }
 
+        .hud-btn.btn-shadow:disabled,
+        .hud-btn.btn-shadow.disabled {
+            background: rgba(100, 116, 139, 0.16);
+            border-color: rgba(148, 163, 184, 0.18);
+            color: #64748b;
+            opacity: 0.55;
+            box-shadow: none;
+            cursor: default;
+            transform: none;
+        }
+
         .hud-btn.btn-form {
             background: rgba(var(--header-accent-rgb), 0.25);
             border-color: rgba(var(--header-accent-rgb), 0.65);
@@ -3298,6 +3309,7 @@
         }
 
         function toggleShadow() {
+            if (battleData && battleData.oppShadowEligible === false) return;
             battleData.isOpponentShadow = !battleData.isOpponentShadow;
             render();
             if (window.AndroidOverlay && window.AndroidOverlay.toggleOpponentShadow) {
@@ -3410,20 +3422,31 @@
                 // Update Shadow Toggle Button (2-row stacked + verified ✓ / locked 🔒 provenance)
                 const shadowBtn = document.getElementById("btn-toggle-shadow");
                 if (shadowBtn) {
-                    const isShad = !!battleData.isOpponentShadow;
-                    const isShadLocked = !!battleData.oppShadowLocked;
-                    const isShadVerified = !!battleData.oppShadowVerified;
+                    const isShadEligible = isWaitingState || battleData.oppShadowEligible !== false;
+                    const isShad = isShadEligible && !!battleData.isOpponentShadow;
+                    const isShadLocked = isShadEligible && !!battleData.oppShadowLocked;
+                    const isShadVerified = isShadEligible && !!battleData.oppShadowVerified;
                     const shadSrc = String(battleData.oppShadowSource || "");
                     const bgIvs = String(battleData.oppBestGuessIvs || "");
-                    const shadSub = isShad
-                        ? (isShadLocked ? "🟣 ON 🔒" : (isShadVerified ? "🟣 ON ✓" : "🟣 ON"))
-                        : (isShadLocked ? "OFF 🔒" : (isShadVerified ? "OFF ✓" : "OFF"));
-                    setHtmlIfChanged(shadowBtn, `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${shadSub}</span>`);
-                    if (isShad) shadowBtn.classList.add("active");
-                    else shadowBtn.classList.remove("active");
-                    const provNote = shadSrc ? ` • Source: ${shadSrc}` : "";
-                    const ivNote = bgIvs ? ` • Est IVs: ${bgIvs}` : "";
-                    shadowBtn.title = `Toggle 1.2x Atk / 0.833x Def Shadow modifier (Tap locks for battle)${provNote}${ivNote}`;
+                    if (!isShadEligible) {
+                        setHtmlIfChanged(shadowBtn, `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">N/A</span>`);
+                        shadowBtn.classList.remove("active");
+                        shadowBtn.disabled = true;
+                        shadowBtn.classList.add("disabled");
+                        shadowBtn.title = "Shadow form not released in Pokémon GO (auto-updates via PvPoke sync)";
+                    } else {
+                        shadowBtn.disabled = false;
+                        shadowBtn.classList.remove("disabled");
+                        const shadSub = isShad
+                            ? (isShadLocked ? "🟣 ON 🔒" : (isShadVerified ? "🟣 ON ✓" : "🟣 ON"))
+                            : (isShadLocked ? "OFF 🔒" : (isShadVerified ? "OFF ✓" : "OFF"));
+                        setHtmlIfChanged(shadowBtn, `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${shadSub}</span>`);
+                        if (isShad) shadowBtn.classList.add("active");
+                        else shadowBtn.classList.remove("active");
+                        const provNote = shadSrc ? ` • Source: ${shadSrc}` : "";
+                        const ivNote = bgIvs ? ` • Est IVs: ${bgIvs}` : "";
+                        shadowBtn.title = `Toggle 1.2x Atk / 0.833x Def Shadow modifier (Tap locks for battle)${provNote}${ivNote}`;
+                    }
                 }
 
                 // Update Form Cycle Button (2-row stacked: Form:\n<form name>)
@@ -4845,9 +4868,10 @@
             const topShadPillEl = document.getElementById("sky-top-opp-shad-pill");
             const oppHdrShadPillEl = document.getElementById("sky-opp-hdr-shad-pill");
             const pacingCenterEl = document.getElementById("sky-compact-pacing-center");
-            const isOppShad = !!(battleData && battleData.isOpponentShadow);
-            const isShadVerified = !!(battleData && battleData.oppShadowVerified);
-            const isShadLocked = !!(battleData && battleData.oppShadowLocked);
+            const isShadEligibleComp = !battleData || battleData.oppShadowEligible !== false;
+            const isOppShad = isShadEligibleComp && !!(battleData && battleData.isOpponentShadow);
+            const isShadVerified = isShadEligibleComp && !!(battleData && battleData.oppShadowVerified);
+            const isShadLocked = isShadEligibleComp && !!(battleData && battleData.oppShadowLocked);
             const compactShadText = !isWaitingState && battleData
                 ? (isShadLocked
                     ? (isOppShad ? "🟣S🔒" : "⚪🔒")

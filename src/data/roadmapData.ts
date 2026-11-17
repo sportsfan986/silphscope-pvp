@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.52',
+    codename: 'Hybrid OTA Shadow Eligibility Catalog, Corroborated Charged ΔHP & Settle-Window Latch',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Eliminates false Shadow detections on unreleased Shadow species and post-charge fast-move bleed with a hybrid compiled + 24h in-app OTA PvPoke Shadow catalog, locked HUD N/A toggle, post-charge ΔHP settle latches, observed-CP charged damage math, and corroborated single-charge flip rules.',
+    icon: '🟣',
+    accentColor: '#A855F7',
+    highlights: [
+      'Hybrid compiled baseline (STATIC_RELEASED_SHADOW_KEYS) + live in-app OTA Shadow registration (DYNAMIC_SHADOW_ELIGIBLE_KEYS) with 24h background staleness refresh so newly released Rocket Shadows unlock automatically without an APK update',
+      'Locks unreleased Shadow species (e.g., Tinkaton, Origin Dialga/Palkia/Giratina, Galarian Moltres) to Normal and dims #btn-toggle-shadow to Shadow: N/A across Full/Compact HUDs',
+      'Latches post-charge ΔHP settle windows after 2 stable combat frames (and bounds CMP intervention to +6.5s) while passing oppSlotObservedCp IV narrowing into IN_CHG_DHP and OUT_CHG_DHP',
+      'Requires >=1 positive 3D Aura frame or multi-hit Fast ΔHP trend before any single charged move can flip Normal -> Shadow, and opens clean entry aura sampling before Ghost/purple fast-move VFX hit'
+    ]
+  },
+  {
     version: 'v7.51',
     codename: 'Shield Carryover & Mimikyu Disguise Hardening, Non-GBL Screen Exclusion, Shadow Aura Lock & Minigame Timeout Fix',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Hardens live battle shield tracking against stale outgoing "BLOCKED!" banner carryover and 0–3% Protect Shield deadlocks, fixes Mimikyu Disguise double-debuffing (-2 DEF) and premature Disguise busts, blocks false battle starts/species locks on Pokédex & catch summary cards with clean aborted-Stop resets, guards against false non-aura Shadow DHP flips, and stops victory-fade duplicate KO events and mid-swipe minigame splits.',
     icon: '🛡️',

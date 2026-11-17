@@ -2,6 +2,16 @@
 
 ---
 
+## v7.52 (2026-11-17) — Hybrid OTA Shadow Eligibility Catalog, Corroborated Charged ΔHP & Settle-Window Latch
+*Targeted Shadow accuracy & live-combat hardening release (`v7.52`, `versionCode = 1752`) resolving false Shadow detections reported on unreleased / under-leveled opponents (`log-1794925674297-366`).*
+
+- **Hybrid Compiled + Live In-App OTA Shadow Eligibility Catalog (`PokemonDatabase.kt`, `OverlayService.kt`, `MainActivity.kt`)**: Replaces the minimal 14-species denylist in `FormResolver.isShadowEligibleVariant` with a compiled baseline (`STATIC_RELEASED_SHADOW_KEYS`, 511 keys from PvPoke `gamemaster.json`) unioned dynamically at runtime with `DYNAMIC_SHADOW_ELIGIBLE_KEYS` parsed from `_shadow` and `"shadoweligible"` entries in `gamemaster.json` + league rankings JSONs, backed by automatic 24-hour background OTA staleness refreshes (`PVPOKE_OTA_REFRESH_TTL_MS`) so future Team GO Rocket Shadow releases unlock in-app without an APK rebuild.
+- **Shadow-Ineligible HUD Lock (`OverlayService.kt`, `overlay.html`, `overlay-asset.mjs`)**: Locks species with no released Shadow form (e.g., *Tinkaton*, *Giratina (Origin)*, *Palkia (Origin)*, *Dialga (Origin)*, *Moltres (Galarian)*) to Normal across auto-detection, PvPoke priors, and Compact HUD pills while disabling `#btn-toggle-shadow` (`Shadow: N/A`).
+- **Post-Charge Settle-Window Latch & CP-Aware Charged ΔHP (`OverlayService.kt`)**: Latches `IN_CHG_DHP` and `OUT_CHG_DHP` retroactive settle windows (`lastOppChargeHpSettleLatched` / `lastUserChargeHpSettleLatched`) once combat HUD circles stabilize for 2 frames or subsequent fast moves land (preventing trailing fast-move drain from inflating charged `ΔHP`), bounds CMP intervention lookback to `+6500ms`, and passes `oppSlotObservedCp` IV-narrowed stats into `IN_CHG_DHP` and `OUT_CHG_DHP`.
+- **Corroborated Single-Charge Flips & Clean Entry Aura Sampling (`OverlayService.kt`, `PixelScannerEngine.kt`)**: Blocks single unshielded charged moves from flipping `Normal -> Shadow` unless corroborated by `>= 1` positive 3D Aura frame or an early multi-hit Fast `ΔHP` Shadow trend (`oppSlotFastShadowTrend`), tightens single-charge demotion margins when Aura is non-negative, and lets `scanOpponent3dShadowAura` sample clean opponent switch-in frames before Ghost/purple fast-move VFX land.
+
+---
+
 ## v7.51 (2026-11-17) — Shield Carryover & Mimikyu Disguise Hardening, Non-GBL Screen Exclusion, Shadow Aura Lock & Minigame Timeout Fix
 *Targeted live-battle hardening & telemetry accuracy release (`v7.51`, `versionCode = 1751`) resolving all open user-flagged DVR reports (`-668`, `-787`, `-289`) and auto-flagged edge cases (`-261`).*
 
