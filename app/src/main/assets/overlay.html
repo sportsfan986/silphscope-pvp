@@ -1383,11 +1383,18 @@
             font-weight: 900;
         }
 
+        .idle-elo-group {
+            display: inline-flex;
+            align-items: stretch;
+            gap: 1px;
+            flex-shrink: 0;
+        }
+
         .idle-elo-chip {
             font-size: 7.2px;
             font-weight: 800;
             padding: 1px 4px;
-            border-radius: 3px;
+            border-radius: 3px 0 0 3px;
             line-height: 1.15;
             cursor: pointer;
             white-space: nowrap;
@@ -1402,6 +1409,20 @@
             background: rgba(217, 119, 6, 0.34);
             border-color: #fbbf24;
             box-shadow: 0 0 5px rgba(251, 191, 36, 0.55);
+        }
+
+        .idle-elo-edit-btn {
+            font-size: 7.2px;
+            font-weight: 800;
+            padding: 1px 3.5px;
+            border-radius: 0 3px 3px 0;
+            line-height: 1.15;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            color: #fde68a;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.5);
         }
 
         .hud-btn.btn-dvr {
@@ -3887,8 +3908,9 @@
                     const eloBadgeText = curEloVal !== null
                         ? (battlesSinceVal >= 5 ? `🎯 ${curEloVal.toLocaleString()} • 5/5!` : `🎯 ${curEloVal.toLocaleString()} (${battlesSinceVal}/5)`)
                         : (unrankedMutedVal ? "🎯 <R20" : `🎯 Scan ELO (${Math.min(5, battlesSinceVal)}/5)`);
+                    const dueCls = ((battlesSinceVal >= 5 || promptDueVal) && !unrankedMutedVal) ? "due" : "";
                     const eloChipHtml = (!isReplay && isGblCombatMode)
-                        ? `<button type="button" class="idle-elo-chip ${(battlesSinceVal >= 5 && !unrankedMutedVal) ? 'due' : ''}" onclick="startGuidedEloScanHud(event)" title="Tap to scroll-scan ELO (250ms OCR) or enter manually">${escapeHtml(eloBadgeText)}</button>`
+                        ? `<span class="idle-elo-group"><button type="button" class="idle-elo-chip ${dueCls}" onclick="startGuidedEloScanHud(event)" title="Tap to scroll-scan ELO (250ms Live OCR)">${escapeHtml(eloBadgeText)}</button><button type="button" class="idle-elo-edit-btn" onclick="openEloTypeDialogHud(event)" title="Set ELO manually with touch keypad">✏️</button></span>`
                         : "";
                     const pokePillsHtml = teamList.slice(0, 3).map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
@@ -3908,16 +3930,20 @@
                     `);
                 }
                 if (eloBannerEl) {
+                    const guidedHintVal = eloState && eloState.guidedHintText ? String(eloState.guidedHintText).trim() : "";
                     if (!isReplay && isGblCombatMode && guidedActiveVal) {
                         const wasHidden = eloBannerEl.classList.contains("hidden");
                         eloBannerEl.classList.remove("hidden");
                         eloBannerEl.style.borderColor = "rgba(45, 212, 191, 0.85)";
                         eloBannerEl.style.background = "rgba(13, 148, 136, 0.28)";
+                        const guidedMsgHtml = guidedHintVal && guidedHintVal.indexOf("CURRENT SEASON") === -1
+                            ? `<span style="color:#fde047;">${escapeHtml(guidedHintVal)}</span>`
+                            : `Scroll down to <span style="color:#fde047;">CURRENT SEASON</span>`;
                         const scanHtml = `
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
-                                <span style="font-size:8.1px; font-weight:900; color:#5eead4;">🔍 Live OCR (${guidedRemSec}s) — Scroll down to <span style="color:#fde047;">CURRENT SEASON</span></span>
+                                <span style="font-size:8.1px; font-weight:900; color:#5eead4;">🔍 Live OCR (${guidedRemSec}s) — ${guidedMsgHtml}</span>
                                 <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
-                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Type ELO manually instead">⌨️ Type</button>
+                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Set ELO manually with touch keypad">✏️ Keypad</button>
                                     <button type="button" class="menu-btn menu-btn-close" onclick="cancelGuidedEloScanHud(event)" title="Cancel ELO Scan">✕</button>
                                 </div>
                             </div>
@@ -3933,7 +3959,7 @@
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
                                 <span style="font-size:8px; font-weight:900; color:#6ee7b7;">${escapeHtml(confirmTextVal)}</span>
                                 <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
-                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Edit typed ELO">⌨️ Type</button>
+                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Adjust ELO manually with touch keypad">✏️ Keypad</button>
                                     <button type="button" class="menu-btn menu-btn-close" onclick="dismissEloConfirmHud(event)" title="Dismiss">✕</button>
                                 </div>
                             </div>
@@ -3948,14 +3974,15 @@
                         const sameBtnHtml = curEloVal !== null
                             ? `<button type="button" class="menu-btn menu-btn-win" onclick="confirmSameEloHud(event)" title="Confirm rating is unchanged">✓ Same (${curEloVal.toLocaleString()})</button>`
                             : "";
+                        const promptPrefix = battlesSinceVal >= 5 ? "5/5 Set Complete!" : "Set Complete!";
                         const promptHtml = `
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; flex-wrap:wrap;">
-                                <span style="font-size:8px; font-weight:900; color:#fde68a;">🎯 5/5 Set Complete! Scan updated ELO?</span>
+                                <span style="font-size:8px; font-weight:900; color:#fde68a;">🎯 ${promptPrefix} Scan updated ELO?</span>
                                 <div style="display:flex; gap:3px; align-items:center; flex-wrap:wrap;">
                                     <button type="button" class="menu-btn menu-btn-elo-scan" onclick="startGuidedEloScanHud(event)" title="Arm 250ms OCR and scroll down to CURRENT SEASON">📷 Scan ELO</button>
                                     ${sameBtnHtml}
-                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Type ELO or mark Unranked < R20">⌨️ Type</button>
-                                    <button type="button" class="menu-btn menu-btn-close" onclick="snoozeEloPromptHud(event)" title="Snooze prompt for 5 more battles">✕ Snooze</button>
+                                    <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Enter ELO with touch keypad or mark Unranked < R20">✏️ Keypad</button>
+                                    <button type="button" class="menu-btn menu-btn-close" onclick="snoozeEloPromptHud(event)" title="Snooze prompt for this set">✕ Snooze</button>
                                 </div>
                             </div>
                         `;

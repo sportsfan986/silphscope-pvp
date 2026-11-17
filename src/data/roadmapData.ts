@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.45',
+    codename: 'Passive Scroll-Down ELO Auto-OCR Fix, Live GBL Set Counter Sync & Split HUD Touch Keypad',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Unblocks passive scroll-down ELO auto-OCR on white GBL lobby cards and adjacent battery overlays (-mA), syncs HUD set battle counts (0/5–5/5) directly from Pokémon GO\'s on-screen "X/5 battles played" text, and splits [🎯 ELO (X/5)][✏️] into 1-tap Scan plus a zero-IME in-overlay touch keypad with ± steppers.',
+    icon: '🎯',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Unblocked passive GBL lobby ELO OCR from white-card wake lockout (isWakeTransitionActive), added scroll-sensitive 6×12 luma invalidation, and switched to token-level element parsing with strict CURRENT SEASON header anchoring',
+      'Live OCR sync of Pokémon GO\'s on-screen "X/5 battles played" label keeps the HUD set counter (0/5–5/5) accurate even for battles played earlier or across devices, triggering ELO prompts at 5/5 or set wrap',
+      'Surfaces once-per-lobby verification feedback when scrolled auto-scan locks an unchanged rating (±0) instead of staying silent',
+      'Split [🎯 ELO (X/5)][✏️] idle HUD pill with a native zero-IME 0–9 touch keypad modal featuring -30/-15/-5/+5/+15/+30 steppers and < R20'
+    ]
+  },
+  {
     version: 'v7.44',
     codename: 'Guided Idle HUD ELO Scanner, 5-Battle Set Reprompt & Passive GBL Lobby/Modal OCR Fix',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Fixes passive idle ELO auto-OCR across waiting/mint-teal GBL lobby frames and 2nd-frame signature locks, adds a clickable idle ELO set-progress chip (N/5) with automatic 5-battle reprompt banner ([📷 Scan ELO], [✓ Same], [⌨️ Type], [✕ Snooze]), Guided 250ms Scroll-to-Scan mode, and forward set-rating stamping with D1 sync.',
     icon: '🎯',

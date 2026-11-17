@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.44"
-        const val APP_VERSION_CODE = 1744
+        const val APP_VERSION = "7.45"
+        const val APP_VERSION_CODE = 1745
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -229,6 +229,9 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_CURRENT_USER_ELO = "gbl_current_user_elo"
         const val PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK = "gbl_battles_since_elo_check_v744"
         const val PREFS_KEY_GBL_ELO_UNRANKED_MUTE = "gbl_elo_unranked_mute_v744"
+        const val PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING = "gbl_set_elo_prompt_pending_v745"
+        const val PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE = "gbl_prompt_acked_at_five_v745"
+        const val PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS = "gbl_last_elo_confirmed_ms_v745"
         const val PREFS_KEY_CROWD_ELO_META_CACHE_JSON = "gbl_crowd_elo_meta_cache_v741"
         const val PREFS_KEY_LAST_APP_UPDATE_CHECK_MS = "gbl_last_app_update_check_ms_v741"
         const val PREFS_KEY_DISMISSED_APP_UPDATE_VERSION = "gbl_dismissed_app_update_version_v741"
@@ -254,10 +257,19 @@ class OverlayService : LifecycleService() {
         fun setCurrentUserEloStatic(prefs: SharedPreferences, rawElo: Int?): Int? {
             val clean = rawElo?.takeIf { it in 300..3800 }
             activeCurrentUserElo = clean
+            val nowMs = System.currentTimeMillis()
+            val curSetBattles = prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
             val editor = prefs.edit()
                 .putString(PREFS_KEY_CURRENT_USER_ELO, clean?.toString() ?: "")
-                .putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
-                .putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                .putBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
+                .putLong(PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS, nowMs)
+                .putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, nowMs)
+            if (curSetBattles > 5) {
+                editor.putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+                    .putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, false)
+            } else {
+                editor.putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, curSetBattles >= 5)
+            }
             if (clean != null) {
                 editor.putBoolean(PREFS_KEY_GBL_ELO_UNRANKED_MUTE, false)
             }
@@ -2853,10 +2865,12 @@ class OverlayService : LifecycleService() {
     internal var idleEloLastOcrAttemptMs: Long = 0L
     internal var pendingIdleLobbyElo: Int? = null
     internal var pendingIdleLobbyEloAtMs: Long = 0L
+    internal var lastIdleSameEloVerifiedAtMs: Long = 0L
     internal var lastAutoCapturedEloToastMs: Long = 0L
     internal var lastIdleEloScreenSig: Long = Long.MIN_VALUE
     @Volatile internal var isIdleEloOcrInFlight: Boolean = false
     @Volatile internal var guidedEloScanUntilMs: Long = 0L
+    @Volatile internal var guidedEloScanHintText: String = ""
     internal var guidedEloScanJob: Job? = null
     @Volatile internal var lastEloLockBannerText: String = ""
     @Volatile internal var lastEloLockBannerUntilMs: Long = 0L
@@ -6581,6 +6595,7 @@ class OverlayService : LifecycleService() {
     internal fun cancelGuidedEloScanInternal(pushUpdate: Boolean = false) {
         guidedEloScanUntilMs = 0L
         pendingIdleLobbyElo = null
+        guidedEloScanHintText = ""
         guidedEloScanJob?.cancel()
         guidedEloScanJob = null
         if (pushUpdate) {
@@ -6611,6 +6626,8 @@ class OverlayService : LifecycleService() {
             dismissOverlayEloTypeDialog()
             val density = resources.displayMetrics.density
             val curElo = if (::prefs.isInitialized) getCurrentUserEloStatic(prefs) else activeCurrentUserElo
+            var rawDigits = curElo?.toString().orEmpty()
+            var replaceOnFirstDigit = curElo != null
 
             val backdrop = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -6618,12 +6635,15 @@ class OverlayService : LifecycleService() {
                 setBackgroundColor(Color.parseColor("#B8020617"))
                 val hPad = (20 * density).toInt()
                 setPadding(hPad, hPad, hPad, hPad)
+                setOnClickListener { dismissOverlayEloTypeDialog() }
             }
 
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                val pad = (16 * density).toInt()
+                val pad = (14 * density).toInt()
                 setPadding(pad, pad, pad, pad)
+                isClickable = true
+                setOnClickListener { /* consume inside card */ }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 14f * density
@@ -6633,7 +6653,7 @@ class OverlayService : LifecycleService() {
             }
 
             val titleTv = TextView(this).apply {
-                text = "🎯 Enter Current GBL ELO"
+                text = "🎯 Set Current GBL ELO"
                 setTextColor(Color.parseColor("#5EEAD4"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setTypeface(typeface, Typeface.BOLD)
@@ -6641,58 +6661,70 @@ class OverlayService : LifecycleService() {
             card.addView(titleTv)
 
             val subTv = TextView(this).apply {
-                text = "Enter 300–3800 (applied to upcoming battles), or tap < R20 Unranked to pause 5-battle prompts until you reach Rank 20."
+                text = "Tap digits (300–3,800) or adjust with ± steppers. Applied to upcoming battles."
                 setTextColor(Color.parseColor("#94A3B8"))
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setPadding(0, (6 * density).toInt(), 0, (10 * density).toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                setPadding(0, (4 * density).toInt(), 0, (8 * density).toInt())
             }
             card.addView(subTv)
 
-            val eloInput = EditText(this).apply {
-                hint = "e.g. 2307"
-                inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                isSingleLine = true
-                filters = arrayOf(android.text.InputFilter.LengthFilter(4))
-                setHintTextColor(Color.parseColor("#64748B"))
-                setTextColor(Color.parseColor("#FDE047"))
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            val readoutTv = TextView(this).apply {
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
                 setTypeface(typeface, Typeface.BOLD)
-                val inPad = (10 * density).toInt()
-                setPadding(inPad, inPad, inPad, inPad)
+                val inPadV = (8 * density).toInt()
+                val inPadH = (12 * density).toInt()
+                setPadding(inPadH, inPadV, inPadH, inPadV)
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = 8f * density
+                    cornerRadius = 9f * density
                     setColor(Color.parseColor("#1E293B"))
-                    setStroke((1f * density).toInt().coerceAtLeast(1), Color.parseColor("#334155"))
-                }
-                if (curElo != null) {
-                    setText(curElo.toString())
-                    selectAll()
+                    setStroke((1.2f * density).toInt().coerceAtLeast(1), Color.parseColor("#334155"))
                 }
             }
             card.addView(
-                eloInput,
+                readoutTv,
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
             )
 
-            val btnRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END
-                setPadding(0, (12 * density).toInt(), 0, 0)
+            val hintTv = TextView(this).apply {
+                visibility = View.GONE
+                setTextColor(Color.parseColor("#FCA5A5"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(0, (4 * density).toInt(), 0, 0)
             }
+            card.addView(hintTv)
 
-            fun makeBtn(label: String, textHex: String, fillHex: String, strokeHex: String): TextView {
+            fun refreshDisplay() {
+                hintTv.visibility = View.GONE
+                val nVal = rawDigits.toIntOrNull()
+                if (rawDigits.isEmpty()) {
+                    readoutTv.text = "Enter ELO or < R20"
+                    readoutTv.setTextColor(Color.parseColor("#64748B"))
+                } else if (nVal != null && rawDigits.length == 4 && nVal in 300..3800) {
+                    readoutTv.text = String.format(java.util.Locale.US, "%,d", nVal)
+                    readoutTv.setTextColor(Color.parseColor("#FDE047"))
+                } else {
+                    readoutTv.text = rawDigits
+                    readoutTv.setTextColor(Color.parseColor("#FDE047"))
+                }
+            }
+            refreshDisplay()
+
+            fun makeActionBtn(label: String, textHex: String, fillHex: String, strokeHex: String, textSp: Float = 11.5f, vPadDp: Float = 8f): TextView {
                 return TextView(this).apply {
                     text = label
                     setTextColor(Color.parseColor(textHex))
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp)
                     setTypeface(typeface, Typeface.BOLD)
                     gravity = Gravity.CENTER
-                    val vPad = (8 * density).toInt()
-                    val hPad = (10 * density).toInt()
+                    val vPad = (vPadDp * density).toInt()
+                    val hPad = (6 * density).toInt()
                     setPadding(hPad, vPad, hPad, vPad)
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
@@ -6703,17 +6735,111 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            val cancelBtn = makeBtn("Cancel", "#CBD5E1", "#1E293B", "#475569").apply {
+            // Quick-delta steppers row (-30, -15, -5, +5, +15, +30)
+            val deltaRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, (8 * density).toInt(), 0, (6 * density).toInt())
+            }
+            val deltas = listOf(-30, -15, -5, 5, 15, 30)
+            val smallGap = (4 * density).toInt()
+            deltas.forEachIndexed { idx, dVal ->
+                val isPos = dVal > 0
+                val lbl = if (isPos) "+$dVal" else "$dVal"
+                val btn = makeActionBtn(
+                    label = lbl,
+                    textHex = if (isPos) "#86EFAC" else "#FCA5A5",
+                    fillHex = if (isPos) "#064E3B" else "#450A0A",
+                    strokeHex = if (isPos) "#10B981" else "#EF4444",
+                    textSp = 11f,
+                    vPadDp = 6f
+                ).apply {
+                    setOnClickListener {
+                        val base = rawDigits.toIntOrNull() ?: curElo ?: 2000
+                        val next = (base + dVal).coerceIn(300, 3800)
+                        rawDigits = next.toString()
+                        replaceOnFirstDigit = false
+                        refreshDisplay()
+                    }
+                }
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (idx < deltas.lastIndex) rightMargin = smallGap
+                }
+                deltaRow.addView(btn, lp)
+            }
+            card.addView(deltaRow)
+
+            // 3x4 Zero-IME Touch Numeric Keypad
+            val keypadRows = listOf(
+                listOf("1", "2", "3"),
+                listOf("4", "5", "6"),
+                listOf("7", "8", "9"),
+                listOf("Clear", "0", "⌫")
+            )
+            val keyGap = (6 * density).toInt()
+            for (rowKeys in keypadRows) {
+                val rowLayout = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, 0, 0, keyGap)
+                }
+                rowKeys.forEachIndexed { cIdx, keyTxt ->
+                    val textHex = when (keyTxt) {
+                        "Clear" -> "#FCA5A5"
+                        "⌫" -> "#93C5FD"
+                        else -> "#F8FAFC"
+                    }
+                    val fillHex = if (keyTxt == "Clear" || keyTxt == "⌫") "#1E293B" else "#172554"
+                    val strokeHex = if (keyTxt == "Clear" || keyTxt == "⌫") "#475569" else "#334155"
+                    val keySp = if (keyTxt == "Clear") 12f else 15.5f
+                    val keyBtn = makeActionBtn(keyTxt, textHex, fillHex, strokeHex, textSp = keySp, vPadDp = 10f).apply {
+                        setOnClickListener {
+                            when (keyTxt) {
+                                "Clear" -> {
+                                    rawDigits = ""
+                                    replaceOnFirstDigit = false
+                                }
+                                "⌫" -> {
+                                    if (rawDigits.isNotEmpty()) {
+                                        rawDigits = rawDigits.dropLast(1)
+                                    }
+                                    replaceOnFirstDigit = false
+                                }
+                                else -> {
+                                    if (replaceOnFirstDigit) {
+                                        rawDigits = keyTxt
+                                        replaceOnFirstDigit = false
+                                    } else if (rawDigits.length < 4) {
+                                        rawDigits += keyTxt
+                                    }
+                                }
+                            }
+                            refreshDisplay()
+                        }
+                    }
+                    val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (cIdx < rowKeys.lastIndex) rightMargin = keyGap
+                    }
+                    rowLayout.addView(keyBtn, lp)
+                }
+                card.addView(rowLayout)
+            }
+
+            val btnRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END
+                setPadding(0, (6 * density).toInt(), 0, 0)
+            }
+
+            val cancelBtn = makeActionBtn("Cancel", "#CBD5E1", "#1E293B", "#475569").apply {
                 setOnClickListener { dismissOverlayEloTypeDialog() }
             }
-            val unrankedBtn = makeBtn("< R20", "#FDE68A", "#78350F", "#F59E0B").apply {
+            val unrankedBtn = makeActionBtn("< R20", "#FDE68A", "#78350F", "#F59E0B").apply {
                 setOnClickListener {
                     dismissOverlayEloTypeDialog()
                     if (::prefs.isInitialized) {
                         setCurrentUserEloStatic(prefs, null)
                         prefs.edit()
                             .putBoolean(PREFS_KEY_GBL_ELO_UNRANKED_MUTE, true)
-                            .putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+                            .putBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
                             .apply()
                         val activeLg = currentPreset?.league ?: "GREAT LEAGUE"
                         refreshCrowdEloMetaCacheAsync(prefs, activeLg, null, forceRefresh = true)
@@ -6729,12 +6855,12 @@ class OverlayService : LifecycleService() {
                     showBattleToast("🎯 Set Unranked (< R20) — prompts paused until ELO set")
                 }
             }
-            val saveBtn = makeBtn("💾 Save", "#042F2E", "#2DD4BF", "#5EEAD4").apply {
+            val saveBtn = makeActionBtn("💾 Save", "#042F2E", "#2DD4BF", "#5EEAD4").apply {
                 setOnClickListener {
-                    val rawStr = eloInput.text?.toString()?.trim().orEmpty()
-                    val parsed = sanitizeUserEloStatic(rawStr)
+                    val parsed = sanitizeUserEloStatic(rawDigits)
                     if (parsed == null) {
-                        eloInput.error = "Enter 300–3800"
+                        hintTv.text = "Enter an ELO between 300 and 3,800 (or tap < R20)"
+                        hintTv.visibility = View.VISIBLE
                         return@setOnClickListener
                     }
                     dismissOverlayEloTypeDialog()
@@ -6760,24 +6886,17 @@ class OverlayService : LifecycleService() {
                     @Suppress("DEPRECATION")
                     WindowManager.LayoutParams.TYPE_PHONE
                 },
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.CENTER
-                softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                    WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
             }
 
             try {
                 windowManager.addView(backdrop, dialogParams)
                 eloTypeDialogOverlayView = backdrop
-                eloInput.postDelayed({
-                    try {
-                        eloInput.requestFocus()
-                        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                        imm?.showSoftInput(eloInput, InputMethodManager.SHOW_IMPLICIT)
-                    } catch (_: Exception) {}
-                }, 80L)
             } catch (_: Exception) {}
         }
     }
@@ -6790,6 +6909,7 @@ class OverlayService : LifecycleService() {
         dismissOverlayEloTypeDialog()
         val nowStart = System.currentTimeMillis()
         guidedEloScanUntilMs = nowStart + 15_000L
+        guidedEloScanHintText = "Scroll down to CURRENT SEASON"
         pendingIdleLobbyElo = null
         idleEloLastOcrAttemptMs = 0L
         lastEloLockBannerUntilMs = 0L
@@ -6806,16 +6926,18 @@ class OverlayService : LifecycleService() {
                     (isBattleActive && !isWaitingForOpponent)
                 if (!isInstanceRunning || mediaProjection == null || combatTakingOver || guidedEloScanUntilMs <= 0L) {
                     guidedEloScanUntilMs = 0L
+                    guidedEloScanHintText = ""
                     pendingIdleLobbyElo = null
                     recalculateAndPushBattleData()
                     break
                 }
                 if (nowMs >= guidedEloScanUntilMs) {
                     guidedEloScanUntilMs = 0L
+                    guidedEloScanHintText = ""
                     pendingIdleLobbyElo = null
                     recalculateAndPushBattleData()
                     Handler(Looper.getMainLooper()).post {
-                        showBattleToast("⏱️ ELO Scan ended — scroll to CURRENT SEASON & tap 📷 Scan, or tap ⌨️ Type")
+                        showBattleToast("⏱️ ELO Scan ended — scroll to CURRENT SEASON & tap 📷 Scan, or tap ✏️ Keypad")
                     }
                     break
                 }
@@ -6849,12 +6971,20 @@ class OverlayService : LifecycleService() {
     internal fun snoozeOverlayEloPromptFromOverlay() {
         cancelGuidedEloScanInternal(pushUpdate = false)
         if (::prefs.isInitialized) {
-            prefs.edit().putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0).apply()
+            val curSet = prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+            val editor = prefs.edit()
+                .putBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
+                .putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, curSet >= 5)
+            if (curSet > 5) {
+                editor.putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+                    .putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, false)
+            }
+            editor.apply()
         }
         lastEloLockBannerUntilMs = 0L
         lastEloLockBannerText = ""
         recalculateAndPushBattleData()
-        showBattleToast("🎯 ELO check snoozed for next 5 battles")
+        showBattleToast("🎯 ELO prompt snoozed for this set")
     }
 
     internal fun dismissEloConfirmBannerFromOverlay() {
@@ -6890,9 +7020,9 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * Ultra-cheap (<0.05ms) 12-point pixel gate to confirm an End-of-Set card or
-     * Pokémon GO's mint/teal GBL lobby screen is visible below the top floating HUD.
-     * Returns a pair of (passesGate, quantizedVisualSignature).
+     * Ultra-cheap (<0.10ms) 12-point pixel gate to confirm an End-of-Set card or
+     * Pokémon GO's mint/teal GBL lobby screen is visible below the top floating HUD,
+     * paired with a scroll-sensitive 6x12 luma grid signature so scrolling invalidates immediately.
      */
     internal fun evaluateIdleGblCardPixelGate(screen: Bitmap, w: Int, h: Int): Pair<Boolean, Long> {
         if (w <= 40 || h <= 80 || screen.isRecycled) return false to Long.MIN_VALUE
@@ -6925,7 +7055,23 @@ class OverlayService : LifecycleService() {
             val lumBucket = ((r + g + b) / 48).toLong()
             sig = sig * 31L + lumBucket
         }
-        return (cardLikePoints >= 3) to sig
+        val passesGate = cardLikePoints >= 3
+        if (passesGate) {
+            val ysHash = floatArrayOf(0.34f, 0.48f, 0.60f, 0.72f, 0.82f, 0.90f)
+            for (yf in ysHash) {
+                val py = (h * yf).toInt().coerceIn(0, h - 1)
+                for (col in 0 until 12) {
+                    val xf = 0.08f + col * (0.82f / 11f)
+                    val px = (w * xf).toInt().coerceIn(0, w - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = (c shr 16) and 0xFF
+                    val g = (c shr 8) and 0xFF
+                    val b = c and 0xFF
+                    sig = sig * 31L + ((r + g + b) / 42).toLong()
+                }
+            }
+        }
+        return passesGate to sig
     }
 
     internal data class IdleEloParseResult(val elo: Int, val isEndOfSetModal: Boolean)
@@ -6938,6 +7084,67 @@ class OverlayService : LifecycleService() {
         return compact.toIntOrNull()?.takeIf { it in 300..3800 }
     }
 
+    internal fun parseIdleGblSetBattlesPlayed(
+        visionText: Text,
+        cropTop: Int,
+        scale: Float,
+        fullH: Int
+    ): Int? {
+        val allLines: List<Text.Line> = visionText.textBlocks.flatMap { it.lines }
+        if (allLines.isEmpty() || fullH <= 0 || scale <= 0f) return null
+
+        val directRegex = Regex("""\b([0-5])\s*/\s*5\s*battles?\s*played\b""", RegexOption.IGNORE_CASE)
+        val fracRegex = Regex("""\b([0-5])\s*/\s*5\b""")
+        for (line in allLines) {
+            val txt = line.text.trim()
+            val mDirect = directRegex.find(txt)
+            if (mDirect != null) {
+                return mDirect.groupValues[1].toIntOrNull()?.takeIf { it in 0..5 }
+            }
+        }
+
+        // Fallback if ML Kit splits "3/5" and "battles played" into adjacent lines/elements on the same Y row
+        for (line in allLines) {
+            val mFrac = fracRegex.find(line.text.trim()) ?: continue
+            val box = line.boundingBox ?: continue
+            val normCy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            val hasBattlesPlayedNeighbor = allLines.any { other ->
+                val oBox = other.boundingBox ?: return@any false
+                val oCy = (cropTop + (oBox.top + oBox.bottom) * 0.5f / scale) / fullH.toFloat()
+                val oLow = other.text.lowercase()
+                kotlin.math.abs(oCy - normCy) <= 0.022f && oLow.contains("battle") && oLow.contains("played")
+            }
+            if (hasBattlesPlayedNeighbor) {
+                return mFrac.groupValues[1].toIntOrNull()?.takeIf { it in 0..5 }
+            }
+        }
+        return null
+    }
+
+    internal fun onIdleGblSetBattlesPlayedObserved(observedPlayed: Int, nowMs: Long) {
+        if (!::prefs.isInitialized || observedPlayed !in 0..5) return
+        val prevCount = prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+        val wasPromptPending = prefs.getBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
+        val ackedAtFive = prefs.getBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, false)
+        val lastConfirmedMs = prefs.getLong(PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS, 0L)
+
+        val nextAckedAtFive = if (observedPlayed < 5) false else ackedAtFive
+        val nextPromptPending = when {
+            observedPlayed == 5 && !ackedAtFive -> true
+            observedPlayed == 0 && prevCount in 3..5 && (nowMs - lastConfirmedMs) > 180_000L -> true
+            else -> wasPromptPending
+        }
+
+        if (observedPlayed != prevCount || nextPromptPending != wasPromptPending || nextAckedAtFive != ackedAtFive) {
+            prefs.edit()
+                .putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, observedPlayed)
+                .putBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, nextPromptPending)
+                .putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, nextAckedAtFive)
+                .apply()
+            recalculateAndPushBattleData()
+        }
+    }
+
     internal fun parseIdleGblEloFromVisionResult(
         visionText: Text,
         cropLeft: Int,
@@ -6946,7 +7153,7 @@ class OverlayService : LifecycleService() {
         fullW: Int,
         fullH: Int
     ): IdleEloParseResult? {
-        val allLines = visionText.textBlocks.flatMap { it.lines }
+        val allLines: List<Text.Line> = visionText.textBlocks.flatMap { it.lines }
         if (allLines.isEmpty() || fullW <= 0 || fullH <= 0 || scale <= 0f) return null
 
         val joinedLower = allLines.joinToString(" ") { it.text }.lowercase()
@@ -6980,74 +7187,157 @@ class OverlayService : LifecycleService() {
             }
             if (ratingLabelCenterY > 0f) {
                 for (line in allLines) {
-                    val parsed = parseNormalizedEloToken(line.text) ?: continue
-                    val box = line.boundingBox ?: continue
-                    val normCy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
-                    if (kotlin.math.abs(normCy - ratingLabelCenterY) <= 0.065f) {
-                        return IdleEloParseResult(elo = parsed, isEndOfSetModal = true)
+                    val elems = line.elements
+                    for (eIdx in elems.indices) {
+                        val elem = elems[eIdx]
+                        val eTxt = elem.text.trim()
+                        if (eTxt.contains("-") || eTxt.contains("+") || eTxt.contains("/") || eTxt.contains("%")) continue
+                        val prevElem = if (eIdx > 0) elems[eIdx - 1] else null
+                        val eBox = elem.boundingBox ?: continue
+                        val prevBox = prevElem?.boundingBox
+                        val prevText = prevElem?.text?.trim().orEmpty()
+                        val elemH = (eBox.bottom - eBox.top).coerceAtLeast(1)
+                        val precededBySign = prevBox != null &&
+                            (prevText == "-" || prevText == "+" || prevText.endsWith("-") || prevText.endsWith("+")) &&
+                            (eBox.left - prevBox.right) <= (elemH * 0.8f)
+                        if (precededBySign) continue
+                        val parsed = parseNormalizedEloToken(eTxt) ?: continue
+                        val normCy = (cropTop + (eBox.top + eBox.bottom) * 0.5f / scale) / fullH.toFloat()
+                        if (kotlin.math.abs(normCy - ratingLabelCenterY) <= 0.065f) {
+                            return IdleEloParseResult(elo = parsed, isEndOfSetModal = true)
+                        }
                     }
                 }
             }
         }
 
         // 2. Scrolled Pre-Battle GBL Lobby ("CURRENT SEASON" left column, e.g., 2,307 + ACE)
-        val hasLobbySeasonCue = joinedLower.contains("current season") ||
-            (joinedLower.contains("season") && (
-                joinedLower.contains("rank 20") ||
-                    joinedLower.contains("ace") ||
-                    joinedLower.contains("veteran") ||
-                    joinedLower.contains("expert") ||
-                    joinedLower.contains("legend") ||
-                    joinedLower.contains("wins") ||
-                    joinedLower.contains("battles") ||
-                    joinedLower.contains("stardust")
-                ))
-        if (!hasLobbySeasonCue) return null
-
-        var currentSeasonTopNorm = 0.42f
+        var currentSeasonTopNorm = -1f
+        var currentSeasonBottomNorm = -1f
         for (line in allLines) {
             val lTxt = line.text.lowercase()
-            if (lTxt.contains("current season") || lTxt == "season") {
+            if (lTxt.contains("current season")) {
                 val box = line.boundingBox ?: continue
-                val topFull = cropTop + box.top / scale
-                currentSeasonTopNorm = (topFull / fullH.toFloat()).coerceIn(0.24f, 0.86f)
+                currentSeasonTopNorm = ((cropTop + box.top / scale) / fullH.toFloat()).coerceIn(0.14f, 0.92f)
+                currentSeasonBottomNorm = ((cropTop + box.bottom / scale) / fullH.toFloat()).coerceIn(0.14f, 0.94f)
                 break
             }
         }
+        if (currentSeasonTopNorm < 0f) {
+            // Check split "CURRENT" + "SEASON" lines/elements on the same Y row
+            for (line in allLines) {
+                val lTxt = line.text.lowercase()
+                if (!lTxt.contains("current")) continue
+                val box = line.boundingBox ?: continue
+                val cTop = (cropTop + box.top / scale) / fullH.toFloat()
+                val cBot = (cropTop + box.bottom / scale) / fullH.toFloat()
+                val cCy = (cTop + cBot) * 0.5f
+                val mate = allLines.firstOrNull { other ->
+                    other !== line && other.boundingBox != null && other.text.lowercase().contains("season") && run {
+                        val oBox = other.boundingBox!!
+                        val oCy = (cropTop + (oBox.top + oBox.bottom) * 0.5f / scale) / fullH.toFloat()
+                        kotlin.math.abs(oCy - cCy) <= 0.022f
+                    }
+                }
+                if (mate != null) {
+                    val mBox = mate.boundingBox!!
+                    val mTop = (cropTop + mBox.top / scale) / fullH.toFloat()
+                    val mBot = (cropTop + mBox.bottom / scale) / fullH.toFloat()
+                    currentSeasonTopNorm = minOf(cTop, mTop).coerceIn(0.14f, 0.92f)
+                    currentSeasonBottomNorm = maxOf(cBot, mBot).coerceIn(0.14f, 0.94f)
+                    break
+                }
+            }
+        }
+        if (currentSeasonTopNorm < 0f) return null
 
+        val allElements: List<Text.Element> = allLines.flatMap { it.elements }
         val forbiddenTokens = listOf("win", "battle", "streak", "stardust", "/5", "cp", "hp", "lvl", "rank", "ma", "%")
-        val rowStatTokens = listOf("win", "battle", "streak", "stardust", "/5", "reward")
+        val rowStatTokens = listOf("win", "battle", "streak", "stardust", "/5", "reward", "collect")
+
+        data class EloElemCandidate(val text: String, val box: Rect, val precedingIdx: Int)
+
         for (line in allLines) {
-            val raw = line.text.trim()
-            if (raw.isEmpty() || raw.length > 10) continue
-            val low = raw.lowercase()
-            if (raw.contains("-") || raw.contains("+") || raw.contains("/") || low.endsWith("x") || forbiddenTokens.any { low.contains(it) }) {
-                continue
+            val elems: List<Text.Element> = line.elements
+            if (elems.isEmpty()) continue
+            val candidates = ArrayList<EloElemCandidate>(elems.size * 2)
+            for (i in elems.indices) {
+                val e1 = elems[i]
+                val b1 = e1.boundingBox
+                if (b1 != null) {
+                    candidates.add(EloElemCandidate(e1.text.trim(), b1, i - 1))
+                }
+                if (i + 1 < elems.size) {
+                    val e2 = elems[i + 1]
+                    val b2 = e2.boundingBox
+                    val t1 = e1.text.trim()
+                    val t2 = e2.text.trim()
+                    if (b1 != null && b2 != null &&
+                        !t1.startsWith("-") && !t1.startsWith("+") &&
+                        !t2.startsWith("-") && !t2.startsWith("+")
+                    ) {
+                        val h1 = (b1.bottom - b1.top).coerceAtLeast(1)
+                        val gap = b2.left - b1.right
+                        if (gap in (-h1 / 2)..((h1 * 1.1f).toInt())) {
+                            val combined = "$t1$t2"
+                            val mergedBox = Rect(
+                                minOf(b1.left, b2.left),
+                                minOf(b1.top, b2.top),
+                                maxOf(b1.right, b2.right),
+                                maxOf(b1.bottom, b2.bottom)
+                            )
+                            candidates.add(EloElemCandidate(combined, mergedBox, i - 1))
+                        }
+                    }
+                }
             }
-            val parsed = parseNormalizedEloToken(raw) ?: continue
-            val box = line.boundingBox ?: continue
-            val normLeft = (cropLeft + box.left / scale) / fullW.toFloat()
-            val normRight = (cropLeft + box.right / scale) / fullW.toFloat()
-            val fullTop = cropTop + box.top / scale
-            val fullBottom = cropTop + box.bottom / scale
-            val normCenterY = ((fullTop + fullBottom) * 0.5f) / fullH.toFloat()
-            val normBottom = fullBottom / fullH.toFloat()
-            val normH = (fullBottom - fullTop) / fullH.toFloat()
 
-            val hasStatWordSameRow = allLines.any { other ->
-                val oBox = other.boundingBox ?: return@any false
-                val oCy = (cropTop + (oBox.top + oBox.bottom) * 0.5f / scale) / fullH.toFloat()
-                val oLow = other.text.lowercase()
-                other !== line && kotlin.math.abs(oCy - normCenterY) <= 0.028f && rowStatTokens.any { oLow.contains(it) }
-            }
+            for (cand in candidates) {
+                val raw = cand.text
+                if (raw.isEmpty() || raw.length > 8) continue
+                val low = raw.lowercase()
+                if (raw.contains("-") || raw.contains("+") || raw.contains("/") || raw.contains("%") ||
+                    low.endsWith("x") || forbiddenTokens.any { low.contains(it) }
+                ) {
+                    continue
+                }
+                val box = cand.box
+                val elemH = (box.bottom - box.top).coerceAtLeast(1)
+                if (cand.precedingIdx >= 0) {
+                    val prevElem = elems[cand.precedingIdx]
+                    val prevTxt = prevElem.text.trim()
+                    val prevBox = prevElem.boundingBox
+                    val precededBySign = prevBox != null &&
+                        (prevTxt == "-" || prevTxt == "+" || prevTxt.endsWith("-") || prevTxt.endsWith("+")) &&
+                        (box.left - prevBox.right) <= (elemH * 0.8f)
+                    if (precededBySign) continue
+                }
 
-            // Strictly inside left CURRENT SEASON column & completely unclipped from bottom edge
-            if (!hasStatWordSameRow &&
-                normLeft >= 0.04f && normRight <= 0.46f &&
-                normBottom < 0.962f && normCenterY <= 0.92f &&
-                normCenterY > currentSeasonTopNorm && normH >= 0.012f
-            ) {
-                return IdleEloParseResult(elo = parsed, isEndOfSetModal = false)
+                val parsed = parseNormalizedEloToken(raw) ?: continue
+                val normLeft = (cropLeft + box.left / scale) / fullW.toFloat()
+                val normRight = (cropLeft + box.right / scale) / fullW.toFloat()
+                val fullTop = cropTop + box.top / scale
+                val fullBottom = cropTop + box.bottom / scale
+                val normCenterY = ((fullTop + fullBottom) * 0.5f) / fullH.toFloat()
+                val normBottom = fullBottom / fullH.toFloat()
+                val normH = (fullBottom - fullTop) / fullH.toFloat()
+
+                val hasStatWordSameRow = allElements.any { otherElem ->
+                    val oBox = otherElem.boundingBox ?: return@any false
+                    val oCy = (cropTop + (oBox.top + oBox.bottom) * 0.5f / scale) / fullH.toFloat()
+                    val oLow = otherElem.text.lowercase()
+                    kotlin.math.abs(oCy - normCenterY) <= 0.026f && rowStatTokens.any { oLow.contains(it) }
+                }
+
+                // Strictly inside left CURRENT SEASON column & completely unclipped from bottom edge
+                if (!hasStatWordSameRow &&
+                    normLeft >= 0.11f && normRight <= 0.46f &&
+                    normBottom < 0.966f && normH >= 0.011f &&
+                    normCenterY > (currentSeasonTopNorm + 0.015f) &&
+                    normCenterY <= (currentSeasonBottomNorm + 0.25f)
+                ) {
+                    return IdleEloParseResult(elo = parsed, isEndOfSetModal = false)
+                }
             }
         }
         return null
@@ -7058,22 +7348,43 @@ class OverlayService : LifecycleService() {
         val sanitized = sanitizeUserEloStatic(confirmedElo) ?: return
         val prevElo = getCurrentUserEloStatic(prefs)
         val nowMs = System.currentTimeMillis()
-        val prevPendingBattles = prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+        val wasPromptPending = prefs.getBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
+        val curSetBattles = prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+        val sanitizedFmt = String.format(java.util.Locale.US, "%,d", sanitized)
 
         cancelGuidedEloScanInternal(pushUpdate = false)
 
         if (source == "AUTO" && sanitized == prevElo) {
-            if (prevPendingBattles >= 5) {
-                prefs.edit().putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0).apply()
-                lastEloLockBannerText = "✅ Set ELO Verified: $sanitized (±0)"
+            if (wasPromptPending || curSetBattles >= 5) {
+                prefs.edit()
+                    .putBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
+                    .putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, curSetBattles >= 5)
+                    .putLong(PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS, nowMs)
+                    .apply()
+                lastIdleSameEloVerifiedAtMs = nowMs
+                lastEloLockBannerText = "✅ Set ELO Verified: $sanitizedFmt (±0)"
+                lastEloLockBannerUntilMs = nowMs + 4000L
+                recalculateAndPushBattleData()
+                Handler(Looper.getMainLooper()).post {
+                    OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+                    showBattleToast("🎯 Set ELO Verified: $sanitizedFmt (±0)")
+                }
+            } else if ((nowMs - lastIdleSameEloVerifiedAtMs) >= 45_000L) {
+                lastIdleSameEloVerifiedAtMs = nowMs
+                prefs.edit().putLong(PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS, nowMs).apply()
+                lastEloLockBannerText = "✅ Auto-Scanned ELO: $sanitizedFmt (±0)"
                 lastEloLockBannerUntilMs = nowMs + 3500L
                 recalculateAndPushBattleData()
+                Handler(Looper.getMainLooper()).post {
+                    showBattleToast("🎯 Auto-Scanned ELO: $sanitizedFmt (±0)")
+                }
             }
             return
         }
 
-        // Resets PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK to 0 & clears unranked mute
+        // Updates CURRENT_USER_ELO, clears SET_ELO_PROMPT_PENDING & preserves live 0..5 set progress
         setCurrentUserEloStatic(prefs, sanitized)
+        lastIdleSameEloVerifiedAtMs = nowMs
 
         // Forward-only for new ELO sets; preserve 120s null backfill ONLY on first Rank-20 reveal (prevElo == null)
         if (prevElo == null) {
@@ -7101,10 +7412,10 @@ class OverlayService : LifecycleService() {
         }
 
         val deltaSummary = when {
-            prevElo == null -> "Rank 20: $sanitized"
-            sanitized > prevElo -> "$sanitized (+${sanitized - prevElo} 📈)"
-            sanitized < prevElo -> "$sanitized (${sanitized - prevElo} 📉)"
-            else -> "$sanitized (±0)"
+            prevElo == null -> "Rank 20: $sanitizedFmt"
+            sanitized > prevElo -> "$sanitizedFmt (+${sanitized - prevElo} 📈)"
+            sanitized < prevElo -> "$sanitizedFmt (${sanitized - prevElo} 📉)"
+            else -> "$sanitizedFmt (±0)"
         }
         lastEloLockBannerText = "✅ ELO Locked: $deltaSummary"
         lastEloLockBannerUntilMs = nowMs + 4000L
@@ -7150,7 +7461,11 @@ class OverlayService : LifecycleService() {
         if (isIdleEloOcrInFlight) return
 
         val isGuided = forceGuided || nowMs < guidedEloScanUntilMs
-        val minIntervalMs = if (isGuided) 220L else 1200L
+        val minIntervalMs = when {
+            isGuided -> 220L
+            pendingIdleLobbyElo != null -> 550L
+            else -> 950L
+        }
         if ((nowMs - idleEloLastOcrAttemptMs) < minIntervalMs) return
 
         val screenSig: Long
@@ -7158,8 +7473,7 @@ class OverlayService : LifecycleService() {
             val (passesGate, sig) = evaluateIdleGblCardPixelGate(screen, w, h)
             if (!passesGate) return
             screenSig = sig
-            // Allow 2nd confirmation read immediately when pendingIdleLobbyElo != null (fix v7.41 4.5s self-lock!)
-            if (pendingIdleLobbyElo == null && screenSig == lastIdleEloScreenSig && (nowMs - idleEloLastOcrAttemptMs) < 4000L) {
+            if (pendingIdleLobbyElo == null && screenSig == lastIdleEloScreenSig && (nowMs - idleEloLastOcrAttemptMs) < 1800L) {
                 return
             }
         } else {
@@ -7169,7 +7483,7 @@ class OverlayService : LifecycleService() {
         val cropLeft = (w * 0.04f).toInt().coerceIn(0, max(0, w - 10))
         val cropTop = (h * 0.20f).toInt().coerceIn(0, max(0, h - 10))
         val cropRight = (w * 0.96f).toInt().coerceIn(cropLeft + 10, w)
-        val cropBottom = (h * 0.965f).toInt().coerceIn(cropTop + 10, h)
+        val cropBottom = (h * 0.985f).toInt().coerceIn(cropTop + 10, h)
         val srcW = cropRight - cropLeft
         val srcH = cropBottom - cropTop
         if (srcW < 64 || srcH < 64) return
@@ -7208,23 +7522,43 @@ class OverlayService : LifecycleService() {
                     !isBattleIntroCountdownActive &&
                     introCountdownConfirmFrames == 0
                 if (visionText != null && stillEligible) {
+                    val obsDoneMs = System.currentTimeMillis()
+                    parseIdleGblSetBattlesPlayed(visionText, cropTop, scale, h)?.let { played ->
+                        onIdleGblSetBattlesPlayedObserved(played, obsDoneMs)
+                    }
                     val parsed = parseIdleGblEloFromVisionResult(visionText, cropLeft, cropTop, scale, w, h)
                     if (parsed != null) {
-                        val doneMs = System.currentTimeMillis()
                         if (parsed.isEndOfSetModal) {
                             pendingIdleLobbyElo = null
                             onIdleGblEloConfirmed(parsed.elo, source = scanSource)
                         } else {
-                            if (pendingIdleLobbyElo == parsed.elo && (doneMs - pendingIdleLobbyEloAtMs) in 0L..12_000L) {
+                            if (pendingIdleLobbyElo == parsed.elo && (obsDoneMs - pendingIdleLobbyEloAtMs) in 0L..12_000L) {
                                 pendingIdleLobbyElo = null
                                 onIdleGblEloConfirmed(parsed.elo, source = scanSource)
                             } else {
                                 pendingIdleLobbyElo = parsed.elo
-                                pendingIdleLobbyEloAtMs = doneMs
+                                pendingIdleLobbyEloAtMs = obsDoneMs
+                                val nextHint = "Locking ${String.format(java.util.Locale.US, "%,d", parsed.elo)}..."
+                                if (guidedEloScanHintText != nextHint) {
+                                    guidedEloScanHintText = nextHint
+                                    if (isGuided) recalculateAndPushBattleData()
+                                }
                             }
                         }
                     } else {
                         pendingIdleLobbyElo = null
+                        if (isGuided) {
+                            val rawLower = visionText.text.lowercase()
+                            val nextHint = if (rawLower.contains("battles played") && !rawLower.contains("current season")) {
+                                "Scroll down to CURRENT SEASON"
+                            } else {
+                                "Scroll down to CURRENT SEASON"
+                            }
+                            if (guidedEloScanHintText != nextHint) {
+                                guidedEloScanHintText = nextHint
+                                recalculateAndPushBattleData()
+                            }
+                        }
                     }
                 }
             } catch (_: Exception) {
@@ -7420,8 +7754,8 @@ class OverlayService : LifecycleService() {
             val safeLobbyForPassiveElo = !isCountdownDimmedState &&
                 !isBattleIntroCountdownActive &&
                 introCountdownConfirmFrames == 0 &&
-                !isWakeTransitionActive &&
-                !(sampledPlayerBalls == 3 && sampledOppBalls == 3)
+                !sampledTopRightNameplateVisible &&
+                !(sampledPlayerBalls in 1..3 && sampledOppBalls in 1..3)
             if (safeLobbyForPassiveElo && currentFrameTimestampMs >= guidedEloScanUntilMs) {
                 maybeTriggerIdleGblEloOcr(screen, w, h, currentFrameTimestampMs, forceGuided = false)
             }
@@ -7432,7 +7766,7 @@ class OverlayService : LifecycleService() {
                 introCountdownConfirmFrames == 0 &&
                 !isCountdownDimmedState
             if (isWaitingLobbyBeforeCombat) {
-                if (sampledPlayerBalls == 3 && sampledOppBalls == 3) {
+                if ((sampledPlayerBalls in 1..3 && sampledOppBalls in 1..3) || sampledTopRightNameplateVisible) {
                     if (guidedEloScanUntilMs > 0L) cancelGuidedEloScanInternal(pushUpdate = true)
                 } else if (currentFrameTimestampMs >= guidedEloScanUntilMs) {
                     maybeTriggerIdleGblEloOcr(screen, w, h, currentFrameTimestampMs, forceGuided = false)
@@ -15831,6 +16165,7 @@ class OverlayService : LifecycleService() {
         lastValidOppHpRowY = -1
         prevIdleProbeLuma = -1
         idleTransitionWakeUntilMs = 0L
+        lastIdleSameEloVerifiedAtMs = 0L
         lastValidOppHpRowTimeMs = 0L
         lastValidOppHpRowSpecies = ""
         lastValidPlayerHpRowY = -1
@@ -16357,6 +16692,7 @@ class OverlayService : LifecycleService() {
         lastValidOppHpRowY = -1
         prevIdleProbeLuma = -1
         idleTransitionWakeUntilMs = 0L
+        lastIdleSameEloVerifiedAtMs = 0L
         lastValidOppHpRowTimeMs = 0L
         lastValidOppHpRowSpecies = ""
         lastValidPlayerHpRowY = -1
@@ -16833,8 +17169,16 @@ class OverlayService : LifecycleService() {
         liveMovesetProfileCache.clear()
         if (::prefs.isInitialized) {
             if (prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") != "show6") {
-                val nextSetCount = (prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0) + 1).coerceIn(0, 99)
-                prefs.edit().putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, nextSetCount).apply()
+                val prevCount = prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0)
+                val nextSetCount = if (prevCount >= 5) 1 else (prevCount + 1).coerceIn(1, 5)
+                val editor = prefs.edit().putInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, nextSetCount)
+                if (nextSetCount >= 5) {
+                    editor.putBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, true)
+                        .putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, false)
+                } else {
+                    editor.putBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, false)
+                }
+                editor.apply()
             }
             OverlayService.refreshCrowdEloMetaCacheAsync(prefs, league, currentEloSnap, forceRefresh = false)
         }
@@ -18851,19 +19195,23 @@ class OverlayService : LifecycleService() {
                 "eloScanState" to run {
                     val hasPrefs = ::prefs.isInitialized
                     val curElo = getCurrentUserEloStatic(if (hasPrefs) prefs else null)
-                    val battlesSince = if (hasPrefs) prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0) else 0
+                    val setBattles = (if (hasPrefs) prefs.getInt(PREFS_KEY_GBL_BATTLES_SINCE_ELO_CHECK, 0) else 0).coerceIn(0, 5)
                     val unrankedMuted = if (hasPrefs) prefs.getBoolean(PREFS_KEY_GBL_ELO_UNRANKED_MUTE, false) else false
                     val isGbl = !hasPrefs || prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") != "show6"
                     val guidedActive = !isReplayMode && isGbl && nowMs < guidedEloScanUntilMs
                     val guidedSec = if (guidedActive) ((guidedEloScanUntilMs - nowMs + 999L) / 1000L).toInt().coerceAtLeast(1) else 0
-                    val promptDue = !isReplayMode && isGbl && battlesSince >= 5 && !unrankedMuted && !guidedActive
+                    val promptPendingPref = hasPrefs && prefs.getBoolean(PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING, false)
+                    val ackedAtFive = hasPrefs && prefs.getBoolean(PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE, false)
+                    val promptDue = !isReplayMode && isGbl && !unrankedMuted && !guidedActive &&
+                        (promptPendingPref || (setBattles >= 5 && !ackedAtFive))
                     val confirmText = if (!isReplayMode && isGbl && nowMs < lastEloLockBannerUntilMs) lastEloLockBannerText else ""
                     val stateMap: Map<String, Any?> = mapOf(
                         "currentElo" to curElo,
-                        "battlesSinceCheck" to battlesSince,
+                        "battlesSinceCheck" to setBattles,
                         "unrankedMuted" to unrankedMuted,
                         "guidedScanActive" to guidedActive,
                         "guidedRemainingSec" to guidedSec,
+                        "guidedHintText" to (if (guidedActive) guidedEloScanHintText else ""),
                         "promptDue" to promptDue,
                         "confirmBannerText" to confirmText
                     )

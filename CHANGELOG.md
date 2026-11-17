@@ -2,6 +2,16 @@
 
 ---
 
+## v7.45 (2026-11-16) — Passive Scroll-Down ELO Auto-OCR Fix, Live GBL Set Counter Sync & Split HUD Touch Keypad
+*Live Android APK, Web Simulator & Cloudflare Edge release (`v7.45`, `versionCode = 1745`) fixing passive scroll-down ELO auto-capture blockers, syncing set battle progress directly from Pokémon GO's on-screen `X/5 battles played` readout, and splitting HUD ELO scan and zero-IME manual keypad controls.*
+
+### Highlights
+- **Fixed Passive Scroll-Down ELO Auto-OCR Lockouts**: Stopped `isWakeTransitionActive` bright-screen detection from blocking `maybeTriggerIdleGblEloOcr()` whenever the white GBL lobby card is scrolled up, added a scroll-sensitive `6×12` card luma hash + faster `950ms` passive cadence, parsed token-level `line.elements` with strict `"CURRENT SEASON"` header anchoring so adjacent battery overlays (e.g. `-1247 mA`) never poison `2,307`, and surfaced a once-per-lobby verification indicator even when rating is unchanged (`±0`).
+- **Live GBL Set Progress Sync (`0/5–5/5 battles played`)**: Extracts Pokémon GO's `([0-5])/5 battles played` label directly during idle lobby OCR to keep the HUD pill accurately synced (e.g. `3/5` instead of local-only drift), preserving real set counts across ELO confirmations and triggering ELO prompts cleanly at `5/5` or set wrap (`3–5/5 -> 0/5`).
+- **Split Idle HUD Pill (`[🎯 ELO (X/5)][✏️]`) & Zero-IME Touch Keypad**: Separated `[✏️]` right beside the Scan pill so tapping `✏️` opens an in-overlay `0–9` touch numeric keypad with `-30/-15/-5/+5/+15/+30` quick steppers and `< R20` without fighting Android OS keyboard focus over Pokémon GO.
+
+---
+
 ## v7.44 (2026-11-16) — Guided Idle HUD ELO Scanner, 5-Battle Set Reprompt & Passive GBL Lobby/Modal OCR Fix
 *Live Android APK, Web Simulator & Cloudflare Edge release (`v7.44`, `versionCode = 1744`) fixing 4 blockers in idle ELO auto-capture and introducing an in-HUD guided scroll-to-scan workflow prompted once every 5 GBL battles.*
 
