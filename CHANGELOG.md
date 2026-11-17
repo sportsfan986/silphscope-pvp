@@ -2,6 +2,16 @@
 
 ---
 
+## v7.53 (2026-11-17) — Automatic Multi-Form Disambiguation & Raw HP-Pulse Turn-Cadence Engine
+*Feature & accuracy milestone (`v7.53`, `versionCode = 1753`) completing automatic mid-battle multi-form disambiguation (`OBS_CP`, `BANNER_OCR` signature moves & EPT, joint stats/cadence) paired with an assumption-free raw HP-pulse turn-cadence engine for rapid Non-Standard Fast Move and Shadow confirmation.*
+
+- **Form-Isolated Move Pools & Observed-CP / League Variant Filtering (`PokemonDatabase.kt`, `OverlayService.kt`)**: Isolates form-specific move pools (`isBaseOrKantoForm` guard + `urshifu_single_strike` / `urshifu_rapid_strike` / `_shield` / `_full_belly` keys), filters illegal Mega/Primal variants in non-Mega leagues, and eliminates sibling forms whose Level-51 `15/15/15` max CP (`+15 CP` OCR margin) cannot reach `oppSlotObservedCp`.
+- **`BANNER_OCR` Charged-Move & EPT Form Disambiguation (`OverlayService.kt`)**: Pools candidate charged moves across eligible sibling forms in `BANNER_OCR` and automatically flips to the true form on signature `BANNER_OCR` moves or EPT-infeasible throws (never on noisy `HP_DELTA` guesses alone), re-validating Shadow eligibility (`isShadowEligibleVariant`) and retroactively syncing `battleTimelineEvents` & `detectedOpponents`.
+- **Manual Lock vs. Auto-Verified Form HUD Provenance (`OverlayService.kt`, `overlay.html`, `overlay-asset.mjs`)**: Separates manual `#btn-cycle-form` taps (`🔒` permanent match lock) from auto-verified forms (`✓` with `OBS_CP`, `CHARGED_MOVE`, `CHARGED_EPT`, `FAST_CADENCE`, `FAST_MOVE_DHP` provenance) and emits `🔄 Form Corrected` toasts (muted in Log-Only Stealth Mode).
+- **Assumption-Free Raw HP-Pulse Turn-Cadence Engine & Joint `(Form × FastMove × ShadowState)` Evaluator (`OverlayService.kt`)**: Replaces circular `expectedIntervalMs` interval gating with a `380ms`-debounced raw HP-drop pulse ring buffer (`oppRawPulseTimestampsMs` / `oppRawPulseDropsPct`), enabling cadence-led Non-Standard Fast Move & Form confirmation (`wonByCadence`), breaking `(2t+Shadow)` vs `(3t+Normal)` ties while preserving clock-turn `completedMoves` for Shadow `ΔHP` math, and enforcing asymmetric `1t` vs `2t` double-tick guards (`sub720Count` & median single-pulse drop).
+
+---
+
 ## v7.52 (2026-11-17) — Hybrid OTA Shadow Eligibility Catalog, Corroborated Charged ΔHP & Settle-Window Latch
 *Targeted Shadow accuracy & live-combat hardening release (`v7.52`, `versionCode = 1752`) resolving false Shadow detections reported on unreleased / under-leveled opponents (`log-1794925674297-366`).*
 

@@ -3355,24 +3355,43 @@ internal fun OverlayService.Companion.getAvailableMovePoolForSpeciesStatic(
         ?: POKEMON_META_DATABASE.first()
     val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow")
     val baseKey = meta.baseSpecies.lowercase()
+    val formLower = meta.formLabel.trim().lowercase()
+    val isBaseOrKantoForm = (formLower.isEmpty() || formLower == "base" || formLower == "kanto" || formLower == "shadow") &&
+        cleanSpeciesId == baseKey
+    val formSlug = formLower
+        .takeIf { it.isNotEmpty() && it != "base" && it != "kanto" && it != "shadow" }
+        ?.replace(Regex("[^a-z0-9]+"), "_")
+        ?.trim('_')
+    val aliasId = when (cleanSpeciesId) {
+        "urshifu_single" -> "urshifu_single_strike"
+        "urshifu_rapid" -> "urshifu_rapid_strike"
+        else -> null
+    }
+    val qualifiedId = if (formSlug != null && !cleanSpeciesId.endsWith("_$formSlug")) {
+        "${cleanSpeciesId}_$formSlug"
+    } else null
+    val candidatePoolKeys = buildList {
+        add(meta.speciesId.lowercase())
+        add(cleanSpeciesId)
+        if (aliasId != null) add(aliasId)
+        if (qualifiedId != null) add(qualifiedId)
+        add(meta.name.lowercase())
+        add("${cleanSpeciesId}_shield")
+        add("${cleanSpeciesId}_full_belly")
+        if (isBaseOrKantoForm) add(baseKey)
+    }.distinct()
+
     val rankEntry = resolveRankingsMapForLeagueStatic(league)?.let { map ->
-        map[meta.speciesId.lowercase()] ?: map[cleanSpeciesId] ?: map["${cleanSpeciesId}_shadow"]
+        map[meta.speciesId.lowercase()]
+            ?: map[cleanSpeciesId]
+            ?: map["${cleanSpeciesId}_shadow"]
+            ?: aliasId?.let { map[it] ?: map["${it}_shadow"] }
+            ?: qualifiedId?.let { map[it] ?: map["${it}_shadow"] }
     }
 
-    val gmFastPool = SPECIES_FAST_MOVES_POOL[meta.speciesId.lowercase()]
-        ?: SPECIES_FAST_MOVES_POOL[cleanSpeciesId]
-        ?: SPECIES_FAST_MOVES_POOL[meta.name.lowercase()]
-        ?: SPECIES_FAST_MOVES_POOL[baseKey]
-        ?: SPECIES_FAST_MOVES_POOL["${cleanSpeciesId}_shield"]
-        ?: SPECIES_FAST_MOVES_POOL["${cleanSpeciesId}_full_belly"]
-
-    val effectiveFastPool = if (!gmFastPool.isNullOrEmpty()) {
-        gmFastPool
-    } else {
-        FALLBACK_SPECIES_FAST_POOL[cleanSpeciesId]
-            ?: FALLBACK_SPECIES_FAST_POOL[baseKey]
-            ?: FALLBACK_SPECIES_FAST_POOL[meta.name.lowercase()]
-    }
+    val gmFastPool = candidatePoolKeys.firstNotNullOfOrNull { SPECIES_FAST_MOVES_POOL[it] }
+    val effectiveFastPool = gmFastPool
+        ?: candidatePoolKeys.firstNotNullOfOrNull { FALLBACK_SPECIES_FAST_POOL[it] }
 
     val fastList = mutableListOf<String>()
     fun addFast(name: String?) {
@@ -3394,20 +3413,9 @@ internal fun OverlayService.Companion.getAvailableMovePoolForSpeciesStatic(
         fastList.add(meta.defaultFastMove.trim())
     }
 
-    val gmChargedPool = SPECIES_CHARGED_MOVES_POOL[meta.speciesId.lowercase()]
-        ?: SPECIES_CHARGED_MOVES_POOL[cleanSpeciesId]
-        ?: SPECIES_CHARGED_MOVES_POOL[meta.name.lowercase()]
-        ?: SPECIES_CHARGED_MOVES_POOL[baseKey]
-        ?: SPECIES_CHARGED_MOVES_POOL["${cleanSpeciesId}_shield"]
-        ?: SPECIES_CHARGED_MOVES_POOL["${cleanSpeciesId}_full_belly"]
-
-    val effectiveChargedPool = if (!gmChargedPool.isNullOrEmpty()) {
-        gmChargedPool
-    } else {
-        FALLBACK_SPECIES_CHARGED_POOL[cleanSpeciesId]
-            ?: FALLBACK_SPECIES_CHARGED_POOL[baseKey]
-            ?: FALLBACK_SPECIES_CHARGED_POOL[meta.name.lowercase()]
-    }
+    val gmChargedPool = candidatePoolKeys.firstNotNullOfOrNull { SPECIES_CHARGED_MOVES_POOL[it] }
+    val effectiveChargedPool = gmChargedPool
+        ?: candidatePoolKeys.firstNotNullOfOrNull { FALLBACK_SPECIES_CHARGED_POOL[it] }
 
     val chargedList = mutableListOf<String>()
     fun addCharged(name: String?) {

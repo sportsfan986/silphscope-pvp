@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.53',
+    codename: 'Automatic Multi-Form Disambiguation & Raw HP-Pulse Turn-Cadence Engine',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Automatically resolves multi-form Pokémon (e.g., Giratina, Landorus, Zacian, Urshifu, Alolan/Galarian variants) using observed nameplate CP caps, BANNER_OCR signature/EPT moves, and joint stats/cadence, powered by an assumption-free 380ms-debounced raw HP-pulse turn-cadence ring buffer.',
+    icon: '🔄',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Form-isolated move pools (isBaseOrKantoForm guard + Urshifu/Zamazenta/Morpeko keys) paired with Level-51 max-CP +15 margin and non-Mega legality filtering on sibling forms',
+      'BANNER_OCR multi-form pooling & automatic form flipping on signature charged moves or EPT-infeasible throws (never noisy HP_DELTA guesses alone), with Shadow re-validation & retroactive timeline sync',
+      'Separates manual #btn-cycle-form locks (🔒) from auto-verified forms (✓ with OBS_CP / CHARGED_MOVE / CHARGED_EPT / FAST_CADENCE / FAST_MOVE_DHP provenance) across HUD and Replay Vault',
+      'Assumption-free 380ms-debounced raw HP-pulse turn-cadence engine enabling cadence-led Non-Standard Fast Move confirmation (wonByCadence), (2t+Shadow) vs (3t+Normal) tie-breaking, and asymmetric 1t vs 2t merged-tick guards'
+    ]
+  },
+  {
     version: 'v7.52',
     codename: 'Hybrid OTA Shadow Eligibility Catalog, Corroborated Charged ΔHP & Settle-Window Latch',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Eliminates false Shadow detections on unreleased Shadow species and post-charge fast-move bleed with a hybrid compiled + 24h in-app OTA PvPoke Shadow catalog, locked HUD N/A toggle, post-charge ΔHP settle latches, observed-CP charged damage math, and corroborated single-charge flip rules.',
     icon: '🟣',

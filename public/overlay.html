@@ -3449,18 +3449,26 @@
                     }
                 }
 
-                // Update Form Cycle Button (2-row stacked: Form:\n<form name>)
+                // Update Form Cycle Button (2-row stacked + verified ✓ / locked 🔒 provenance)
                 const formBtn = document.getElementById("btn-cycle-form");
                 if (formBtn) {
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
-                    setHtmlIfChanged(formBtn, `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel)}</span>`);
+                    const isFormLocked = !!battleData.oppFormLocked;
+                    const isFormVerified = !!battleData.oppFormVerified;
+                    const formSrc = String(battleData.oppFormSource || "");
+                    const formBadge = (forms.length > 1 && !isWaitingState)
+                        ? (isFormLocked ? " 🔒" : (isFormVerified ? " ✓" : ""))
+                        : "";
+                    setHtmlIfChanged(formBtn, `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel + formBadge)}</span>`);
                     if (forms.length > 1 && !isWaitingState) {
                         formBtn.disabled = false;
                         formBtn.classList.remove("disabled");
+                        formBtn.title = `Cycle regional or alternate form (Tap locks for battle)${formSrc ? ` • Source: ${formSrc}` : ""}`;
                     } else {
                         formBtn.disabled = true;
                         formBtn.classList.add("disabled");
+                        formBtn.title = "Cycle regional or alternate form";
                     }
                 }
 

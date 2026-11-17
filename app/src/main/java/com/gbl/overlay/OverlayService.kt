@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.52"
-        const val APP_VERSION_CODE = 1752
+        const val APP_VERSION = "7.53"
+        const val APP_VERSION_CODE = 1753
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -1781,6 +1781,9 @@ class OverlayService : LifecycleService() {
             val oppShadowVerified: Boolean = false,
             val oppShadowLocked: Boolean = false,
             val oppShadowSource: String = "",
+            val oppFormVerified: Boolean = false,
+            val oppFormLocked: Boolean = false,
+            val oppFormSource: String = "",
             val oppAuraDensity: Float = 0f,
             val oppAuraFlicker: Float = 0f,
             val oppObservedCp: Int = -1,
@@ -2171,6 +2174,48 @@ class OverlayService : LifecycleService() {
                 return variants.sortedBy { meta ->
                     getEffectiveRankAndShadowForVariant(meta, activeLeague).first
                 }
+            }
+
+            fun computeLevel51MaxCpForVariant(variant: PokemonMeta): Int {
+                val rawMeta = if (variant.isRawBaseStats) {
+                    variant
+                } else {
+                    OverlayService.getAllPokemonMeta().firstOrNull {
+                        it.isRawBaseStats && (
+                            it.speciesId.equals(variant.speciesId, ignoreCase = true) ||
+                                it.name.equals(variant.name, ignoreCase = true)
+                            )
+                    } ?: variant
+                }
+                if (!rawMeta.isRawBaseStats) return 9999
+                val uAtk = (rawMeta.atk + 15.0).coerceAtLeast(20.0)
+                val uDef = (rawMeta.def + 15.0).coerceAtLeast(20.0)
+                val uHp = (rawMeta.hp.toDouble() + 15.0).coerceAtLeast(20.0)
+                return OverlayService.solveLeagueLevelAndCpm(uAtk, uDef, uHp, 10000, 51.0).third
+            }
+
+            fun getEligibleAutoDisambiguationVariants(
+                speciesOrName: String,
+                activeLeague: String,
+                observedCp: Int = -1,
+                allowMegas: Boolean = false,
+                currentIsMega: Boolean = false
+            ): List<PokemonMeta> {
+                val all = getVariantsForSpecies(speciesOrName, activeLeague)
+                if (all.size <= 1) return all
+                val nonMegas = all.filterNot {
+                    OverlayService.isMegaOrPrimalSpeciesStatic(it.speciesId) ||
+                        OverlayService.isMegaOrPrimalSpeciesStatic(it.name)
+                }
+                val maxNonMegaCp = nonMegas.maxOfOrNull { computeLevel51MaxCpForVariant(it) } ?: 0
+                val megaFiltered = when {
+                    !allowMegas -> nonMegas
+                    !currentIsMega && nonMegas.isNotEmpty() && (observedCp <= 0 || observedCp <= maxNonMegaCp + 15) -> nonMegas
+                    else -> all
+                }.ifEmpty { all }
+                if (observedCp < 100) return megaFiltered
+                val cpFeasible = megaFiltered.filter { computeLevel51MaxCpForVariant(it) + 15 >= observedCp }
+                return cpFeasible.ifEmpty { megaFiltered }
             }
 
             fun resolveBestDefaultFormAndShadow(
@@ -2884,6 +2929,9 @@ class OverlayService : LifecycleService() {
     internal var activeUserPokemonName: String? = null
     internal val detectedOpponents = mutableListOf<String>()
     internal val manualFormOverrides = mutableMapOf<String, String>()
+    internal val userManualFormLocks = mutableMapOf<String, String>()
+    internal val autoVerifiedForms = mutableMapOf<String, String>()
+    internal val autoFormProvenance = mutableMapOf<String, String>()
     internal val manualShadowOverrides = mutableMapOf<String, Boolean>()
     internal val userManualShadowLocks = mutableMapOf<String, Boolean>()
     internal val autoVerifiedShadowStates = mutableMapOf<String, Boolean>()
@@ -3428,6 +3476,10 @@ class OverlayService : LifecycleService() {
     internal val oppSlotBpToastEmitted = BooleanArray(3) { false }
     internal val oppSlotOutBpToastEmitted = BooleanArray(3) { false }
     internal val oppSlotFastShadowTrend = BooleanArray(3) { false }
+    internal val oppRawPulseTimestampsMs = Array(3) { LongArray(24) { 0L } }
+    internal val oppRawPulseDropsPct = Array(3) { IntArray(24) { 0 } }
+    internal val oppRawPulseCount = IntArray(3) { 0 }
+    internal val oppLastRawPulseMs = LongArray(3) { 0L }
     internal var lastOppChargeHpSettleLatched: Boolean = false
     internal var oppChargePostSettleStableFrames: Int = 0
     internal var oppChargeLastSettlingPlayerHp: Int = -1
@@ -3441,6 +3493,9 @@ class OverlayService : LifecycleService() {
         autoVerifiedShadowStates.clear()
         autoShadowProvenance.clear()
         defaultPriorShadowStates.clear()
+        userManualFormLocks.clear()
+        autoVerifiedForms.clear()
+        autoFormProvenance.clear()
         oppSlotAuraPosFrames.fill(0)
         oppSlotAuraClearFrames.fill(0)
         oppSlotAuraFirstCleanMs.fill(0L)
@@ -3474,6 +3529,8 @@ class OverlayService : LifecycleService() {
         oppSlotBpToastEmitted.fill(false)
         oppSlotOutBpToastEmitted.fill(false)
         oppSlotFastShadowTrend.fill(false)
+        oppRawPulseCount.fill(0)
+        oppLastRawPulseMs.fill(0L)
         lastOppChargeHpSettleLatched = false
         oppChargePostSettleStableFrames = 0
         oppChargeLastSettlingPlayerHp = -1
@@ -4703,13 +4760,22 @@ class OverlayService : LifecycleService() {
     }
 
     internal fun syncCurrentBattleShadowTimelineForSpecies(baseKeyRaw: String, isShadow: Boolean) {
+        syncCurrentBattleFormAndShadowTimelineForSpecies(baseKeyRaw, null, isShadow)
+    }
+
+    internal fun syncCurrentBattleFormAndShadowTimelineForSpecies(
+        baseKeyRaw: String,
+        newFormName: String?,
+        isShadow: Boolean
+    ) {
         val baseKey = baseKeyRaw.trim().lowercase()
         if (baseKey.isEmpty() || battleTimelineEvents.isEmpty()) return
 
         fun rewriteMatch(raw: String?): String? {
             if (raw.isNullOrBlank()) return raw
             if (!FormResolver.extractBaseSpecies(raw).equals(baseKey, ignoreCase = true)) return raw
-            return formatSpeciesNameForTimelineWithShadow(raw, isShadow)
+            val canonical = newFormName?.takeIf { it.isNotBlank() } ?: raw
+            return formatSpeciesNameForTimelineWithShadow(canonical, isShadow)
         }
 
         val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
@@ -4726,7 +4792,7 @@ class OverlayService : LifecycleService() {
             if (ev.type == "CHARGED_ATTACK" && !ev.inferredMoveName.isNullOrBlank()) {
                 val moveName = ev.inferredMoveName
                 if (ev.actor == "opp" && ev.activePokemon?.let { FormResolver.extractBaseSpecies(it).equals(baseKey, ignoreCase = true) } == true) {
-                    val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(ev.activePokemon, activeLeague, isShadow), activeLeague)
+                    val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(newAct ?: ev.activePokemon, activeLeague, isShadow), activeLeague)
                     val uName = activeUserPokemonName ?: preset?.pokemon?.firstOrNull()?.name ?: ""
                     val uCfg = preset?.pokemon?.firstOrNull { it.name.equals(uName, ignoreCase = true) } ?: preset?.pokemon?.firstOrNull()
                     if (uName.isNotBlank()) {
@@ -4743,10 +4809,11 @@ class OverlayService : LifecycleService() {
                 } else if (ev.actor == "user" && activeOpponentSpecies.equals(baseKey, ignoreCase = true)) {
                     val uName = ev.activePokemon ?: activeUserPokemonName ?: preset?.pokemon?.firstOrNull()?.name ?: ""
                     val uCfg = preset?.pokemon?.firstOrNull { it.name.equals(uName, ignoreCase = true) } ?: preset?.pokemon?.firstOrNull()
-                    if (uName.isNotBlank() && activeOpponentName != "Waiting...") {
+                    val oppTargetName = newFormName?.takeIf { it.isNotBlank() } ?: activeOpponentName
+                    if (uName.isNotBlank() && oppTargetName != "Waiting...") {
                         val uShad = uName.contains("Shadow", ignoreCase = true)
                         val uMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(uName, activeLeague, uShad), activeLeague, uCfg?.cp, uCfg?.ivs, uCfg?.isBestBuddy == true)
-                        val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isShadow), activeLeague)
+                        val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(oppTargetName, activeLeague, isShadow), activeLeague)
                         updatedExpDmg = calculateChargedMoveDamagePercent(
                             attacker = uMeta,
                             defender = oppMeta,
@@ -4849,6 +4916,301 @@ class OverlayService : LifecycleService() {
             return true
         }
         return !wasVerifiedSame
+    }
+
+    internal fun applyMidBattleOpponentFormDisambiguation(
+        slotIdx: Int,
+        baseKeyRaw: String,
+        newVariant: PokemonMeta,
+        provenanceCode: String,
+        reasonText: String,
+        emitToastOnFlip: Boolean = true
+    ): Boolean {
+        val baseKey = baseKeyRaw.trim().lowercase()
+        if (baseKey.isEmpty() || userManualFormLocks.containsKey(baseKey)) return false
+        val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+        val obsCp = if (slotIdx in 0..2) oppSlotObservedCp.getOrElse(slotIdx) { -1 } else -1
+        val eligibleForms = FormResolver.getEligibleAutoDisambiguationVariants(baseKey, activeLeague, obsCp)
+        if (eligibleForms.isNotEmpty() && eligibleForms.none { it.name.equals(newVariant.name, ignoreCase = true) }) {
+            return false
+        }
+
+        val prevSlotName = detectedOpponents.getOrNull(slotIdx)
+            ?: if (activeOpponentSpecies.equals(baseKey, ignoreCase = true)) activeOpponentName else ""
+        val didFormChange = !prevSlotName.equals(newVariant.name, ignoreCase = true)
+        val wasVerifiedSame = autoVerifiedForms[baseKey]?.equals(newVariant.name, ignoreCase = true) == true
+
+        autoVerifiedForms[baseKey] = newVariant.name
+        val prevProv = autoFormProvenance[baseKey].orEmpty()
+        autoFormProvenance[baseKey] = when {
+            prevProv.isBlank() -> provenanceCode
+            prevProv == provenanceCode || prevProv.contains(provenanceCode) -> prevProv
+            else -> "$prevProv+$provenanceCode"
+        }
+        manualFormOverrides[baseKey] = newVariant.name
+
+        val resolvedShad: Boolean = when {
+            !FormResolver.isShadowEligibleVariant(newVariant) -> {
+                defaultPriorShadowStates[baseKey] = false
+                manualShadowOverrides[baseKey] = false
+                if (!userManualShadowLocks.containsKey(baseKey)) {
+                    autoVerifiedShadowStates.remove(baseKey)
+                    autoShadowProvenance.remove(baseKey)
+                }
+                false
+            }
+            userManualShadowLocks.containsKey(baseKey) -> userManualShadowLocks[baseKey]!!
+            autoVerifiedShadowStates.containsKey(baseKey) -> {
+                val verifiedSh = autoVerifiedShadowStates[baseKey]!!
+                manualShadowOverrides[baseKey] = verifiedSh
+                verifiedSh
+            }
+            else -> {
+                val (_, prefShad) = FormResolver.getEffectiveRankAndShadowForVariant(newVariant, activeLeague)
+                defaultPriorShadowStates[baseKey] = prefShad
+                autoShadowProvenance.putIfAbsent(baseKey, "PRIOR")
+                manualShadowOverrides[baseKey] = prefShad
+                prefShad
+            }
+        }
+
+        if (activeOpponentSpecies.equals(baseKey, ignoreCase = true)) {
+            isOpponentShadow = resolvedShad
+            activeOpponentName = newVariant.name
+            availableOpponentForms = FormResolver.getVariantsForSpecies(baseKey, activeLeague)
+            currentFormIndex = availableOpponentForms.indexOfFirst { it.name.equals(newVariant.name, ignoreCase = true) }.coerceAtLeast(0)
+        }
+
+        val existingIdx = detectedOpponents.indexOfFirst {
+            FormResolver.extractBaseSpecies(it).equals(baseKey, ignoreCase = true)
+        }
+        if (existingIdx >= 0) {
+            detectedOpponents[existingIdx] = newVariant.name
+            syncRecommendedGoalForRevealedOpponentsImmediate()
+        }
+
+        if (didFormChange && slotIdx in 0..2) {
+            oppSlotLiveInBpDeltaHp[slotIdx] = 0
+            oppSlotLiveOutBpDeltaHp[slotIdx] = 0
+            oppSlotBpToastEmitted[slotIdx] = false
+            oppSlotOutBpToastEmitted[slotIdx] = false
+            if (provenanceCode != "FAST_MOVE_DHP" && provenanceCode != "FAST_CADENCE") {
+                val curOverride = detectedOppFastMoveOverride[slotIdx].orEmpty()
+                val newFastPool = OverlayService.getAvailableMovePoolForSpeciesStatic(newVariant.name, activeLeague).first
+                val isValidOnNewForm = curOverride.isNotBlank() &&
+                    (newVariant.defaultFastMove.equals(curOverride, ignoreCase = true) ||
+                        newFastPool.any { it.equals(curOverride, ignoreCase = true) })
+                if (!isValidOnNewForm) {
+                    detectedOppFastMoveOverride[slotIdx] = ""
+                }
+                oppFastMoveConfirmed[slotIdx] = false
+                oppFastMoveStatus[slotIdx] = "unconfirmed"
+            }
+        }
+
+        syncCurrentBattleFormAndShadowTimelineForSpecies(baseKey, newVariant.name, resolvedShad)
+        if (didFormChange && emitToastOnFlip && !isLogOnlyStealthMode && !disableBattleToasts) {
+            showBattleToast("🔄 Form Corrected: ${newVariant.name} ($reasonText)")
+        }
+        return didFormChange || !wasVerifiedSame
+    }
+
+    internal fun tryDisambiguateOpponentFormByObservedCp(
+        slotIdx: Int,
+        baseKeyRaw: String,
+        observedCp: Int
+    ): Boolean {
+        if (slotIdx !in 0..2 || observedCp !in 100..5999) return false
+        val baseKey = baseKeyRaw.trim().lowercase()
+        if (baseKey.isEmpty() || userManualFormLocks.containsKey(baseKey) || autoVerifiedForms.containsKey(baseKey)) return false
+        val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+        val allForms = FormResolver.getVariantsForSpecies(baseKey, activeLeague)
+        if (allForms.size <= 1) return false
+        val eligible = FormResolver.getEligibleAutoDisambiguationVariants(baseKey, activeLeague, observedCp)
+        if (eligible.isEmpty() || eligible.size >= allForms.size) return false
+
+        if (eligible.size == 1) {
+            return applyMidBattleOpponentFormDisambiguation(
+                slotIdx = slotIdx,
+                baseKeyRaw = baseKey,
+                newVariant = eligible.first(),
+                provenanceCode = "OBS_CP",
+                reasonText = "CP $observedCp"
+            )
+        }
+
+        val curName = detectedOpponents.getOrNull(slotIdx) ?: activeOpponentName
+        if (eligible.none { it.name.equals(curName, ignoreCase = true) }) {
+            val bestSurvivor = eligible.maxByOrNull { v ->
+                val (rk, _) = FormResolver.getEffectiveRankAndShadowForVariant(v, activeLeague)
+                10000 - rk
+            } ?: eligible.first()
+            manualFormOverrides[baseKey] = bestSurvivor.name
+            val existingIdx = detectedOpponents.indexOfFirst {
+                FormResolver.extractBaseSpecies(it).equals(baseKey, ignoreCase = true)
+            }
+            if (existingIdx >= 0) {
+                detectedOpponents[existingIdx] = bestSurvivor.name
+                syncRecommendedGoalForRevealedOpponentsImmediate()
+            }
+            if (activeOpponentSpecies.equals(baseKey, ignoreCase = true)) {
+                activeOpponentName = bestSurvivor.name
+                availableOpponentForms = allForms
+                currentFormIndex = allForms.indexOfFirst { it.name.equals(bestSurvivor.name, ignoreCase = true) }.coerceAtLeast(0)
+                val (_, prefShad) = FormResolver.getEffectiveRankAndShadowForVariant(bestSurvivor, activeLeague)
+                if (!FormResolver.isShadowEligibleVariant(bestSurvivor)) {
+                    isOpponentShadow = false
+                    defaultPriorShadowStates[baseKey] = false
+                    manualShadowOverrides[baseKey] = false
+                } else if (!userManualShadowLocks.containsKey(baseKey) && !autoVerifiedShadowStates.containsKey(baseKey)) {
+                    isOpponentShadow = prefShad
+                    defaultPriorShadowStates[baseKey] = prefShad
+                    manualShadowOverrides[baseKey] = prefShad
+                }
+            }
+            val effShad = resolveEffectiveOpponentShadow(baseKey, isOpponentShadow)
+            syncCurrentBattleFormAndShadowTimelineForSpecies(baseKey, bestSurvivor.name, effShad)
+            if (!isLogOnlyStealthMode && !disableBattleToasts) {
+                showBattleToast("🔄 Form Corrected: ${bestSurvivor.name} (CP $observedCp)")
+            }
+            return true
+        }
+        return false
+    }
+
+    internal fun tryDisambiguateOpponentFormByChargedMove(
+        slotIdx: Int,
+        confirmedBannerMove: String,
+        preThrowOppEnergy: Int = -1,
+        elapsedSlotTurns: Int = 0
+    ): Boolean {
+        if (slotIdx !in 0..2 || confirmedBannerMove.isBlank()) return false
+        val rawSlotName = detectedOpponents.getOrNull(slotIdx) ?: activeOpponentName
+        val baseKey = FormResolver.extractBaseSpecies(rawSlotName).lowercase()
+        if (baseKey.isEmpty() || userManualFormLocks.containsKey(baseKey) || autoVerifiedForms.containsKey(baseKey)) return false
+        val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+        val obsCp = oppSlotObservedCp.getOrElse(slotIdx) { -1 }
+        val eligible = FormResolver.getEligibleAutoDisambiguationVariants(baseKey, activeLeague, obsCp)
+        if (eligible.size <= 1) return false
+
+        val learningVariants = eligible.filter { variant ->
+            val chgPool = OverlayService.getAvailableMovePoolForSpeciesStatic(variant.name, activeLeague).second
+            variant.chargedMove1.equals(confirmedBannerMove, ignoreCase = true) ||
+                variant.chargedMove2.equals(confirmedBannerMove, ignoreCase = true) ||
+                chgPool.any { it.equals(confirmedBannerMove, ignoreCase = true) }
+        }
+        if (learningVariants.size == 1) {
+            return applyMidBattleOpponentFormDisambiguation(
+                slotIdx = slotIdx,
+                baseKeyRaw = baseKey,
+                newVariant = learningVariants.first(),
+                provenanceCode = "CHARGED_MOVE",
+                reasonText = confirmedBannerMove
+            )
+        }
+        val hasPriorSwitchOut = battleTimelineEvents.any { ev ->
+            ev.type == "SWITCH" &&
+                ev.actor == "opp" &&
+                ev.pokemonOut?.let { FormResolver.extractBaseSpecies(it).equals(baseKey, ignoreCase = true) } == true
+        }
+        if (learningVariants.size > 1 && preThrowOppEnergy >= 0 && elapsedSlotTurns >= 6 && !hasPriorSwitchOut && !oppFastMoveConfirmed[slotIdx]) {
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(confirmedBannerMove, learningVariants.first().types.firstOrNull() ?: "normal")
+            val moveCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[confirmedBannerMove] ?: 0)
+            if (moveCost in 35..100) {
+                val feasibleByEpt = learningVariants.filter { variant ->
+                    val fastPool = (listOf(variant.defaultFastMove) + OverlayService.getAvailableMovePoolForSpeciesStatic(variant.name, activeLeague).first)
+                        .filter { it.isNotBlank() }
+                        .distinctBy { it.lowercase() }
+                    fastPool.any { fName ->
+                        val fTurns = OverlayService.resolveFastTurnsStatic(fName, variant.fastTurns).coerceIn(1, 5)
+                        val fEnergy = OverlayService.resolveFastEnergyStatic(fName, fTurns).coerceIn(2, 20)
+                        val maxGain = ((elapsedSlotTurns + 3) / fTurns) * fEnergy
+                        maxGain >= moveCost
+                    }
+                }
+                if (feasibleByEpt.size == 1) {
+                    return applyMidBattleOpponentFormDisambiguation(
+                        slotIdx = slotIdx,
+                        baseKeyRaw = baseKey,
+                        newVariant = feasibleByEpt.first(),
+                        provenanceCode = "CHARGED_EPT",
+                        reasonText = "$confirmedBannerMove EPT"
+                    )
+                }
+            }
+        }
+        return false
+    }
+
+    internal data class PulseCadenceEval(
+        val validIntervalCount: Int,
+        val matchCount: Int,
+        val sub720Count: Int,
+        val avgErrMs: Double,
+        val cadenceScore: Double,
+        val medianDropPct: Double
+    )
+
+    internal fun evaluateRawPulseCadenceForTurnDuration(
+        slotIdx: Int,
+        candTurns: Int,
+        singleHitDmgPct: Double,
+        hasCompetingOneTurn: Boolean
+    ): PulseCadenceEval {
+        if (slotIdx !in 0..2) return PulseCadenceEval(0, 0, 0, 9999.0, 0.0, 0.0)
+        val count = oppRawPulseCount[slotIdx].coerceIn(0, 24)
+        if (count < 2) return PulseCadenceEval(0, 0, 0, 9999.0, 0.0, 0.0)
+        val ts = oppRawPulseTimestampsMs[slotIdx]
+        val drops = oppRawPulseDropsPct[slotIdx]
+        val sortedDrops = drops.copyOfRange(0, count).sorted()
+        val medianDrop = if (count % 2 == 1) {
+            sortedDrops[count / 2].toDouble()
+        } else {
+            (sortedDrops[count / 2 - 1] + sortedDrops[count / 2]) / 2.0
+        }
+
+        val validIntervals = mutableListOf<Long>()
+        var sub720Count = 0
+        for (i in 1 until count) {
+            val dt = (ts[i] - ts[i - 1]).coerceAtLeast(0L)
+            if (dt in 320L..3200L) {
+                validIntervals.add(dt)
+                if (dt in 380L..720L) {
+                    sub720Count++
+                }
+            }
+        }
+        if (validIntervals.isEmpty()) return PulseCadenceEval(0, 0, 0, 9999.0, 0.0, medianDrop)
+
+        val targetMs = candTurns.coerceIn(1, 5) * 500L
+        val matchingIntervals = validIntervals.filter { kotlin.math.abs(it - targetMs) <= 220L }
+        val matchCount = matchingIntervals.size
+        val avgErrMs = if (matchingIntervals.isNotEmpty()) {
+            matchingIntervals.map { kotlin.math.abs(it - targetMs).toDouble() }.average()
+        } else {
+            validIntervals.map { kotlin.math.abs(it - targetMs).toDouble() }.average()
+        }
+        val matchRatio = matchCount.toDouble() / validIntervals.size.toDouble()
+        var score = (1.0 / (1.0 + (avgErrMs / 180.0) * (avgErrMs / 180.0))) * (0.45 + 0.55 * matchRatio)
+
+        // R2-A3: Guard 1t cadence confirmation against false sub-interval jitter & guard 2t against merged 1t double-ticks
+        if (candTurns == 1) {
+            if (sub720Count < 2 || medianDrop > max(2.5, singleHitDmgPct * 1.65)) {
+                score *= 0.35
+            }
+        } else if (candTurns == 2 && hasCompetingOneTurn) {
+            if (sub720Count >= 2 || medianDrop < max(2.0, singleHitDmgPct * 0.72)) {
+                score *= 0.40
+            }
+        }
+        return PulseCadenceEval(
+            validIntervalCount = validIntervals.size,
+            matchCount = matchCount,
+            sub720Count = sub720Count,
+            avgErrMs = avgErrMs,
+            cadenceScore = score.coerceIn(0.0, 1.0),
+            medianDropPct = medianDrop
+        )
     }
 
     internal fun computeFastRawHpDamage(
@@ -8953,13 +9315,33 @@ class OverlayService : LifecycleService() {
         fun buildOppPoolForName(rawName: String, isShad: Boolean): Pair<PokemonMeta, List<String>>? {
             if (rawName.isBlank() || rawName.equals("Waiting...", ignoreCase = true)) return null
             val meta = getPokemonMeta(rawName, activeLeague, isShad)
-            val pool = OverlayService.getAvailableMovePoolForSpeciesStatic(meta.name, activeLeague).second
-            val oppPlus = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
-                ?: OverlayService.resolveMegaPlusMoveStatic(rawName, activeLeague)
-            val third = meta.chargedMove3.takeIf { it.isNotBlank() }
-                ?: COMMON_THIRD_CHARGED_MOVE[meta.name]
-                ?: ""
-            val moves = (listOfNotNull(oppPlus, meta.chargedMove1, meta.chargedMove2, third, meta.chargedMove4) + pool)
+            val baseKey = meta.baseSpecies.lowercase()
+            val slotIdxForForm = detectedOpponents.indexOfFirst {
+                FormResolver.extractBaseSpecies(it).equals(baseKey, ignoreCase = true)
+            }
+            val obsCp = if (slotIdxForForm in 0..2) oppSlotObservedCp.getOrElse(slotIdxForForm) { -1 } else -1
+            val canSearchAltForms = baseKey.isNotEmpty() &&
+                !userManualFormLocks.containsKey(baseKey) &&
+                !autoVerifiedForms.containsKey(baseKey)
+            val variantsToPool: List<PokemonMeta> = if (canSearchAltForms) {
+                val elig = FormResolver.getEligibleAutoDisambiguationVariants(baseKey, activeLeague, obsCp)
+                if (elig.size > 1) elig else listOf(meta)
+            } else {
+                listOf(meta)
+            }
+            val allMoves = mutableListOf<String>()
+            for (v in variantsToPool) {
+                val vPool = OverlayService.getAvailableMovePoolForSpeciesStatic(v.name, activeLeague).second
+                val vPlus = OverlayService.resolveMegaPlusMoveStatic(v.name, activeLeague)
+                val vThird = v.chargedMove3.takeIf { it.isNotBlank() }
+                    ?: COMMON_THIRD_CHARGED_MOVE[v.name]
+                    ?: ""
+                allMoves.addAll(listOfNotNull(vPlus, v.chargedMove1, v.chargedMove2, vThird, v.chargedMove4))
+                allMoves.addAll(vPool)
+            }
+            val oppPlus = OverlayService.resolveMegaPlusMoveStatic(rawName, activeLeague)
+            if (!oppPlus.isNullOrBlank()) allMoves.add(oppPlus)
+            val moves = allMoves
                 .filter { it.isNotBlank() }
                 .distinct()
             return meta to moves
@@ -9658,6 +10040,24 @@ class OverlayService : LifecycleService() {
                         lastOppChargeHpInferredMoveName = ""
                     }
                     val added = confirmedOppChargedMoves[resolvedOppSlotIdx].add(moveName)
+                    val preThrowEnergyHint = if (pendingChargedAttackActor == "opp" || ((nowMs - lastChargedAttackLoggedMs) <= 4500L && lastChargedPromptActor == "opp")) {
+                        pendingChargedAttackPreOppEnergy
+                    } else {
+                        -1
+                    }
+                    if (tryDisambiguateOpponentFormByChargedMove(
+                            slotIdx = resolvedOppSlotIdx,
+                            confirmedBannerMove = moveName,
+                            preThrowOppEnergy = preThrowEnergyHint,
+                            elapsedSlotTurns = oppSlotTurnsOnField.getOrElse(resolvedOppSlotIdx) { 0 }
+                        )
+                    ) {
+                        val updatedRawName = detectedOpponents.getOrNull(resolvedOppSlotIdx) ?: activeOpponentName
+                        val updatedBase = FormResolver.extractBaseSpecies(updatedRawName).lowercase()
+                        val updatedShad = manualShadowOverrides[updatedBase] ?: isOpponentShadow
+                        oppMeta = getPokemonMeta(updatedRawName, activeLeague, updatedShad)
+                        recalculateAndPushBattleData()
+                    }
                     if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 4500L && lastChargedPromptActor == "opp") {
                         val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
                         val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
@@ -10336,6 +10736,8 @@ class OverlayService : LifecycleService() {
                 oppSlotLiveOutBpDeltaHp[activeOppIdx] = 0
                 oppSlotBpToastEmitted[activeOppIdx] = false
                 oppSlotOutBpToastEmitted[activeOppIdx] = false
+                oppRawPulseCount[activeOppIdx] = 0
+                oppLastRawPulseMs[activeOppIdx] = 0L
                 if (prevOppIdxKey != activeOppIdx || prevSpeciesKey != activeOpponentSpecies.lowercase()) {
                     oppSlotAuraPosFrames[activeOppIdx] = 0
                     oppSlotAuraClearFrames[activeOppIdx] = 0
@@ -10698,6 +11100,24 @@ class OverlayService : LifecycleService() {
                 // and v7.15/v7.25 Dual-Source HP-Drop Opponent Energy Quantizer (E_opp,hp & C_hp) with minimum cadence gate & drift clamp
                 if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy && !isCameraZoomUpwardYShift) {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
+                    // v7.53: Assumption-free raw HP-drop pulse ring buffer (380ms debounce, independent of expectedIntervalMs)
+                    val lastRawPulseAt = oppLastRawPulseMs[activeOppIdx]
+                    if (lastRawPulseAt <= 0L || (nowMs - lastRawPulseAt) >= 380L) {
+                        val curCount = oppRawPulseCount[activeOppIdx]
+                        if (curCount < 24) {
+                            oppRawPulseTimestampsMs[activeOppIdx][curCount] = nowMs
+                            oppRawPulseDropsPct[activeOppIdx][curCount] = realUserDrop
+                            oppRawPulseCount[activeOppIdx] = curCount + 1
+                        } else {
+                            for (p in 1 until 24) {
+                                oppRawPulseTimestampsMs[activeOppIdx][p - 1] = oppRawPulseTimestampsMs[activeOppIdx][p]
+                                oppRawPulseDropsPct[activeOppIdx][p - 1] = oppRawPulseDropsPct[activeOppIdx][p]
+                            }
+                            oppRawPulseTimestampsMs[activeOppIdx][23] = nowMs
+                            oppRawPulseDropsPct[activeOppIdx][23] = realUserDrop
+                        }
+                        oppLastRawPulseMs[activeOppIdx] = nowMs
+                    }
                     val safeOppExactDmg = oppExactDmgPct.coerceAtLeast(0.8)
                     val totalAccUserDrop = realUserDrop.toDouble() + oppSlotHpDmgRemainder[activeOppIdx]
                     val maxStepsFromDrop = if (safeOppExactDmg < 2.5) 1 else 2
@@ -12618,7 +13038,7 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // Phase 1E-2: Joint (FastMove × ShadowState) + Cadence Evaluator & Non-Standard Fast Move Override
+            // Phase 1E-2: Joint (Form × FastMove × ShadowState) + Assumption-Free Raw Pulse Cadence Evaluator
             val stdFastName = oppMetaForStats.defaultFastMove
             val stdFastTurns = OverlayService.resolveFastTurnsStatic(stdFastName, oppMetaForStats.fastTurns).coerceIn(1, 5)
             val rawPoolFast = OverlayService.getAvailableMovePoolForSpeciesStatic(oppMetaForStats.name, activeLeague).first
@@ -12632,6 +13052,42 @@ class OverlayService : LifecycleService() {
             if ((enableAltFastMoveDetect || enableAutoShadowDetect) && !oppFastMoveConfirmed[activeOppIdx]) {
                 val liveOppAtkStage = oppSlotAtkStage[activeOppIdx]
                 val liveUserDefStage = playerSlotDefStage[activeUserIdx]
+                val obsCpForForm = oppSlotObservedCp.getOrElse(activeOppIdx) { -1 }
+                val canSearchAltForms = activeOppBase.isNotEmpty() &&
+                    !userManualFormLocks.containsKey(activeOppBase) &&
+                    !autoVerifiedForms.containsKey(activeOppBase)
+                val formVariants: List<PokemonMeta> = if (canSearchAltForms) {
+                    FormResolver.getEligibleAutoDisambiguationVariants(activeOppBase, activeLeague, obsCpForForm)
+                        .ifEmpty { listOf(oppMetaForStats) }
+                } else {
+                    listOf(oppMetaForStats)
+                }
+
+                data class FormFastCandidate(
+                    val formVariant: PokemonMeta,
+                    val moveName: String,
+                    val turns: Int,
+                    val energy: Int
+                )
+
+                val formFastCandidates: List<FormFastCandidate> = formVariants.flatMap { fVar ->
+                    val fStd = fVar.defaultFastMove
+                    val fStdTurns = OverlayService.resolveFastTurnsStatic(fStd, fVar.fastTurns).coerceIn(1, 5)
+                    val fRawPool = OverlayService.getAvailableMovePoolForSpeciesStatic(fVar.name, activeLeague).first
+                    (listOf(fStd) + fRawPool)
+                        .map { it.trim() }
+                        .filter { cand ->
+                            cand.isNotBlank() && (cand.equals(fStd, ignoreCase = true) || !cand.startsWith("Hidden Power", ignoreCase = true))
+                        }
+                        .distinctBy { it.lowercase() }
+                        .map { cand ->
+                            val cTurns = OverlayService.resolveFastTurnsStatic(cand, fStdTurns).coerceIn(1, 5)
+                            val cEnergy = OverlayService.resolveFastEnergyStatic(cand, cTurns).coerceIn(2, 20)
+                            FormFastCandidate(fVar, cand, cTurns, cEnergy)
+                        }
+                }
+                val hasCompetingOneTurn = formFastCandidates.any { it.turns == 1 }
+
                 val stdExactDmg = calculateFastMoveExactDamagePercent(
                     attacker = oppMetaForStats,
                     defender = userMetaForStats,
@@ -12675,10 +13131,12 @@ class OverlayService : LifecycleService() {
                     "balanced" -> 0.60
                     else -> 0.68
                 }
+                val minCadIntervals = if (strictnessMode == "aggressive") 3 else 4
+                val minPulsesForOneTurn = if (strictnessMode == "aggressive") 4 else 5
 
                 var maxRequiredSampleTurn = max(turnsFor10Pct + offsetTurns, minRequiredElapsedTurns)
-                for (cand in candidateFastMoves) {
-                    val cTurns = OverlayService.resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
+                for (candTuple in formFastCandidates) {
+                    val cTurns = candTuple.turns
                     val minTurnsForCycles = cTurns * minRequiredCompletedCycles + offsetTurns
                     val firstRegTurn = max(
                         ceil(turnsFor10Pct.toDouble() / cTurns.toDouble()).toInt().coerceAtLeast(1) * cTurns + offsetTurns,
@@ -12691,37 +13149,29 @@ class OverlayService : LifecycleService() {
 
                 val elapsedEvalTurns = (oppSlotTurnsOnField[activeOppIdx] - oppInMatchupAnchorOppTurns[activeOppIdx]).coerceAtLeast(0)
                 val observedDmgPct = oppCumulativeFastDmgPct[activeOppIdx].toDouble()
-                if (elapsedEvalTurns >= maxRequiredSampleTurn && observedDmgPct > 0.0) {
+                val readyByCumDmg = elapsedEvalTurns >= maxRequiredSampleTurn && observedDmgPct > 0.0
+                val readyByRawPulses = oppRawPulseCount[activeOppIdx] >= (minCadIntervals + 1) &&
+                    observedDmgPct >= (if (strictnessMode == "aggressive") 4.0 else 5.0) &&
+                    elapsedEvalTurns >= minRequiredElapsedTurns
+                if (readyByCumDmg || readyByRawPulses) {
                     val effectiveTurnsForDamage = (elapsedEvalTurns - offsetTurns).coerceAtLeast(1)
-                    val canJointlySearchShadow = enableAutoShadowDetect &&
+                    val baseCanSearchShadow = enableAutoShadowDetect &&
                         activeOppBase.isNotEmpty() &&
                         !userManualShadowLocks.containsKey(activeOppBase) &&
-                        !autoShadowProvenance[activeOppBase].orEmpty().contains("DHP") &&
-                        FormResolver.isShadowEligibleVariant(oppMetaForStats)
-                    val shadowCandidates: List<Boolean> = if (canJointlySearchShadow) listOf(false, true) else listOf(isOpponentShadow)
-
-                    val normMetaForIn1E: PokemonMeta = if (isOpponentShadow && canJointlySearchShadow) {
-                        val cpVal = oppSlotObservedCp.getOrElse(activeOppIdx) { -1 }
-                        val cpProf = if (cpVal > 0) IvMatrixEngine.resolveBestGuessOpponentIvProfile(oppMetaForStats.name, activeLeague, false, observedCp = cpVal) else null
-                        val baseM = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, false), activeLeague)
-                        if (cpProf != null) baseM.copy(atk = cpProf.bestGuessAtk, def = cpProf.bestGuessDef, hp = cpProf.bestGuessHp, isRawBaseStats = false) else baseM
-                    } else oppMetaForStats
-
-                    val shadMetaForIn1E: PokemonMeta = if (!isOpponentShadow && canJointlySearchShadow) {
-                        val cpVal = oppSlotObservedCp.getOrElse(activeOppIdx) { -1 }
-                        val cpProf = if (cpVal > 0) IvMatrixEngine.resolveBestGuessOpponentIvProfile(oppMetaForStats.name, activeLeague, true, observedCp = cpVal) else null
-                        val baseM = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, true), activeLeague)
-                        if (cpProf != null) baseM.copy(atk = cpProf.bestGuessAtk, def = cpProf.bestGuessDef, hp = cpProf.bestGuessHp, isRawBaseStats = false) else baseM
-                    } else oppMetaForStats
+                        !autoShadowProvenance[activeOppBase].orEmpty().contains("DHP")
 
                     data class JointFastMoveEval(
+                        val formVariant: PokemonMeta,
                         val moveName: String,
                         val isShadow: Boolean,
                         val turns: Int,
                         val energy: Int,
                         val completedMoves: Int,
+                        val singleHitDmg: Double,
                         val expectedDmg: Double,
                         val absError: Double,
+                        val dmgConf: Double,
+                        val pulseEval: PulseCadenceEval,
                         val confidence: Double
                     )
 
@@ -12729,19 +13179,41 @@ class OverlayService : LifecycleService() {
                         oppInIntervalSumMs[activeOppIdx].toDouble() / oppInIntervalCount[activeOppIdx].toDouble()
                     } else -1.0
 
-                    val evals: MutableList<JointFastMoveEval> = mutableListOf()
-                    for (cand in candidateFastMoves) {
-                        val cTurns = OverlayService.resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
-                        val cEnergy = OverlayService.resolveFastEnergyStatic(cand, cTurns).coerceIn(2, 20)
-                        val completedMoves = (effectiveTurnsForDamage / cTurns).coerceAtLeast(1)
-                        val cadConf = if (avgIntervalMs > 0.0) {
-                            val cadErrMs = kotlin.math.abs(avgIntervalMs - cTurns * 500.0)
-                            val rawC = 1.0 / (1.0 + (cadErrMs / 240.0) * (cadErrMs / 240.0))
-                            if (oppInIntervalCount[activeOppIdx] >= 3 && cadErrMs >= 650.0) rawC * 0.55 else rawC
-                        } else -1.0
+                    val formMetaCache = mutableMapOf<String, PokemonMeta>()
+                    fun resolveMetaForCandForm(fVar: PokemonMeta, candShad: Boolean): PokemonMeta {
+                        if (fVar.name.equals(oppMetaForStats.name, ignoreCase = true) && candShad == isOpponentShadow) {
+                            return oppMetaForStats
+                        }
+                        val cacheKey = "${fVar.name.lowercase()}|$candShad"
+                        return formMetaCache.getOrPut(cacheKey) {
+                            val cpProf = if (obsCpForForm > 0) {
+                                IvMatrixEngine.resolveBestGuessOpponentIvProfile(fVar.name, activeLeague, candShad, observedCp = obsCpForForm)
+                            } else null
+                            val baseM = OverlayService.computeEffectiveCombatStats(
+                                getPokemonMeta(fVar.name, activeLeague, candShad),
+                                activeLeague
+                            )
+                            if (cpProf != null) {
+                                baseM.copy(atk = cpProf.bestGuessAtk, def = cpProf.bestGuessDef, hp = cpProf.bestGuessHp, isRawBaseStats = false)
+                            } else baseM
+                        }
+                    }
 
-                        for (candShad in shadowCandidates) {
-                            val candMeta = if (candShad) shadMetaForIn1E else normMetaForIn1E
+                    val evals: MutableList<JointFastMoveEval> = mutableListOf()
+                    for (candTuple in formFastCandidates) {
+                        val fVar = candTuple.formVariant
+                        val cand = candTuple.moveName
+                        val cTurns = candTuple.turns
+                        val cEnergy = candTuple.energy
+                        val completedMoves = (effectiveTurnsForDamage / cTurns).coerceAtLeast(1)
+                        val formShadowCands: List<Boolean> = when {
+                            !FormResolver.isShadowEligibleVariant(fVar) -> listOf(false)
+                            baseCanSearchShadow -> listOf(false, true)
+                            else -> listOf(isOpponentShadow)
+                        }
+
+                        for (candShad in formShadowCands) {
+                            val candMeta = resolveMetaForCandForm(fVar, candShad)
                             val cDmg = calculateFastMoveExactDamagePercent(
                                 attacker = candMeta,
                                 defender = userMetaForStats,
@@ -12756,38 +13228,163 @@ class OverlayService : LifecycleService() {
                             val err = kotlin.math.abs(observedDmgPct - expDmg)
                             val denom = max(2.5, expDmg * 0.35)
                             val dmgConf = 1.0 / (1.0 + (err / denom) * (err / denom))
-                            val jointConf = if (cadConf >= 0.0) {
-                                val penalty = if (oppInIntervalCount[activeOppIdx] >= 3 && kotlin.math.abs(avgIntervalMs - cTurns * 500.0) >= 650.0) 0.55 else 1.0
-                                (0.72 * dmgConf + 0.28 * cadConf) * penalty
-                            } else dmgConf
-                            evals.add(JointFastMoveEval(cand, candShad, cTurns, cEnergy, completedMoves, expDmg, err, jointConf))
+                            val pulseEval = evaluateRawPulseCadenceForTurnDuration(
+                                slotIdx = activeOppIdx,
+                                candTurns = cTurns,
+                                singleHitDmgPct = cDmg,
+                                hasCompetingOneTurn = hasCompetingOneTurn
+                            )
+                            val hasPulseCad = pulseEval.validIntervalCount >= 2
+                            val cadConf = when {
+                                hasPulseCad -> pulseEval.cadenceScore
+                                avgIntervalMs > 0.0 -> {
+                                    val cadErrMs = kotlin.math.abs(avgIntervalMs - cTurns * 500.0)
+                                    val rawC = 1.0 / (1.0 + (cadErrMs / 240.0) * (cadErrMs / 240.0))
+                                    if (oppInIntervalCount[activeOppIdx] >= 3 && cadErrMs >= 650.0) rawC * 0.55 else rawC
+                                }
+                                else -> -1.0
+                            }
+                            val jointConf = when {
+                                hasPulseCad -> {
+                                    val mismatchPenalty = if (pulseEval.validIntervalCount >= 3 && pulseEval.matchCount == 0 && pulseEval.avgErrMs >= 420.0) 0.50 else 1.0
+                                    (0.62 * dmgConf + 0.38 * cadConf) * mismatchPenalty
+                                }
+                                cadConf >= 0.0 -> {
+                                    val penalty = if (oppInIntervalCount[activeOppIdx] >= 3 && kotlin.math.abs(avgIntervalMs - cTurns * 500.0) >= 650.0) 0.55 else 1.0
+                                    (0.72 * dmgConf + 0.28 * cadConf) * penalty
+                                }
+                                else -> dmgConf
+                            }
+                            evals.add(
+                                JointFastMoveEval(
+                                    formVariant = fVar,
+                                    moveName = cand,
+                                    isShadow = candShad,
+                                    turns = cTurns,
+                                    energy = cEnergy,
+                                    completedMoves = completedMoves,
+                                    singleHitDmg = cDmg,
+                                    expectedDmg = expDmg,
+                                    absError = err,
+                                    dmgConf = dmgConf,
+                                    pulseEval = pulseEval,
+                                    confidence = jointConf
+                                )
+                            )
                         }
                     }
 
-                    val bestStdAnyShad = evals.filter { it.moveName.equals(stdFastName, ignoreCase = true) }
-                        .maxByOrNull { it.confidence } ?: evals.first()
+                    val bestStdAnyShad = evals.filter {
+                        it.formVariant.name.equals(oppMetaForStats.name, ignoreCase = true) &&
+                            it.moveName.equals(stdFastName, ignoreCase = true)
+                    }.maxByOrNull { it.confidence } ?: evals.first()
+                    val bestCurrentFormAnyMove = evals.filter {
+                        it.formVariant.name.equals(oppMetaForStats.name, ignoreCase = true)
+                    }.maxByOrNull { it.confidence } ?: bestStdAnyShad
                     val bestEval = evals.maxByOrNull { it.confidence } ?: bestStdAnyShad
+
+                    val passesOneTurnGuard = if (bestEval.turns == 1) {
+                        oppRawPulseCount[activeOppIdx] >= minPulsesForOneTurn &&
+                            bestEval.pulseEval.sub720Count >= 2 &&
+                            bestEval.pulseEval.medianDropPct <= max(2.5, bestEval.singleHitDmg * 1.65)
+                    } else true
+                    val passesTwoTurnGuard = if (bestEval.turns == 2 && hasCompetingOneTurn) {
+                        bestEval.pulseEval.sub720Count == 0 &&
+                            bestEval.pulseEval.medianDropPct >= max(2.0, bestEval.singleHitDmg * 0.72)
+                    } else true
+
+                    // R2-A1 & R2-A3: Raw pulse cadence can independently confirm fast move / form when turns differ cleanly
+                    val wonByCadence = enableAltFastMoveDetect &&
+                        (!bestEval.moveName.equals(stdFastName, ignoreCase = true) ||
+                            !bestEval.formVariant.name.equals(oppMetaForStats.name, ignoreCase = true)) &&
+                        bestEval.turns != bestStdAnyShad.turns &&
+                        bestEval.pulseEval.validIntervalCount >= minCadIntervals &&
+                        bestEval.pulseEval.matchCount >= min(bestEval.pulseEval.validIntervalCount, minCadIntervals) &&
+                        bestEval.pulseEval.cadenceScore >= 0.75 &&
+                        bestStdAnyShad.pulseEval.cadenceScore <= 0.48 &&
+                        bestEval.dmgConf >= 0.58 &&
+                        passesOneTurnGuard &&
+                        passesTwoTurnGuard
 
                     val isOneTurnVsMultiStd = bestEval.turns == 1 && stdFastTurns >= 2
                     val oneTurnQuantMargin = if (isOneTurnVsMultiStd) {
                         max(2.5, bestEval.completedMoves * (100.0 / max(80.0, userMetaForStats.hp.toDouble())) * 0.65)
                     } else 0.0
+                    val oneTurnNotContradictedByPulses = !(isOneTurnVsMultiStd &&
+                        bestEval.pulseEval.validIntervalCount >= 3 &&
+                        bestEval.pulseEval.sub720Count == 0)
 
-                    val isNonStandardWinner = enableAltFastMoveDetect &&
-                        !bestEval.moveName.equals(stdFastName, ignoreCase = true) &&
+                    val wonByDmg = enableAltFastMoveDetect &&
+                        readyByCumDmg &&
+                        (!bestEval.moveName.equals(stdFastName, ignoreCase = true) ||
+                            !bestEval.formVariant.name.equals(oppMetaForStats.name, ignoreCase = true)) &&
                         !bestEval.moveName.startsWith("Hidden Power", ignoreCase = true) &&
                         bestEval.completedMoves >= minRequiredCompletedCycles &&
                         bestStdAnyShad.completedMoves >= minRequiredCompletedCycles &&
                         observedDmgPct >= minRequiredObservedDmgPct &&
                         (!isOneTurnVsMultiStd || (elapsedEvalTurns >= max(maxRequiredSampleTurn, 12) && observedDmgPct >= max(minRequiredObservedDmgPct, 14.0))) &&
+                        oneTurnNotContradictedByPulses &&
+                        passesTwoTurnGuard &&
                         (bestEval.confidence - bestStdAnyShad.confidence) >= minConfGap &&
                         (bestStdAnyShad.absError - bestEval.absError) >= (minAbsErrorGap + oneTurnQuantMargin) &&
                         bestEval.confidence >= minWinnerConf
 
-                    val winnerMoveName = if (isNonStandardWinner) bestEval.moveName else stdFastName
-                    val winnerNorm = evals.firstOrNull { it.moveName.equals(winnerMoveName, ignoreCase = true) && !it.isShadow }
-                    val winnerShad = evals.firstOrNull { it.moveName.equals(winnerMoveName, ignoreCase = true) && it.isShadow }
-                    if (canJointlySearchShadow && winnerNorm != null && winnerShad != null) {
+                    val isDiffFormWinner = !bestEval.formVariant.name.equals(oppMetaForStats.name, ignoreCase = true) &&
+                        (wonByCadence || (wonByDmg &&
+                            (bestEval.confidence - bestCurrentFormAnyMove.confidence) >= minConfGap * 0.75 &&
+                            (bestCurrentFormAnyMove.absError - bestEval.absError) >= minAbsErrorGap * 0.75))
+
+                    var winningFormMeta = oppMetaForStats
+                    var winningFormStdFast = stdFastName
+                    var didFormFlipInStep = false
+                    if (isDiffFormWinner) {
+                        val flipped = applyMidBattleOpponentFormDisambiguation(
+                            slotIdx = activeOppIdx,
+                            baseKeyRaw = activeOppBase,
+                            newVariant = bestEval.formVariant,
+                            provenanceCode = if (wonByCadence) "FAST_CADENCE" else "FAST_MOVE_DHP",
+                            reasonText = "${bestEval.moveName} (${bestEval.turns}t)"
+                        )
+                        if (flipped) {
+                            didFormFlipInStep = true
+                            winningFormMeta = bestEval.formVariant
+                            winningFormStdFast = bestEval.formVariant.defaultFastMove
+                            hpChanged = true
+                        }
+                    } else if (canSearchAltForms && formVariants.size > 1 && readyByCumDmg) {
+                        // Lock current form only if it meaningfully separates from every competing sibling form
+                        val bestOtherForm = evals.filter {
+                            !it.formVariant.name.equals(oppMetaForStats.name, ignoreCase = true)
+                        }.maxByOrNull { it.confidence }
+                        val sameFormWinner = if (wonByCadence || wonByDmg) bestEval else bestCurrentFormAnyMove
+                        val clearlyBeatsOtherForms = bestOtherForm == null ||
+                            (sameFormWinner.confidence - bestOtherForm.confidence) >= minConfGap * 0.65 ||
+                            (sameFormWinner.turns != bestOtherForm.turns && sameFormWinner.pulseEval.validIntervalCount >= minCadIntervals && sameFormWinner.pulseEval.cadenceScore >= 0.78 && bestOtherForm.pulseEval.cadenceScore <= 0.45)
+                        if (clearlyBeatsOtherForms && (wonByCadence || wonByDmg || observedDmgPct >= minRequiredObservedDmgPct)) {
+                            applyMidBattleOpponentFormDisambiguation(
+                                slotIdx = activeOppIdx,
+                                baseKeyRaw = activeOppBase,
+                                newVariant = oppMetaForStats,
+                                provenanceCode = if (wonByCadence) "FAST_CADENCE" else "FAST_MOVE_DHP",
+                                reasonText = "${sameFormWinner.moveName} (${sameFormWinner.turns}t)",
+                                emitToastOnFlip = false
+                            )
+                        }
+                    }
+
+                    val winnerOnSameOrNewForm = didFormFlipInStep || (wonByCadence || wonByDmg) &&
+                        bestEval.formVariant.name.equals(winningFormMeta.name, ignoreCase = true)
+                    val winnerMoveName = if (winnerOnSameOrNewForm) bestEval.moveName else winningFormStdFast
+                    val winnerNorm = evals.firstOrNull {
+                        it.formVariant.name.equals(winningFormMeta.name, ignoreCase = true) &&
+                            it.moveName.equals(winnerMoveName, ignoreCase = true) && !it.isShadow
+                    }
+                    val winnerShad = evals.firstOrNull {
+                        it.formVariant.name.equals(winningFormMeta.name, ignoreCase = true) &&
+                            it.moveName.equals(winnerMoveName, ignoreCase = true) && it.isShadow
+                    }
+                    // R2-A2: Keep clock-turn division completedMoves in evals for Shadow vs Normal ΔHP math
+                    if (baseCanSearchShadow && FormResolver.isShadowEligibleVariant(winningFormMeta) && winnerNorm != null && winnerShad != null) {
                         val bestWinShad = if (winnerShad.confidence >= winnerNorm.confidence) winnerShad else winnerNorm
                         val altWinShad = if (bestWinShad.isShadow) winnerNorm else winnerShad
                         val shadConfDiff = bestWinShad.confidence - altWinShad.confidence
@@ -12806,22 +13403,31 @@ class OverlayService : LifecycleService() {
                         }
                     }
 
-                    if (enableAltFastMoveDetect && (observedDmgPct >= minRequiredObservedDmgPct || elapsedEvalTurns >= maxRequiredSampleTurn + 4)) {
+                    val shouldLockFastMove = wonByCadence ||
+                        wonByDmg ||
+                        didFormFlipInStep ||
+                        (observedDmgPct >= minRequiredObservedDmgPct && readyByCumDmg) ||
+                        elapsedEvalTurns >= maxRequiredSampleTurn + 4
+                    if (enableAltFastMoveDetect && shouldLockFastMove) {
+                        val isNonStdOnWinningForm = !winnerMoveName.equals(winningFormStdFast, ignoreCase = true)
                         oppFastMoveConfirmed[activeOppIdx] = true
-                        if (isNonStandardWinner) {
-                            detectedOppFastMoveOverride[activeOppIdx] = bestEval.moveName
-                            oppFastMoveStatus[activeOppIdx] = "confirmed_non_standard"
+                        if (isNonStdOnWinningForm || didFormFlipInStep) {
+                            val winTurns = OverlayService.resolveFastTurnsStatic(winnerMoveName, winningFormMeta.fastTurns).coerceIn(1, 5)
+                            val winEnergy = OverlayService.resolveFastEnergyStatic(winnerMoveName, winTurns).coerceIn(2, 20)
+                            detectedOppFastMoveOverride[activeOppIdx] = if (isNonStdOnWinningForm) winnerMoveName else ""
+                            oppFastMoveStatus[activeOppIdx] = if (isNonStdOnWinningForm) "confirmed_non_standard" else "confirmed_standard"
                             oppSlotLiveInBpDeltaHp[activeOppIdx] = 0
                             oppSlotBpToastEmitted[activeOppIdx] = false
-                            val newCompletedMoves = (effectiveTurnsForDamage / bestEval.turns).coerceAtLeast(0)
-                            oppSlotEnergy[activeOppIdx] = (newCompletedMoves * bestEval.energy).coerceIn(0, 100)
+                            val newCompletedMoves = (effectiveTurnsForDamage / winTurns).coerceAtLeast(0)
+                            oppSlotEnergy[activeOppIdx] = (newCompletedMoves * winEnergy).coerceIn(0, 100)
                             oppSlotEnergyMeter[activeOppIdx] = oppSlotEnergy[activeOppIdx]
                             oppSlotEnergyHp[activeOppIdx] = oppSlotEnergy[activeOppIdx]
-                            oppSlotTurnsOnField[activeOppIdx] = oppInMatchupAnchorOppTurns[activeOppIdx] + newCompletedMoves * bestEval.turns
-                            phaseOppTurns = (phasePlayerTurns / bestEval.turns) * bestEval.turns
-                            oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, bestEval.turns - 1)
-                            if (!isLogOnlyStealthMode && !disableBattleToasts) {
-                                showBattleToast("⚠️ Non-Standard Fast: ${oppMetaForStats.name} has ${bestEval.moveName} (${bestEval.turns}t/${bestEval.energy}e)!")
+                            oppSlotTurnsOnField[activeOppIdx] = oppInMatchupAnchorOppTurns[activeOppIdx] + newCompletedMoves * winTurns
+                            phaseOppTurns = (phasePlayerTurns / winTurns) * winTurns
+                            oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, winTurns - 1)
+                            if (isNonStdOnWinningForm && !isLogOnlyStealthMode && !disableBattleToasts) {
+                                val srcHint = if (wonByCadence) " [Cadence]" else ""
+                                showBattleToast("⚠️ Non-Standard Fast: ${winningFormMeta.name} has $winnerMoveName (${winTurns}t/${winEnergy}e)$srcHint!")
                             }
                         } else {
                             detectedOppFastMoveOverride[activeOppIdx] = ""
@@ -13820,6 +14426,14 @@ class OverlayService : LifecycleService() {
                     lastOppChargedAttackerSlotIdx in 0..2 -> lastOppChargedAttackerSlotIdx
                     lastNormalCombatOppSlotIdx in 0..2 -> lastNormalCombatOppSlotIdx
                     else -> activeOppIdx.coerceIn(0, 2)
+                }
+                if (hasValidBannerSlot && lastDetectedBannerMoveName.isNotBlank() && attackerOppSlotIdx in 0..2) {
+                    tryDisambiguateOpponentFormByChargedMove(
+                        slotIdx = attackerOppSlotIdx,
+                        confirmedBannerMove = lastDetectedBannerMoveName,
+                        preThrowOppEnergy = pendingChargedAttackPreOppEnergy,
+                        elapsedSlotTurns = oppSlotTurnsOnField.getOrElse(attackerOppSlotIdx) { 0 }
+                    )
                 }
                 val attackerOppRawName = detectedOpponents.getOrNull(attackerOppSlotIdx)
                     ?: pendingChargedAttackOppRawName.ifBlank { lastOppChargedAttackerRawName.ifBlank { activeOpponentName } }
@@ -15251,6 +15865,9 @@ class OverlayService : LifecycleService() {
             }
             if (!isWaitingForOpponent && curOppIdxForCp in 0..2 && oppSlotObservedCp[curOppIdxForCp] <= 0) {
                 oppSlotObservedCp[curOppIdxForCp] = frameOppCp
+                if (tryDisambiguateOpponentFormByObservedCp(curOppIdxForCp, activeOpponentSpecies, frameOppCp)) {
+                    recalculateAndPushBattleData()
+                }
             }
         } else {
             hasExplicitOppCpInCurrentFrame = false
@@ -15527,6 +16144,9 @@ class OverlayService : LifecycleService() {
                 }
                 if (newOppSlotIdx in 0..2 && hasExplicitOppCpInCurrentFrame && lastObservedOppNameplateCp in 100..5999 && oppSlotObservedCp[newOppSlotIdx] <= 0) {
                     oppSlotObservedCp[newOppSlotIdx] = lastObservedOppNameplateCp
+                    if (tryDisambiguateOpponentFormByObservedCp(newOppSlotIdx, newBaseSpecies, lastObservedOppNameplateCp)) {
+                        // activeOpponentName & isOpponentShadow already refreshed inside form disambiguation
+                    }
                 }
                 // Resurrection Guard: Any Pokémon entering the field is 100% alive (restore its last known pre-faint HP%)
                 if (newOppSlotIdx in 0..2 && oppFaintedSlots[newOppSlotIdx]) {
@@ -15546,8 +16166,9 @@ class OverlayService : LifecycleService() {
                         phaseOppTurns = 0
                     } else {
                         battleClockAnchorMs = System.currentTimeMillis() - (phasePlayerTurns.coerceIn(1, 8) * 500L)
-                        val leadOppFastTurns = OverlayService.resolveFastTurnsStatic(matched.defaultFastMove, matched.fastTurns).coerceIn(1, 5)
-                        val leadOppFastEnergy = OverlayService.resolveFastEnergyStatic(matched.defaultFastMove, leadOppFastTurns).coerceIn(2, 20)
+                        val leadOppMeta = getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow)
+                        val leadOppFastTurns = OverlayService.resolveFastTurnsStatic(leadOppMeta.defaultFastMove, leadOppMeta.fastTurns).coerceIn(1, 5)
+                        val leadOppFastEnergy = OverlayService.resolveFastEnergyStatic(leadOppMeta.defaultFastMove, leadOppFastTurns).coerceIn(2, 20)
                         val completedLeadOppMoves = phasePlayerTurns / leadOppFastTurns
                         if (completedLeadOppMoves > 0) {
                             oppSlotEnergy[0] = (completedLeadOppMoves * leadOppFastEnergy).coerceIn(0, 100)
@@ -15604,6 +16225,8 @@ class OverlayService : LifecycleService() {
                     oppSlotBpToastEmitted.fill(false)
                     oppSlotOutBpToastEmitted.fill(false)
                     oppSlotFastShadowTrend.fill(false)
+                    oppRawPulseCount.fill(0)
+                    oppLastRawPulseMs.fill(0L)
                     lastFastEvalPairKey = ""
                     lastOppSwitchInWallMs = System.currentTimeMillis()
                     confirmedOppSlotHpPct.fill(100)
@@ -19570,12 +20193,18 @@ class OverlayService : LifecycleService() {
         val baseKey = nextVariant.baseSpecies.lowercase()
         val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
         activeOpponentName = nextVariant.name
+        userManualFormLocks[baseKey] = nextVariant.name
+        autoFormProvenance[baseKey] = "MANUAL"
         manualFormOverrides[baseKey] = nextVariant.name
 
         if (!FormResolver.isShadowEligibleVariant(nextVariant)) {
             isOpponentShadow = false
             defaultPriorShadowStates[baseKey] = false
             manualShadowOverrides[baseKey] = false
+            if (!userManualShadowLocks.containsKey(baseKey)) {
+                autoVerifiedShadowStates.remove(baseKey)
+                autoShadowProvenance.remove(baseKey)
+            }
         } else {
             val (_, prefShad) = FormResolver.getEffectiveRankAndShadowForVariant(nextVariant, activeLeague)
             defaultPriorShadowStates[baseKey] = prefShad
@@ -19589,9 +20218,18 @@ class OverlayService : LifecycleService() {
         }
         if (existingIdx >= 0) {
             detectedOpponents[existingIdx] = nextVariant.name
+            syncRecommendedGoalForRevealedOpponentsImmediate()
+            oppSlotLiveInBpDeltaHp[existingIdx] = 0
+            oppSlotLiveOutBpDeltaHp[existingIdx] = 0
+            oppSlotBpToastEmitted[existingIdx] = false
+            oppSlotOutBpToastEmitted[existingIdx] = false
+            detectedOppFastMoveOverride[existingIdx] = ""
+            oppFastMoveConfirmed[existingIdx] = false
+            oppFastMoveStatus[existingIdx] = "unconfirmed"
         } else {
             upsertDetectedOpponentBySpecies(nextVariant.name, baseKey)
         }
+        syncCurrentBattleFormAndShadowTimelineForSpecies(baseKey, nextVariant.name, isOpponentShadow)
         recalculateAndPushBattleData()
     }
 
@@ -20609,6 +21247,9 @@ class OverlayService : LifecycleService() {
                 "oppShadowVerified" to false,
                 "oppShadowLocked" to false,
                 "oppShadowSource" to "",
+                "oppFormVerified" to false,
+                "oppFormLocked" to false,
+                "oppFormSource" to "",
                 "liveOppBpDeltaHp" to 0,
                 "liveMyBpDeltaHp" to 0,
                 "confirmedOppChargedMoves" to emptyList<String>(),
@@ -22625,6 +23266,9 @@ class OverlayService : LifecycleService() {
             "oppIvSourceTag" to (activeOppIvProfile?.sourceTag ?: "PRIOR"),
             "currentFormLabel" to oppMeta.formLabel,
             "availableForms" to availableOpponentForms.map { it.formLabel },
+            "oppFormVerified" to (userManualFormLocks.containsKey(activeBaseKey) || autoVerifiedForms.containsKey(activeBaseKey)),
+            "oppFormLocked" to userManualFormLocks.containsKey(activeBaseKey),
+            "oppFormSource" to (if (userManualFormLocks.containsKey(activeBaseKey)) "MANUAL" else autoFormProvenance[activeBaseKey].orEmpty()),
             "userActivePokemon" to activePlayerName,
             "activeUserSlotIndex" to activeUserSlotIndex,
             "activeOpponentSlotIndex" to activeOpponentSlotIndex,
