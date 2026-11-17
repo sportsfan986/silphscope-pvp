@@ -172,6 +172,10 @@ export interface WebBattleLogEntry {
     fastMove?: string | null;
     fastStatus?: string | null;
     chargedMoves?: string[];
+    shadowSource?: string | null;
+    observedCp?: number | null;
+    bestGuessIvs?: string | null;
+    bpBulkTags?: string[];
   }[];
   issueFlagged?: boolean;
   issueNote?: string;

@@ -2,6 +2,18 @@
 
 ---
 
+## v7.50 (2026-11-16) — 3D HSV Shadow Aura Detection, Bidirectional ΔHP & Joint Fast-Move Verification, Observed-CP Best-Guess IVs & Live Breakpoints/Bulkpoints
+*Major Android APK, Web Simulator & Cloudflare Edge milestone (`v7.50`, `versionCode = 1750`) completing Roadmap Features #1 (`shadow-detect`) and #2 (`fast-move-damage`) with zero-allocation 3D battlefield Shadow aura detection, bidirectional fast/charged ΔHP & turn-cadence verification, observed-CP opponent IV narrowing, and live Breakpoint/Bulkpoint surfacing.*
+
+### Highlights
+- **3D Battlefield HSV Shadow Aura Detection & 3-Confounder Filtering (`PixelScannerEngine.kt`, `OverlayService.kt`)**: Samples a zero-allocation `24×16` opponent sprite ROI (`0.520w..0.855w`, `oppHpRowY`-anchored) with per-pixel temporal RGB motion (`movingAuraDensity`) on the Vision thread, enforcing stricter thresholds on purple-palette species, blocking foreground player Shadow / *Moltres (Galarian)* bleed (metadata + `12×8` lower-left motion probe), and gating out active Ghost/purple attack VFX (*Shadow Claw*, *Hex*, etc.) and post-faint switch cards.
+- **Manual Lock vs. Auto-Verified Shadow Provenance & Retroactive Sync**: Separates true user HUD Shadow taps (`🔒` permanent match lock) from PvPoke priors and auto-verified states (`✓` via `AURA`, `OUT_FAST_DHP`, `IN_FAST_DHP`, `IN_CHG_DHP`, `OUT_CHG_DHP`), retroactively syncing active battle timeline events and suppressing routine `< 2.8s` entry toasts while emitting concise reason-tagged toasts on mid-battle flips (always muted in Log-Only Stealth Mode).
+- **Stat-Stage-Aware Joint `(FastMove × ShadowState)` & Turn-Cadence (`dtMs`) Evaluator**: Fixes missing Attack/Defense stat stages in Section `1E`, combines incoming/outgoing fast & unshielded charged `ΔHP` (`14–95%`) with observed `1t–5t` HP-step intervals, and requires non-standard fast move overrides to beat the standard fast move across unresolved Shadow hypotheses.
+- **Observed-CP Best-Guess Opponent IVs & Option A Live Breakpoints/Bulkpoints (`IvMatrixEngine.kt`, `overlay.html`)**: Narrows opponent 4,096 IV spreads by captured nameplate CP and live `ΔHP` to drive live charged-move `ivDeltaPct` (`↑`/`↓`), CMP ties, KO turn counts, and Shield Decision Overlay survival math, while flagging integer `±1 HP/hit` fast-move Breakpoints/Bulkpoints (`⚡BP+1`, `🛡️BLK-1`, `⚠️BP+1`) strictly from opponent IV variance across Full and Compact HUD modes with zero added vertical height.
+- **Settings, D1 Sync & DVR Replay Parity (`MainActivity.kt`, `BattleDvrEngine.kt`, `worker.mjs`)**: Added a D1-synced `🟣 Auto Shadow & IV Breakpoint Detection` toggle in ⚙️ Settings (sharing Strict / Balanced / Aggressive sensitivity) and extended `BattleDeepTraceFrame`, `OpponentObservedMoves`, In-App DVR Replay, and `/watch/:shareId` Web Replay Theater.
+
+---
+
 ## v7.45 (2026-11-16) — Passive Scroll-Down ELO Auto-OCR Fix, Live GBL Set Counter Sync & Split HUD Touch Keypad
 *Live Android APK, Web Simulator & Cloudflare Edge release (`v7.45`, `versionCode = 1745`) fixing passive scroll-down ELO auto-capture blockers, syncing set battle progress directly from Pokémon GO's on-screen `X/5 battles played` readout, and splitting HUD ELO scan and zero-IME manual keypad controls.*
 

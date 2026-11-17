@@ -1127,4 +1127,294 @@ object IvMatrixEngine {
             computedAtMs = System.currentTimeMillis()
         )
     }
+
+    // =========================================================================
+    // Feature #1 & #2: Live Observed-CP IV Narrowing & Best-Guess Opponent IVs
+    // =========================================================================
+
+    data class OpponentBestGuessIvProfile(
+        val standardAtk: Double,
+        val standardDef: Double,
+        val standardHp: Int,
+        val rank1Atk: Double,
+        val rank1Def: Double,
+        val rank1Hp: Int,
+        val bestGuessAtk: Double,
+        val bestGuessDef: Double,
+        val bestGuessHp: Int,
+        val bestGuessCp: Int,
+        val bestGuessIvs: String,
+        val bestGuessLevel: Double,
+        val minFeasibleAtk: Double,
+        val maxFeasibleAtk: Double,
+        val minFeasibleDef: Double,
+        val maxFeasibleDef: Double,
+        val minFeasibleHp: Int,
+        val maxFeasibleHp: Int,
+        val cpMatchedCount: Int,
+        val sourceTag: String // "PRIOR" | "CP" | "DHP" | "CP+DHP"
+    )
+
+    private val bestGuessLock: Any = Any()
+    private val bestGuessCache: LinkedHashMap<String, OpponentBestGuessIvProfile> =
+        object : LinkedHashMap<String, OpponentBestGuessIvProfile>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, OpponentBestGuessIvProfile>?): Boolean {
+                return size > 192
+            }
+        }
+
+    private val UNDERLEVEL_SYNTH_IV_SEEDS: List<Triple<Int, Int, Int>> = listOf(
+        Triple(15, 15, 15),
+        Triple(15, 14, 14),
+        Triple(14, 15, 15),
+        Triple(14, 14, 14),
+        Triple(13, 13, 13),
+        Triple(12, 12, 12),
+        Triple(10, 10, 10),
+        Triple(1, 15, 15),
+        Triple(0, 15, 15),
+        Triple(5, 15, 15),
+        Triple(15, 10, 10)
+    )
+
+    private fun findCpMatchingSpreadsForOpponent(
+        rawMeta: PokemonMeta,
+        league: String,
+        observedCp: Int,
+        stdSpread: IvSpreadEvalDetails,
+        rank1Spread: IvSpreadEvalDetails
+    ): List<IvSpreadEvalDetails> {
+        if (observedCp !in 100..5999) return emptyList()
+        val table50 = getOrBuildIvRankTable(rawMeta, league, false)
+        val exact50 = table50.byIndex.filter { it.cp == observedCp }
+        if (exact50.isNotEmpty()) return exact50
+
+        if (observedCp > table50.hundo.cp) {
+            val table51 = getOrBuildIvRankTable(rawMeta, league, true)
+            val exact51 = table51.byIndex.filter { it.cp == observedCp }
+            if (exact51.isNotEmpty()) return exact51
+        }
+
+        val minTable50Cp = table50.byIndex.minOfOrNull { it.cp } ?: 10
+        if (observedCp >= minTable50Cp - 1 && observedCp <= table50.hundo.cp + 2) {
+            val near50 = table50.byIndex.filter { abs(it.cp - observedCp) <= 1 }
+            if (near50.isNotEmpty()) return near50
+        }
+
+        // Underleveled Pokémon (e.g., Lv 40..49 in Master League or non-maxed GL/UL Pokémon):
+        val seeds = (UNDERLEVEL_SYNTH_IV_SEEDS + listOf(
+            Triple(stdSpread.atkIv, stdSpread.defIv, stdSpread.staIv),
+            Triple(rank1Spread.atkIv, rank1Spread.defIv, rank1Spread.staIv)
+        )).distinct()
+        val exactSynth = ArrayList<IvSpreadEvalDetails>(16)
+        val nearSynth = ArrayList<IvSpreadEvalDetails>(16)
+        for ((a, d, s) in seeds) {
+            val uAtk = (rawMeta.atk + a).coerceAtLeast(20.0)
+            val uDef = (rawMeta.def + d).coerceAtLeast(20.0)
+            val uHp = (rawMeta.hp.toDouble() + s).coerceAtLeast(20.0)
+            for ((lvl, cpm) in CPM_TABLE) {
+                if (lvl < 10.0 || lvl > 50.0 + 1e-6) continue
+                val cp = floor(uAtk * kotlin.math.sqrt(uDef * uHp) * cpm * cpm / 10.0).toInt().coerceAtLeast(10)
+                val diff = abs(cp - observedCp)
+                if (diff <= 2) {
+                    val effAtk = uAtk * cpm
+                    val effDef = uDef * cpm
+                    val effHp = floor(uHp * cpm).toInt().coerceAtLeast(10)
+                    val sp = effAtk * effDef * effHp.toDouble()
+                    val detail = IvSpreadEvalDetails(
+                        atkIv = a,
+                        defIv = d,
+                        staIv = s,
+                        ivs = "$a/$d/$s",
+                        cp = cp,
+                        level = lvl,
+                        cpm = cpm,
+                        effAtk = (effAtk * 100.0).roundToInt() / 100.0,
+                        effDef = (effDef * 100.0).roundToInt() / 100.0,
+                        effHp = effHp,
+                        statProduct = (sp * 100.0).roundToInt() / 100.0,
+                        rank = table50.byIndex[a * 256 + d * 16 + s].rank,
+                        pctOfRank1 = table50.byIndex[a * 256 + d * 16 + s].pctOfRank1
+                    )
+                    if (diff == 0) exactSynth.add(detail) else nearSynth.add(detail)
+                }
+            }
+        }
+        return if (exactSynth.isNotEmpty()) exactSynth else nearSynth
+    }
+
+    fun resolveBestGuessOpponentIvProfile(
+        speciesName: String,
+        league: String,
+        isShadow: Boolean,
+        observedCp: Int = -1,
+        inFastObsRawHpLossPerHit: Int = -1,
+        inFastPower: Int = 0,
+        inFastStab: Double = 1.0,
+        inFastTypeEff: Double = 1.0,
+        userEffDefWithShadow: Double = 0.0,
+        outFastObsPctPerHit: Double = -1.0,
+        outFastPower: Int = 0,
+        outFastStab: Double = 1.0,
+        outFastTypeEff: Double = 1.0,
+        userEffAtkWithShadow: Double = 0.0,
+        knownInChgObsPct: Int = -1,
+        knownInChgEffPower: Double = 0.0,
+        knownInChgStab: Double = 1.0,
+        knownInChgTypeEff: Double = 1.0,
+        userHpInt: Int = 100,
+        knownOutChgObsPct: Int = -1,
+        knownOutChgEffPower: Double = 0.0,
+        knownOutChgStab: Double = 1.0,
+        knownOutChgTypeEff: Double = 1.0
+    ): OpponentBestGuessIvProfile? {
+        val rawMeta = resolveRawSpeciesMeta(speciesName) ?: return null
+        val roundedOutPct = if (outFastObsPctPerHit > 0.0) (outFastObsPctPerHit * 10.0).roundToInt() else -1
+        val cacheKey = buildString {
+            append(rawMeta.speciesId).append('|')
+            append(OverlayService.normalizeLeagueKeyStatic(league)).append('|')
+            append(if (isShadow) 1 else 0).append('|')
+            append(observedCp).append('|')
+            append(inFastObsRawHpLossPerHit).append(':').append(inFastPower).append(':').append((userEffDefWithShadow * 10.0).roundToInt()).append('|')
+            append(roundedOutPct).append(':').append(outFastPower).append(':').append((userEffAtkWithShadow * 10.0).roundToInt()).append('|')
+            append(knownInChgObsPct).append(':').append(knownInChgEffPower.roundToInt()).append(':').append(userHpInt).append('|')
+            append(knownOutChgObsPct).append(':').append(knownOutChgEffPower.roundToInt())
+        }
+        synchronized(bestGuessLock) {
+            bestGuessCache[cacheKey]?.let { return it }
+        }
+
+        val table50 = getOrBuildIvRankTable(rawMeta, league, false)
+        val stdSpread = getPresetIvSpread(rawMeta.name, league, IvPresetMode.PVPOKE_DEFAULT, false) ?: table50.rank1
+        val r1Spread = table50.rank1
+        val cpCap = OverlayService.getLeagueCpCapStatic(league)
+        val isOpenMaster = cpCap > 2500
+
+        val cpMatched = findCpMatchingSpreadsForOpponent(rawMeta, league, observedCp, stdSpread, r1Spread)
+        val hasDhpEvidence = (inFastObsRawHpLossPerHit >= 1 && inFastPower > 0 && userEffDefWithShadow > 1.0) ||
+            (outFastObsPctPerHit > 0.4 && outFastPower > 0 && userEffAtkWithShadow > 1.0) ||
+            (knownInChgObsPct in 10..96 && knownInChgEffPower > 0.0 && userEffDefWithShadow > 1.0) ||
+            (knownOutChgObsPct in 10..96 && knownOutChgEffPower > 0.0 && userEffAtkWithShadow > 1.0)
+
+        val candidatePool: List<IvSpreadEvalDetails> = when {
+            cpMatched.isNotEmpty() -> cpMatched
+            hasDhpEvidence -> table50.byIndex.toList()
+            else -> emptyList()
+        }
+
+        var minAtk = table50.byIndex[0].effAtk
+        var maxAtk = minAtk
+        var minDef = table50.byIndex[0].effDef
+        var maxDef = minDef
+        var minHp = table50.byIndex[0].effHp
+        var maxHp = minHp
+        val boundsSource = if (cpMatched.isNotEmpty()) cpMatched else table50.byIndex.toList()
+        for (idx in boundsSource.indices) {
+            val sp = boundsSource[idx]
+            if (idx == 0) {
+                minAtk = sp.effAtk; maxAtk = sp.effAtk
+                minDef = sp.effDef; maxDef = sp.effDef
+                minHp = sp.effHp; maxHp = sp.effHp
+            } else {
+                if (sp.effAtk < minAtk) minAtk = sp.effAtk
+                if (sp.effAtk > maxAtk) maxAtk = sp.effAtk
+                if (sp.effDef < minDef) minDef = sp.effDef
+                if (sp.effDef > maxDef) maxDef = sp.effDef
+                if (sp.effHp < minHp) minHp = sp.effHp
+                if (sp.effHp > maxHp) maxHp = sp.effHp
+            }
+        }
+
+        val bestSpread: IvSpreadEvalDetails = if (candidatePool.isEmpty()) {
+            stdSpread
+        } else {
+            var topSpread = candidatePool[0]
+            var topScore = Double.NEGATIVE_INFINITY
+            val atkShadMult = if (isShadow) 1.2 else 1.0
+            val defShadMult = if (isShadow) 0.8333333 else 1.0
+            val inConst = 0.5 * inFastPower * inFastStab * inFastTypeEff * 1.3
+            val outConst = 0.5 * outFastPower * outFastStab * outFastTypeEff * 1.3
+            val inChgConst = 0.5 * knownInChgEffPower * knownInChgStab * knownInChgTypeEff * 1.3
+            val outChgConst = 0.5 * knownOutChgEffPower * knownOutChgStab * knownOutChgTypeEff * 1.3
+            val safeUserHp = userHpInt.coerceAtLeast(1).toDouble()
+
+            for (s in candidatePool) {
+                var score = if (isOpenMaster) {
+                    (s.pctOfRank1 * 0.04) - (s.rank * 0.0001)
+                } else {
+                    -(s.rank * 0.0004)
+                }
+                if (s.ivs == stdSpread.ivs && s.cp == stdSpread.cp) {
+                    score += 0.35
+                }
+                val sAtkEff = s.effAtk * atkShadMult
+                val sDefEff = (s.effDef * defShadMult).coerceAtLeast(1.0)
+
+                if (inFastObsRawHpLossPerHit >= 1 && inFastPower > 0 && userEffDefWithShadow > 1.0) {
+                    val predRaw = floor(inConst * (sAtkEff / userEffDefWithShadow)).toInt() + 1
+                    val diff = abs(predRaw - inFastObsRawHpLossPerHit)
+                    score += when (diff) {
+                        0 -> 12.0
+                        1 -> -6.0
+                        else -> -25.0 * diff.toDouble()
+                    }
+                }
+                if (outFastObsPctPerHit > 0.4 && outFastPower > 0 && userEffAtkWithShadow > 1.0) {
+                    val predOutRaw = floor(outConst * (userEffAtkWithShadow / sDefEff)) + 1.0
+                    val predOutPct = (predOutRaw / s.effHp.toDouble()) * 100.0
+                    score -= 4.5 * abs(predOutPct - outFastObsPctPerHit)
+                }
+                if (knownInChgObsPct in 10..96 && knownInChgEffPower > 0.0 && userEffDefWithShadow > 1.0) {
+                    val predInChgRaw = floor(inChgConst * (sAtkEff / userEffDefWithShadow)) + 1.0
+                    val predInChgPct = (predInChgRaw / safeUserHp) * 100.0
+                    score -= 1.6 * abs(predInChgPct - knownInChgObsPct.toDouble())
+                }
+                if (knownOutChgObsPct in 10..96 && knownOutChgEffPower > 0.0 && userEffAtkWithShadow > 1.0) {
+                    val predOutChgRaw = floor(outChgConst * (userEffAtkWithShadow / sDefEff)) + 1.0
+                    val predOutChgPct = (predOutChgRaw / s.effHp.toDouble()) * 100.0
+                    score -= 1.6 * abs(predOutChgPct - knownOutChgObsPct.toDouble())
+                }
+
+                if (score > topScore) {
+                    topScore = score
+                    topSpread = s
+                }
+            }
+            topSpread
+        }
+
+        val sourceTag = when {
+            cpMatched.isNotEmpty() && hasDhpEvidence -> "CP+DHP"
+            cpMatched.isNotEmpty() -> "CP"
+            hasDhpEvidence -> "DHP"
+            else -> "PRIOR"
+        }
+
+        val result = OpponentBestGuessIvProfile(
+            standardAtk = stdSpread.effAtk,
+            standardDef = stdSpread.effDef,
+            standardHp = stdSpread.effHp,
+            rank1Atk = r1Spread.effAtk,
+            rank1Def = r1Spread.effDef,
+            rank1Hp = r1Spread.effHp,
+            bestGuessAtk = bestSpread.effAtk,
+            bestGuessDef = bestSpread.effDef,
+            bestGuessHp = bestSpread.effHp,
+            bestGuessCp = bestSpread.cp,
+            bestGuessIvs = bestSpread.ivs,
+            bestGuessLevel = bestSpread.level,
+            minFeasibleAtk = minAtk,
+            maxFeasibleAtk = maxAtk,
+            minFeasibleDef = minDef,
+            maxFeasibleDef = maxDef,
+            minFeasibleHp = minHp,
+            maxFeasibleHp = maxHp,
+            cpMatchedCount = cpMatched.size,
+            sourceTag = sourceTag
+        )
+        synchronized(bestGuessLock) {
+            bestGuessCache[cacheKey] = result
+        }
+        return result
+    }
 }

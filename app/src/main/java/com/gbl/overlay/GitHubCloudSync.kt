@@ -465,6 +465,7 @@ private val SYNCABLE_BOOLEAN_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_ENABLE_HP_TRACKING,
     OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING,
     OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT,
+    OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT,
     OverlayService.PREFS_KEY_VISION_BATTERY_SAVER,
     OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK,
     OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS,
@@ -1481,6 +1482,7 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
     val guiHapticLeadMs = prefs.getInt(PREFS_KEY_PREDICTIVE_GUI_HAPTIC_LEAD_MS, DEFAULT_PREDICTIVE_GUI_HAPTIC_LEAD_MS).coerceIn(100, 500)
     val circlePriority = prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid"
     val altFastDetect = prefs.getBoolean("enable_alt_fast_move_detect", true)
+    val autoShadowDetect = prefs.getBoolean(PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
     val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
     val hpTracking = prefs.getBoolean("enable_hp_tracking", DEFAULT_ENABLE_HP_TRACKING)
     val energyTracking = prefs.getBoolean("enable_energy_tracking", DEFAULT_ENABLE_ENERGY_TRACKING)
@@ -1508,6 +1510,7 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
         "predictiveGuiHapticLeadMs" to guiHapticLeadMs,
         "chargeCirclePriorityMode" to circlePriority,
         "altFastMoveDetectEnabled" to altFastDetect,
+        "autoShadowDetectEnabled" to autoShadowDetect,
         "fastDetectTurnOffset" to fastTurnOffset,
         "swapThrowRollbackWindowMs" to swapRollbackMs,
         "altFastDetectStrictness" to altFastStrictness,
@@ -1532,11 +1535,12 @@ internal fun OverlayService.Companion.computeDebounceSettingsProfileSignatureSta
     }
     val circlePriority = (prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid").uppercase()
     val altFastDetect = if (prefs.getBoolean("enable_alt_fast_move_detect", true)) 1 else 0
+    val autoShadowDetect = if (prefs.getBoolean(PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, DEFAULT_ENABLE_AUTO_SHADOW_DETECT)) 1 else 0
     val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
     val swapRollbackMs = prefs.getInt(PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS)
     val altFastStrictness = (prefs.getString(PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, DEFAULT_ALT_FAST_DETECT_STRICTNESS) ?: DEFAULT_ALT_FAST_DETECT_STRICTNESS).uppercase()
     val shieldChipTolPct = prefs.getInt(PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, DEFAULT_SHIELD_CHIP_TOLERANCE_PCT)
-    return "HP${hpSamples}_E${energySamples}_TOL${tolPct}_LEAD${leadMs}_${circlePriority}_ALT${altFastDetect}_${altFastStrictness}_OFF${fastTurnOffset}_SWAP${swapRollbackMs}_CHIP${shieldChipTolPct}_FAINT25"
+    return "HP${hpSamples}_E${energySamples}_TOL${tolPct}_LEAD${leadMs}_${circlePriority}_ALT${altFastDetect}_SHAD${autoShadowDetect}_${altFastStrictness}_OFF${fastTurnOffset}_SWAP${swapRollbackMs}_CHIP${shieldChipTolPct}_FAINT25"
 }
 
 internal fun OverlayService.Companion.loadPendingSettingsChangesStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetrySettingsChangeEvent> {

@@ -189,6 +189,10 @@ class TaskerOverlayActivity : Activity() {
                 OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
                 prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
             )
+            putExtra(
+                OverlayService.EXTRA_ENABLE_AUTO_SHADOW_DETECT,
+                prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, OverlayService.DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
+            )
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50))
@@ -313,6 +317,10 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(
                             OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
                             prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+                        )
+                        putExtra(
+                            OverlayService.EXTRA_ENABLE_AUTO_SHADOW_DETECT,
+                            prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, OverlayService.DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
                         )
                         putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
                         putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))

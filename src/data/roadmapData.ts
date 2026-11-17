@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.50',
+    codename: '3D HSV Shadow Aura Detection, Bidirectional ΔHP & Joint Fast-Move Verification, Observed-CP Best-Guess IVs & Live Breakpoints/Bulkpoints',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Completes Roadmap Features #1 and #2 with zero-allocation 3D HSV + temporal-motion Shadow aura detection (with purple-species, foreground Shadow bleed, and Ghost VFX confounder rejection), stat-stage-aware Joint (FastMove × ShadowState) + turn-cadence verification, observed-CP Best-Guess Opponent IV charged damage deltas, and live integer HP Breakpoint/Bulkpoint pills across Full & Compact HUDs.',
+    icon: '🟣',
+    accentColor: '#A855F7',
+    highlights: [
+      'Zero-allocation 24×16 3D HSV + temporal RGB motion Shadow aura scanner on the Vision thread with purple-species, foreground Shadow bleed (12×8 probe), and Ghost/purple VFX confounder gates',
+      'Separated manual user Shadow locks (🔒) from PvPoke priors and auto-verified provenance (✓), with unshielded incoming/outgoing charged & fast ΔHP verification and retroactive timeline sync',
+      'Stat-stage-aware Joint (FastMove × ShadowState) + 1t–5t interval cadence evaluator preventing false non-standard fast move overrides under unresolved Shadow states or stat buffs/debuffs',
+      'Observed-CP Best-Guess Opponent IV narrowing driving live charged ivDeltaPct (↑/↓), CMP, Shield Decision Overlay math, and Option A ±1 HP/hit Breakpoint/Bulkpoint micro-pills across HUD & DVR Replay'
+    ]
+  },
+  {
     version: 'v7.45',
     codename: 'Passive Scroll-Down ELO Auto-OCR Fix, Live GBL Set Counter Sync & Split HUD Touch Keypad',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Unblocks passive scroll-down ELO auto-OCR on white GBL lobby cards and adjacent battery overlays (-mA), syncs HUD set battle counts (0/5–5/5) directly from Pokémon GO\'s on-screen "X/5 battles played" text, and splits [🎯 ELO (X/5)][✏️] into 1-tap Scan plus a zero-IME in-overlay touch keypad with ± steppers.',
     icon: '🎯',
@@ -342,36 +356,6 @@ export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
 ];
 
 export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
-  {
-    id: 'shadow-detect',
-    title: 'Shadow Pokémon State Detection',
-    badge: 'VISION PIPELINE',
-    status: 'Planned',
-    statusColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-    category: 'HUD / Combat Engine',
-    icon: '🟣',
-    description: 'Automatic classification of base vs. Shadow forms to immediately factor in +20% Atk bonus and -20% Def penalty into break-point calculations and turn-to-KO math.',
-    keyGoals: [
-      'Upper-right opponent model HSV particle flare sampling on entry',
-      'Visual bleed filter when player active Pokémon is also Shadow',
-      'Damage-delta cross-verification with fast-move tracker'
-    ]
-  },
-  {
-    id: 'fast-move-damage',
-    title: 'Fast Move Damage Tracking & Dynamic Verification',
-    badge: 'REAL-TIME MATH',
-    status: 'In Design',
-    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-    category: 'HUD / Combat Engine',
-    icon: '⚡',
-    description: 'Measure discrete HP bar pixel delta (ΔHP) per fast move cadence tick against theoretical tables to confirm unknown fast moves and verify Shadow status in real time.',
-    keyGoals: [
-      'Differentiate ambiguous 2-turn & 3-turn move variants instantly',
-      'Empirical +20% damage signature to confirm or refute Shadow status',
-      'Live stat breakpoint and bulkpoint detection'
-    ]
-  },
   {
     id: 'dual-screen-telemetry',
     title: 'Real-Time Dual-Screen Telemetry Streaming',

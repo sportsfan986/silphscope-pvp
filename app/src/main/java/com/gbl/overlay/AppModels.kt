@@ -70,7 +70,11 @@ data class OpponentObservedMoves(
     val species: String = "",
     val fastMove: String? = null,
     val fastStatus: String? = null,
-    val chargedMoves: List<String> = emptyList()
+    val chargedMoves: List<String> = emptyList(),
+    val shadowSource: String? = null,
+    val observedCp: Int? = null,
+    val bestGuessIvs: String? = null,
+    val bpBulkTags: List<String> = emptyList()
 )
 
 data class BattleLogEntry(

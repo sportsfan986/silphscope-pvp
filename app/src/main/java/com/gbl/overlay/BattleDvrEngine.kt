@@ -169,6 +169,20 @@ internal fun OverlayService.buildDvrTraceSnapshot(nowMs: Long): BattleDeepTraceF
     val battleElapsed = if (battleClockAnchorMs > 0L) (nowMs - battleClockAnchorMs).coerceAtLeast(0L) else 0L
     val pSwapRem = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
     val oSwapRem = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+    val oLocked = activeOppBase.isNotEmpty() && userManualShadowLocks.containsKey(activeOppBase)
+    val oVerified = oLocked || (activeOppBase.isNotEmpty() && autoVerifiedShadowStates.containsKey(activeOppBase))
+    val oSrc = if (oLocked) "MANUAL" else autoShadowProvenance[activeOppBase].orEmpty()
+    val oCp = oppSlotObservedCp.getOrElse(oIdx) { -1 }
+    val oFastOvr = detectedOppFastMoveOverride.getOrNull(oIdx)?.trim().orEmpty()
+    val oFastSt = oppFastMoveStatus.getOrElse(oIdx) { "UNCONFIRMED" }
+    val oBgIvs = if (activeOppBase.isNotEmpty() && oCp > 0) {
+        IvMatrixEngine.resolveBestGuessOpponentIvProfile(
+            speciesName = activeOpponentName,
+            league = currentPreset?.league ?: "MASTER LEAGUE",
+            isShadow = isOpponentShadow,
+            observedCp = oCp
+        )?.bestGuessIvs.orEmpty()
+    } else ""
 
     return BattleDeepTraceFrame(
         frameIdx = 0,
@@ -202,7 +216,7 @@ internal fun OverlayService.buildDvrTraceSnapshot(nowMs: Long): BattleDeepTraceF
         activeUserIdx = uIdx,
         activeOppIdx = oIdx,
         activeUserSpecies = activeUserPokemonName.orEmpty(),
-        activeOppSpecies = activeOpponentName,
+        activeOppSpecies = formatOpponentNameWithShadow(activeOpponentName),
         userAtkStage = playerSlotAtkStage.getOrElse(uIdx) { 0 },
         userDefStage = playerSlotDefStage.getOrElse(uIdx) { 0 },
         userDisguiseBusted = playerSlotDisguiseBusted.getOrElse(uIdx) { false },
@@ -233,8 +247,19 @@ internal fun OverlayService.buildDvrTraceSnapshot(nowMs: Long): BattleDeepTraceF
         oppSlotConfirmedChargedMoves = (0..2).map { idx ->
             confirmedOppChargedMoves.getOrNull(idx)?.toList() ?: emptyList()
         },
-        revealedOppSpecies = detectedOpponents.toList(),
-        userSlotEverOnField = playerSlotEverOnField.toList()
+        revealedOppSpecies = detectedOpponents.map { formatOpponentNameWithShadow(it) },
+        userSlotEverOnField = playerSlotEverOnField.toList(),
+        oppShadowVerified = oVerified,
+        oppShadowLocked = oLocked,
+        oppShadowSource = oSrc,
+        oppAuraDensity = oppSlotLastAuraDensity.getOrElse(oIdx) { 0f },
+        oppAuraFlicker = oppSlotLastAuraFlicker.getOrElse(oIdx) { 0f },
+        oppObservedCp = oCp,
+        oppBestGuessIvs = oBgIvs,
+        oppFastMoveResolved = oFastOvr,
+        oppFastMoveStatus = oFastSt,
+        liveMyBpDeltaHp = oppSlotLiveOutBpDeltaHp.getOrElse(oIdx) { 0 },
+        liveOppBpDeltaHp = oppSlotLiveInBpDeltaHp.getOrElse(oIdx) { 0 }
     )
 }
 
@@ -829,9 +854,6 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
             .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
             .trim()
         val base = FormResolver.extractBaseSpecies(cleanOpp).lowercase()
-        if (isShad) {
-            manualShadowOverrides[base] = true
-        }
         val matchedDetected = detectedOpponents.firstOrNull {
             FormResolver.extractBaseSpecies(it).equals(base, ignoreCase = true)
         }
@@ -842,17 +864,28 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
                 detectedOpponents[oIdx] = cleanOpp
             }
         }
+        if (frame.oppShadowLocked) {
+            userManualShadowLocks[base] = isShad
+        } else if (frame.oppShadowVerified) {
+            userManualShadowLocks.remove(base)
+            autoVerifiedShadowStates[base] = isShad
+        }
+        if (frame.oppShadowSource.isNotBlank()) {
+            autoShadowProvenance[base] = frame.oppShadowSource
+        }
+        manualShadowOverrides[base] = isShad
         isWaitingForOpponent = false
         activeOpponentName = matchedDetected ?: cleanOpp
         activeOpponentSpecies = base
-        isOpponentShadow = manualShadowOverrides[base] ?: isShad
+        isOpponentShadow = resolveEffectiveOpponentShadow(base, isShad)
     } else if (detectedOpponents.isNotEmpty()) {
         val fallbackOpp = detectedOpponents.getOrElse(oIdx.coerceIn(0, detectedOpponents.size - 1)) { detectedOpponents.first() }
         val base = FormResolver.extractBaseSpecies(fallbackOpp).lowercase()
+        val isFallbackShad = fallbackOpp.contains("Shadow", ignoreCase = true)
         isWaitingForOpponent = false
         activeOpponentName = fallbackOpp
         activeOpponentSpecies = base
-        isOpponentShadow = manualShadowOverrides[base] ?: false
+        isOpponentShadow = resolveEffectiveOpponentShadow(base, isFallbackShad)
     } else {
         isWaitingForOpponent = true
         activeOpponentName = "Waiting..."
@@ -901,6 +934,18 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
     }
     playerSlotDisguiseBusted[uIdx] = frame.userDisguiseBusted
     oppSlotDisguiseBusted[oIdx] = frame.oppDisguiseBusted
+    if (frame.oppObservedCp > 0) {
+        oppSlotObservedCp[oIdx] = frame.oppObservedCp
+    }
+    oppSlotLiveOutBpDeltaHp[oIdx] = frame.liveMyBpDeltaHp
+    oppSlotLiveInBpDeltaHp[oIdx] = frame.liveOppBpDeltaHp
+    if (frame.oppFastMoveStatus.isNotBlank()) {
+        oppFastMoveStatus[oIdx] = frame.oppFastMoveStatus
+        oppFastMoveConfirmed[oIdx] = frame.oppFastMoveStatus.startsWith("confirmed", ignoreCase = true)
+    }
+    if (frame.oppFastMoveResolved.isNotBlank()) {
+        detectedOppFastMoveOverride[oIdx] = frame.oppFastMoveResolved
+    }
 
     playerShieldsRemaining = frame.userShields.coerceIn(0, 2)
     oppShieldsRemaining = frame.oppShields.coerceIn(0, 2)

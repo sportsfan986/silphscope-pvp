@@ -121,6 +121,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textVisionBatterySaverDesc: TextView
     private lateinit var btnToggleAltFastMoveDetect: Button
     private lateinit var textAltFastMoveDetectDesc: TextView
+    private lateinit var btnToggleAutoShadowDetect: Button
+    private lateinit var textAutoShadowDetectDesc: TextView
     private lateinit var btnCycleFastDetectOffset: Button
     private lateinit var textFastDetectOffsetDesc: TextView
     private lateinit var btnCycleAltFastStrictness: Button
@@ -1272,6 +1274,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnCycleChargeCirclePriority.isInitialized) updateChargeCirclePriorityUi()
         if (::btnToggleVisionBatterySaver.isInitialized) updateVisionBatterySaverUi()
         if (::btnToggleAltFastMoveDetect.isInitialized) updateAltFastMoveDetectUi()
+        if (::btnToggleAutoShadowDetect.isInitialized) updateAutoShadowDetectUi()
         if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
         if (::btnCycleAltFastStrictness.isInitialized) updateAltFastStrictnessUi()
         if (::btnCycleShieldChipTol.isInitialized) updateShieldChipTolUi()
@@ -1365,6 +1368,8 @@ class MainActivity : AppCompatActivity() {
         textVisionBatterySaverDesc = findViewById(R.id.text_vision_battery_saver_desc)
         btnToggleAltFastMoveDetect = findViewById(R.id.btn_toggle_alt_fast_move_detect)
         textAltFastMoveDetectDesc = findViewById(R.id.text_alt_fast_move_detect_desc)
+        btnToggleAutoShadowDetect = findViewById(R.id.btn_toggle_auto_shadow_detect)
+        textAutoShadowDetectDesc = findViewById(R.id.text_auto_shadow_detect_desc)
         btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
         textFastDetectOffsetDesc = findViewById(R.id.text_fast_detect_offset_desc)
         btnCycleAltFastStrictness = findViewById(R.id.btn_cycle_alt_fast_strictness)
@@ -1711,6 +1716,7 @@ class MainActivity : AppCompatActivity() {
         updateChargeCirclePriorityUi()
         updateVisionBatterySaverUi()
         updateAltFastMoveDetectUi()
+        updateAutoShadowDetectUi()
         updateFastDetectOffsetUi()
         updateAltFastStrictnessUi()
         updateShieldChipTolUi()
@@ -2507,6 +2513,32 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnToggleAutoShadowDetect.setOnClickListener {
+            val currentEnable = prefs.getBoolean(
+                OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT,
+                OverlayService.DEFAULT_ENABLE_AUTO_SHADOW_DETECT
+            )
+            val nextEnable = !currentEnable
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, nextEnable).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_auto_shadow_detect",
+                triggerImmediateUpload = true
+            )
+            updateAutoShadowDetectUi()
+            updateAiTelemetryStatusUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ENABLE_AUTO_SHADOW_DETECT, nextEnable)
+                }
+                startService(updateIntent)
+            }
+        }
+
         btnToggleAltFastMoveDetect.setOnClickListener {
             val currentEnable = prefs.getBoolean(
                 OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT,
@@ -2522,6 +2554,7 @@ class MainActivity : AppCompatActivity() {
                 triggerImmediateUpload = true
             )
             updateAltFastMoveDetectUi()
+        updateAutoShadowDetectUi()
             updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
@@ -10035,6 +10068,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateAutoShadowDetectUi() {
+        if (!::btnToggleAutoShadowDetect.isInitialized) return
+        val enabled = prefs.getBoolean(
+            OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT,
+            OverlayService.DEFAULT_ENABLE_AUTO_SHADOW_DETECT
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleAutoShadowDetect.text = "Shadow Auto On"
+            btnToggleAutoShadowDetect.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleAutoShadowDetect.setTextColor(0xFFFFFFFF.toInt())
+            textAutoShadowDetectDesc.text = "Default: Enabled (3D HSV aura + fast/charged ΔHP verification & Best-Guess IV BP/Bulk; shares sensitivity below)"
+        } else {
+            btnToggleAutoShadowDetect.text = "Shadow Auto Off"
+            btnToggleAutoShadowDetect.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleAutoShadowDetect.setTextColor(theme.primaryTextColor)
+            textAutoShadowDetectDesc.text = "Active: Disabled (Opponent Shadow status stays locked to PvPoke prior/manual tap)"
+        }
+    }
+
     private fun updateAltFastMoveDetectUi() {
         if (!::btnToggleAltFastMoveDetect.isInitialized) return
         val enabled = prefs.getBoolean(
@@ -10368,6 +10421,10 @@ class MainActivity : AppCompatActivity() {
             putExtra(
                 OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
                 prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+            )
+            putExtra(
+                OverlayService.EXTRA_ENABLE_AUTO_SHADOW_DETECT,
+                prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, OverlayService.DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
             )
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, OverlayService.DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3))
             putExtra(

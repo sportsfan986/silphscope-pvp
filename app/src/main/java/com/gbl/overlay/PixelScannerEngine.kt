@@ -2959,3 +2959,275 @@ internal fun OverlayService.detectFloatingHpBarPct(
         -1
     }
 }
+
+private val PURPLE_OR_SHADOW_CONF_SPECIES: Set<String> = setOf(
+    "gengar", "haunter", "gastly", "sableye", "clodsire", "toxapex", "mareanie",
+    "drifblim", "drifloon", "muk", "grimer", "crobat", "golbat", "zubat",
+    "spiritomb", "goodra", "sliggoo", "goomy", "gligar", "gliscor",
+    "tinkaton", "tinkatuff", "tinkatink", "tapu fini", "mismagius", "misdreavus",
+    "dusknoir", "dusclops", "giratina", "ceruledge", "nidoking", "nidorino",
+    "swalot", "gulpin", "weezing", "koffing", "venomoth", "venonat",
+    "arbok", "ekans", "chandelure", "lampent", "litwick", "sinistcha",
+    "polteageist", "drapion", "skorupi", "skuntank", "stunky", "toxicroak",
+    "croagunk", "dragalge", "malamar", "inkay", "espeon", "mewtwo", "genesect",
+    "rattata", "raticate", "delcatty", "purrloin", "liepard", "pecharunt",
+    "munkidori", "fezandipiti", "okidogi", "lunala", "nihilego", "poipole",
+    "naganadel", "eternatus", "corviknight", "umbreon", "jellicent",
+    "annihilape", "dragapult", "flutter mane"
+)
+
+private val PURPLE_VFX_FAST_MOVES: Set<String> = setOf(
+    "shadow claw", "hex", "lick", "astonish", "sucker punch", "feint attack",
+    "snarl", "bite", "payback", "poison jab", "poison sting", "acid",
+    "psycho cut", "confusion", "extrasensory", "psywave", "magical leaf",
+    "charm", "fairy wind", "infestation"
+)
+
+internal data class ShadowAuraScanSample(
+    val valid: Boolean = false,
+    val fgBleedBlocked: Boolean = false,
+    val vfxContaminated: Boolean = false,
+    val isPurpleConfounderSpecies: Boolean = false,
+    val haloDensity: Float = 0f,
+    val movingAuraDensity: Float = 0f,
+    val upperPlumeDensity: Float = 0f,
+    val corePurpleDensity: Float = 0f,
+    val cellFlickerRatio: Float = 0f
+)
+
+private const val AURA_FLAG_SMOKE = 1
+private const val AURA_FLAG_VFX = 2
+
+private fun classifyShadowAuraPixel(px: Int, absY: Int, oppHpRowY: Int): Int {
+    val r = (px shr 16) and 0xFF
+    val g = (px shr 8) and 0xFF
+    val b = px and 0xFF
+    val maxCh = max(r, max(g, b))
+    val minCh = min(r, min(g, b))
+    val delta = maxCh - minCh
+    val valPct = (maxCh * 100) / 255
+    val satPct = if (maxCh == 0) 0 else (delta * 100) / maxCh
+    val hueDeg = if (delta >= 12) {
+        val rawH = when (maxCh) {
+            r -> (60 * (g - b)) / delta + (if (g < b) 360 else 0)
+            g -> (60 * (b - r)) / delta + 120
+            else -> (60 * (r - g)) / delta + 240
+        }
+        ((rawH % 360) + 360) % 360
+    } else {
+        -1
+    }
+
+    var flags = 0
+    if (delta >= 18 &&
+        hueDeg in 248..278 &&
+        satPct in 46..88 &&
+        valPct in 27..75 &&
+        (b - g) >= 20 &&
+        (r - g) >= 8
+    ) {
+        flags = flags or AURA_FLAG_SMOKE
+    }
+    if ((hueDeg in 277..332 && satPct >= 38 && valPct >= 78) ||
+        (valPct >= 93 && satPct <= 18 && absY >= oppHpRowY)
+    ) {
+        flags = flags or AURA_FLAG_VFX
+    }
+    return flags
+}
+
+/**
+ * Zero-allocation 3D Battlefield HSV Shadow Aura Scanner anchored to `oppHpRowY`.
+ * Enforces all 3 visual confounder filters empirically calibrated on GBL DVR traces:
+ * 1. Shifted opponent ROI (`x in 0.520w..0.855w`, `y in oppHpRowY-0.045h..min(0.525h, oppHpRowY+0.135h)`)
+ *    plus temporal RGB motion gating (`movingAuraDensity`) to eliminate Tinkaton hammer and static purple bodies.
+ * 2. Foreground Shadow / Galarian Moltres bleed gate (species check + direct `12x8` lower-left motion probe).
+ * 3. Ghost / purple attack VFX rejection (`PURPLE_VFX_FAST_MOVES` active battle gate + bright VFX pixel cutoff).
+ */
+internal fun OverlayService.scanOpponent3dShadowAura(
+    screen: Bitmap,
+    w: Int,
+    h: Int,
+    oppHpRowY: Int,
+    oppBaseSpecies: String,
+    isUserActiveShadow: Boolean,
+    userFastMoveName: String,
+    nowMs: Long
+): ShadowAuraScanSample {
+    val normSpecies = oppBaseSpecies.trim().lowercase()
+    val isPurpleConf = normSpecies in PURPLE_OR_SHADOW_CONF_SPECIES
+
+    val activeUserLower = (activeUserPokemonName ?: "").lowercase()
+    val isFgGalarianMoltres = activeUserLower.contains("moltres") && activeUserLower.contains("galarian")
+    if (isUserActiveShadow || isFgGalarianMoltres) {
+        oppAuraHasPrevRgb = false
+        return ShadowAuraScanSample(
+            valid = false,
+            fgBleedBlocked = true,
+            isPurpleConfounderSpecies = isPurpleConf
+        )
+    }
+
+    val fastLower = userFastMoveName.trim().lowercase()
+    val recentPlayerFast = (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) in 0L..2200L)
+    if (fastLower in PURPLE_VFX_FAST_MOVES &&
+        hasBattleStarted &&
+        !isPlayerInIdleFallback &&
+        (phasePlayerTurns > 0 || recentPlayerFast)
+    ) {
+        oppAuraHasPrevRgb = false
+        return ShadowAuraScanSample(
+            valid = false,
+            vfxContaminated = true,
+            isPurpleConfounderSpecies = isPurpleConf
+        )
+    }
+
+    if (screen.isRecycled || w < 200 || h < 400) {
+        oppAuraHasPrevRgb = false
+        return ShadowAuraScanSample(valid = false, isPurpleConfounderSpecies = isPurpleConf)
+    }
+    val minHpY = (h * 0.24f).toInt()
+    val maxHpY = (h * 0.50f).toInt()
+    if (oppHpRowY !in minHpY..maxHpY) {
+        oppAuraHasPrevRgb = false
+        return ShadowAuraScanSample(valid = false, isPurpleConfounderSpecies = isPurpleConf)
+    }
+
+    return try {
+        if (oppAuraPrevSpeciesKey != normSpecies) {
+            oppAuraHasPrevRgb = false
+        }
+        val hadPrev = oppAuraHasPrevRgb
+
+        // 1. Direct Foreground Lower-Left Shadow Bleed Probe (12x8 grid in [0.20..0.47w, 0.45..0.62h])
+        val fgX0 = (w * 0.20f).toInt().coerceIn(0, w - 2)
+        val fgX1 = (w * 0.47f).toInt().coerceIn(fgX0 + 1, w - 1)
+        val fgY0 = (h * 0.45f).toInt().coerceIn(0, h - 2)
+        val fgY1 = (h * 0.62f).toInt().coerceIn(fgY0 + 1, h - 1)
+        val fgCw = fgX1 - fgX0 + 1
+        val fgCh = fgY1 - fgY0 + 1
+        val fgPixels = ensureVisionScratchPixels(fgCw * fgCh)
+        screen.getPixels(fgPixels, 0, fgCw, fgX0, fgY0, fgCw, fgCh)
+
+        val fgGridW = 12
+        val fgGridH = 8
+        var fgSmokeCount = 0
+        var fgMovingSmokeCount = 0
+        for (gy in 0 until fgGridH) {
+            val ry = (((gy + 0.5f) * fgCh.toFloat()) / fgGridH.toFloat()).toInt().coerceIn(0, fgCh - 1)
+            val rowOff = ry * fgCw
+            for (gx in 0 until fgGridW) {
+                val rx = (((gx + 0.5f) * fgCw.toFloat()) / fgGridW.toFloat()).toInt().coerceIn(0, fgCw - 1)
+                val px = fgPixels[rowOff + rx]
+                val idx = gy * fgGridW + gx
+                val isSmoke = (classifyShadowAuraPixel(px, fgY0 + ry, oppHpRowY) and AURA_FLAG_SMOKE) != 0
+                if (isSmoke) {
+                    fgSmokeCount++
+                    if (hadPrev) {
+                        val prevPx = oppAuraPrevFgRgb[idx]
+                        val rgbDiff = kotlin.math.abs(((px shr 16) and 0xFF) - ((prevPx shr 16) and 0xFF)) +
+                            kotlin.math.abs(((px shr 8) and 0xFF) - ((prevPx shr 8) and 0xFF)) +
+                            kotlin.math.abs((px and 0xFF) - (prevPx and 0xFF))
+                        if (rgbDiff >= 18) {
+                            fgMovingSmokeCount++
+                        }
+                    }
+                }
+                oppAuraPrevFgRgb[idx] = px
+            }
+        }
+
+        // 2. Opponent 3D ROI (24x16 grid in [0.520w..0.855w, max(0.180h, oppHpRowY-0.045h)..min(0.525h, oppHpRowY+0.135h)])
+        val x0 = (w * 0.520f).toInt().coerceIn(0, w - 2)
+        val x1 = (w * 0.855f).toInt().coerceIn(x0 + 1, w - 1)
+        val y0 = max((h * 0.180f).toInt(), oppHpRowY - (h * 0.045f).toInt()).coerceIn(0, h - 2)
+        val y1 = min((h * 0.525f).toInt(), oppHpRowY + (h * 0.135f).toInt()).coerceIn(y0 + 1, h - 1)
+        val cw = x1 - x0 + 1
+        val ch = y1 - y0 + 1
+        if (cw < 24 || ch < 24) {
+            oppAuraHasPrevRgb = false
+            return ShadowAuraScanSample(valid = false, isPurpleConfounderSpecies = isPurpleConf)
+        }
+
+        val pixels = ensureVisionScratchPixels(cw * ch)
+        screen.getPixels(pixels, 0, cw, x0, y0, cw, ch)
+
+        val gridW = 24
+        val gridH = 16
+        val totalSamples = gridW * gridH
+        var smokeHits = 0
+        var movingSmokeHits = 0
+        var vfxHits = 0
+        for (gy in 0 until gridH) {
+            val ry = (((gy + 0.5f) * ch.toFloat()) / gridH.toFloat()).toInt().coerceIn(0, ch - 1)
+            val absY = y0 + ry
+            val rowOff = ry * cw
+            for (rx in 0 until gridW) {
+                val rxPos = (((rx + 0.5f) * cw.toFloat()) / gridW.toFloat()).toInt().coerceIn(0, cw - 1)
+                val px = pixels[rowOff + rxPos]
+                val flags = classifyShadowAuraPixel(px, absY, oppHpRowY)
+                if ((flags and AURA_FLAG_VFX) != 0) {
+                    vfxHits++
+                }
+                val isSmoke = (flags and AURA_FLAG_SMOKE) != 0
+                val idx = gy * gridW + rx
+                if (isSmoke) {
+                    smokeHits++
+                    if (hadPrev) {
+                        val prevPx = oppAuraPrevSampleRgb[idx]
+                        val rgbDiff = kotlin.math.abs(((px shr 16) and 0xFF) - ((prevPx shr 16) and 0xFF)) +
+                            kotlin.math.abs(((px shr 8) and 0xFF) - ((prevPx shr 8) and 0xFF)) +
+                            kotlin.math.abs((px and 0xFF) - (prevPx and 0xFF))
+                        if (rgbDiff >= 16) {
+                            movingSmokeHits++
+                        }
+                    }
+                }
+                oppAuraPrevSampleRgb[idx] = px
+            }
+        }
+
+        oppAuraHasPrevRgb = true
+        oppAuraPrevSpeciesKey = normSpecies
+
+        if (!hadPrev) {
+            return ShadowAuraScanSample(valid = false, isPurpleConfounderSpecies = isPurpleConf)
+        }
+
+        val fgTotal = (fgGridW * fgGridH).toFloat()
+        if ((fgSmokeCount.toFloat() / fgTotal) >= 0.30f && (fgMovingSmokeCount.toFloat() / fgTotal) >= 0.13f) {
+            return ShadowAuraScanSample(
+                valid = false,
+                fgBleedBlocked = true,
+                isPurpleConfounderSpecies = isPurpleConf
+            )
+        }
+        if ((vfxHits.toFloat() / totalSamples.toFloat()) >= 0.055f) {
+            return ShadowAuraScanSample(
+                valid = false,
+                vfxContaminated = true,
+                isPurpleConfounderSpecies = isPurpleConf
+            )
+        }
+
+        val haloDensity = smokeHits.toFloat() / totalSamples.toFloat()
+        val movingAuraDensity = movingSmokeHits.toFloat() / totalSamples.toFloat()
+        val flickerRatio = if (smokeHits > 0) movingSmokeHits.toFloat() / smokeHits.toFloat() else 0f
+
+        ShadowAuraScanSample(
+            valid = true,
+            fgBleedBlocked = false,
+            vfxContaminated = false,
+            isPurpleConfounderSpecies = isPurpleConf,
+            haloDensity = haloDensity,
+            movingAuraDensity = movingAuraDensity,
+            upperPlumeDensity = haloDensity,
+            corePurpleDensity = haloDensity,
+            cellFlickerRatio = flickerRatio
+        )
+    } catch (_: Exception) {
+        oppAuraHasPrevRgb = false
+        ShadowAuraScanSample(valid = false, isPurpleConfounderSpecies = isPurpleConf)
+    }
+}

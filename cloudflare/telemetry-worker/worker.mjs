@@ -2253,16 +2253,39 @@ function sanitizeOppObservedMovesJson(rawMoves) {
           )
         ).slice(0, 4)
       : [];
-    if (!fastMove && chargedList.length === 0) continue;
+    const shadowSource =
+      typeof item.shadowSource === 'string'
+        ? item.shadowSource.trim().slice(0, 24)
+        : '';
+    const cpNum = item.observedCp === null || item.observedCp === undefined ? NaN : Math.round(Number(item.observedCp));
+    const observedCp = Number.isFinite(cpNum) && cpNum >= 100 && cpNum <= 6000 ? cpNum : null;
+    const bestGuessIvs =
+      typeof item.bestGuessIvs === 'string'
+        ? item.bestGuessIvs.trim().slice(0, 16)
+        : '';
+    const bpBulkTags = Array.isArray(item.bpBulkTags)
+      ? Array.from(
+          new Set(
+            item.bpBulkTags
+              .map((t) => String(t || '').trim().slice(0, 20))
+              .filter(Boolean)
+          )
+        ).slice(0, 4)
+      : [];
+    if (!fastMove && chargedList.length === 0 && !shadowSource && observedCp === null && !bestGuessIvs && bpBulkTags.length === 0) continue;
     cleaned.push({
       species,
       ...(fastMove ? { fastMove, fastStatus } : {}),
       ...(chargedList.length > 0 ? { chargedMoves: chargedList } : {}),
+      ...(shadowSource ? { shadowSource } : {}),
+      ...(observedCp !== null ? { observedCp } : {}),
+      ...(bestGuessIvs ? { bestGuessIvs } : {}),
+      ...(bpBulkTags.length > 0 ? { bpBulkTags } : {}),
     });
   }
   if (cleaned.length === 0) return null;
   const encoded = JSON.stringify(cleaned);
-  return encoded.length <= 2048 ? encoded : null;
+  return encoded.length <= 4096 ? encoded : null;
 }
 
 function parseSemanticVersionCode(tagOrVer) {
@@ -5923,6 +5946,13 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         isOverlayMinimized: false,
         maxHorizonTurns,
         isOpponentShadow: actOpp.isShadow,
+        oppShadowVerified: Boolean(f.oppShadowVerified),
+        oppShadowLocked: Boolean(f.oppShadowLocked),
+        oppShadowSource: typeof f.oppShadowSource === 'string' ? f.oppShadowSource : '',
+        liveMyBpDeltaHp: Number(f.liveMyBpDeltaHp) || 0,
+        liveOppBpDeltaHp: Number(f.liveOppBpDeltaHp) || 0,
+        oppObservedCp: Number(f.oppObservedCp) || -1,
+        oppBestGuessIvs: typeof f.oppBestGuessIvs === 'string' ? f.oppBestGuessIvs : '',
         currentFormLabel: actOpp.meta.formLabel || 'Base',
         availableForms: [actOpp.meta.formLabel || 'Base'],
         userActivePokemon: actUser.name,
@@ -8169,7 +8199,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.45',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.50',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
