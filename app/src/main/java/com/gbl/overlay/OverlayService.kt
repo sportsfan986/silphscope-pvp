@@ -3841,15 +3841,14 @@ class OverlayService : LifecycleService() {
             // Immediate trigger if both dimmed circles & OCR token match, or 2-frame debounce otherwise
             val isConfirmed = (hasDimmedCircles && hasOcrCountdownToken) || introCountdownConfirmFrames >= 2
             if (isConfirmed && !isBattleIntroCountdownActive) {
-                isBattleIntroCountdownActive = true
-                introCountdownStartMs = now
                 val shouldResetFalseActiveStart = isBattleActive &&
-                    !confirmedByGoBanner &&
+                    !leadConfirmedByGoBanner &&
                     hasOcrCountdownToken &&
                     sampledPlayerBalls == 3 &&
                     sampledOppBalls == 3 &&
-                    battleTimelineEvents.isEmpty() &&
-                    !isBattleIntroCountdownActive
+                    battleTimelineEvents.isEmpty()
+                isBattleIntroCountdownActive = true
+                introCountdownStartMs = now
                 if (!isBattleActive || shouldResetFalseActiveStart) {
                     startNewBattle()
                     isBattleIntroCountdownActive = true
@@ -17935,7 +17934,7 @@ class OverlayService : LifecycleService() {
                 abortOneBattleDvrAsync(disarm = true)
             }
         }
-        if (stoppedBattleDiscardDvr || (!confirmedByGoBanner && battleTimelineEvents.isEmpty())) {
+        if (stoppedBattleDiscardDvr || (!leadConfirmedByGoBanner && battleTimelineEvents.isEmpty())) {
             detectedOpponents.clear()
             lastClearedOpponentsSnapshot = emptyList()
             lastClearedTimelineEventsSnapshot = emptyList()
@@ -17945,7 +17944,7 @@ class OverlayService : LifecycleService() {
             isWaitingForOpponent = true
             detectedOppFastMoveOverride.fill(null)
             oppFastMoveConfirmed.fill(false)
-            oppFastMoveStatus.fill("unconfirmed")
+            oppFastMoveStatus.fill("UNCONFIRMED")
             confirmedOppChargedMoves.forEach { it.clear() }
             recalculateAndPushBattleData()
         }
