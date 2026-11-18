@@ -2,6 +2,13 @@
 
 ---
 
+## v7.63 (2026-11-18) — Compact Right-Rail Team Card Controls & Expanded Horizontal Card Width
+*UI density polish release (`v7.63`, `versionCode = 1763`) consolidating Team Card action controls into one slim right-side vertical column so team names, multi-meta BR pools, and moveset summaries get ~108dp more horizontal width.*
+
+- **Single Right-Rail Control Column (`item_team_preset.xml`)**: Moved the active-team `RadioButton` off the left gutter and stacked it vertically above `Edit`, `Delete`, and `▲`/`▼` inside a single `32dp` vertical column on the right while keeping a slim `16dp` `⋮⋮` drag handle on the left and tightening outer card padding (`10dp`).
+
+---
+
 ## v7.62 (2026-11-18) — Multi-Select Assigned Leagues Editor, Per-Meta Pool BR Cards & Merged-Team Battle Log Unification
 *Multi-meta team UX & Battle Rating visibility upgrade (`v7.62`, `versionCode = 1762`) fixing editor chip state persistence, replacing single-select dropdowns with a CP-Tier bar + inline checkable multi-meta grid, displaying full BR rows for every assigned meta pool on main Team Cards, and unifying Battle Log filtering & exports across merged multi-meta presets.*
 

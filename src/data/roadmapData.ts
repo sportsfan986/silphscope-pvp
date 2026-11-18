@@ -23,9 +23,21 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.63',
+    codename: 'Compact Right-Rail Team Card Controls & Expanded Horizontal Card Width',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Consolidates the Team Card active Radio button, Edit, Delete, and ▲/▼ reorder controls into one slim 32dp vertical rail on the right while keeping a compact 16dp drag handle on the left, expanding usable horizontal card width for long team names and multi-meta BR pools.',
+    icon: '📐',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Stacked Select Radio, Edit, Delete, and ▲/▼ vertically inside one 32dp right-hand column in item_team_preset.xml',
+      'Removed left-side Radio gutter and trimmed card horizontal padding to reclaim ~108dp of width for team names, multi-meta pool BR boxes, and slot rows'
+    ]
+  },
+  {
     version: 'v7.62',
     codename: 'Multi-Select Assigned Metas Editor, Per-Meta Pool BR Cards & Battle Log Team Unification',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Replaces single-select League dropdowns in Edit Team with a CP-Tier bar + inline checkable multi-meta grid (fixing assigned chip persistence on edit open), displays full Core/Beats/Lead/Swap/Closer BR rows for every assigned meta pool on main Team Cards with 1-tap switching, and unifies merged team names & multi-meta filters in Battle Logs.',
     icon: '📊',

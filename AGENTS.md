@@ -1,7 +1,7 @@
 # AGENTS.md — SilphScope PvP Workspace Rules
 
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.62` (`versionCode = 1762`)  
+> **Current Version**: `v7.63` (`versionCode = 1763`)  
 > **Domains**: `silphscopepvp.com` (Web/Sim) • `dvr.silphscopepvp.com` (Cloud Vault & `/watch/:shareId`) • `api.silphscopepvp.com` (Worker API) • `dl.silphscopepvp.com` (APK)
 
 ---

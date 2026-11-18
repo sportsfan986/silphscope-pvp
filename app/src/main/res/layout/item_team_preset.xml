@@ -5,27 +5,21 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="#1e293b"
-    android:padding="12dp"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="10dp"
     android:layout_marginBottom="8dp">
 
     <TextView
         android:id="@+id/drag_handle_preset"
-        android:layout_width="24dp"
-        android:layout_height="36dp"
+        android:layout_width="16dp"
+        android:layout_height="48dp"
         android:gravity="center"
         android:text="⋮⋮"
         android:textColor="#64748b"
-        android:textSize="16sp"
+        android:textSize="15sp"
         android:textStyle="bold"
-        android:layout_marginEnd="6dp"
+        android:layout_marginEnd="4dp"
         android:contentDescription="Hold and drag to rearrange team order" />
-
-    <RadioButton
-        android:id="@+id/radio_selected"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:buttonTint="#38bdf8"
-        android:layout_marginEnd="8dp" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -172,15 +166,49 @@
     </LinearLayout>
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="32dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginStart="4dp">
+        android:gravity="center_horizontal"
+        android:layout_marginStart="6dp">
+
+        <RadioButton
+            android:id="@+id/radio_selected"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp"
+            android:buttonTint="#38bdf8"
+            android:contentDescription="Select Active Team" />
+
+        <ImageButton
+            android:id="@+id/btn_edit_preset"
+            android:layout_width="32dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="2dp"
+            android:padding="4dp"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_edit"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Edit Team &amp; Moves" />
+
+        <ImageButton
+            android:id="@+id/btn_delete_preset"
+            android:layout_width="32dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="2dp"
+            android:padding="4dp"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_delete"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Delete Preset" />
 
         <TextView
             android:id="@+id/btn_move_preset_up"
-            android:layout_width="24dp"
+            android:layout_width="32dp"
             android:layout_height="20dp"
+            android:layout_marginTop="2dp"
             android:gravity="center"
             android:text="▲"
             android:textSize="10sp"
@@ -190,7 +218,7 @@
 
         <TextView
             android:id="@+id/btn_move_preset_down"
-            android:layout_width="24dp"
+            android:layout_width="32dp"
             android:layout_height="20dp"
             android:gravity="center"
             android:text="▼"
@@ -199,22 +227,5 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Move Preset Down" />
     </LinearLayout>
-
-    <ImageButton
-        android:id="@+id/btn_edit_preset"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:layout_marginStart="2dp"
-        android:src="@android:drawable/ic_menu_edit"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Edit Team &amp; Moves" />
-
-    <ImageButton
-        android:id="@+id/btn_delete_preset"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:src="@android:drawable/ic_menu_delete"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Delete Preset" />
 
 </LinearLayout>
