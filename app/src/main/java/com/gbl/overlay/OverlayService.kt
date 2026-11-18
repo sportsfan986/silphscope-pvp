@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.56"
-        const val APP_VERSION_CODE = 1756
+        const val APP_VERSION = "7.60"
+        const val APP_VERSION_CODE = 1760
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -235,6 +235,16 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_GBL_SET_ELO_PROMPT_PENDING = "gbl_set_elo_prompt_pending_v745"
         const val PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE = "gbl_prompt_acked_at_five_v745"
         const val PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS = "gbl_last_elo_confirmed_ms_v745"
+        const val PREFS_KEY_AUTO_TEAM_SCAN_ENABLED = "gbl_auto_team_scan_enabled_v760"
+        val PARTY_CARD_INHERENT_PURPLE_SPECIES: Set<String> = setOf(
+            "gengar", "haunter", "gastly", "sableye", "drifblim", "drifloon",
+            "mismagius", "misdreavus", "muk", "grimer", "weezing", "koffing",
+            "arbok", "ekans", "nidoking", "crobat", "golbat", "zubat",
+            "drapion", "skorupi", "toxicroak", "swalot", "venomoth", "clodsire",
+            "espeon", "mewtwo", "goodra", "gligar", "gliscor", "tinkaton",
+            "corviknight", "spiritomb", "chandelure", "lampent", "litwick",
+            "ceruledge", "rattata"
+        )
         const val PREFS_KEY_CROWD_ELO_META_CACHE_JSON = "gbl_crowd_elo_meta_cache_v741"
         const val PREFS_KEY_LAST_APP_UPDATE_CHECK_MS = "gbl_last_app_update_check_ms_v741"
         const val PREFS_KEY_DISMISSED_APP_UPDATE_VERSION = "gbl_dismissed_app_update_version_v741"
@@ -2962,6 +2972,45 @@ class OverlayService : LifecycleService() {
     @Volatile internal var lastEloLockBannerText: String = ""
     @Volatile internal var lastEloLockBannerUntilMs: Long = 0L
     internal var eloTypeDialogOverlayView: View? = null
+
+    internal data class PartySlotBoxVisualSample(
+        val fgCount: Int = 0,
+        val shadowPurpleRatio: Float = 0f,
+        val darkCharcoalRatio: Float = 0f,
+        val magentaPinkRatio: Float = 0f,
+        val orangeFlameRatio: Float = 0f,
+        val iceCyanWhiteRatio: Float = 0f,
+        val poisonGreenRatio: Float = 0f
+    )
+    internal data class PendingPartyCandidateObs(
+        val signature: String,
+        val count: Int,
+        val observedAtMs: Long
+    )
+    internal data class MatchedPartyPreviewState(
+        val signature: String,
+        val presetId: String,
+        val presetName: String,
+        val league: String,
+        val leadPokemonName: String,
+        val orderedDisplayNames: List<String>,
+        val cardPartyName: String,
+        val lastSeenOnPartyScreenMs: Long
+    )
+    @Volatile internal var autoTeamScanEnabled: Boolean = true
+    @Volatile internal var forcePartyScanUntilMs: Long = 0L
+    @Volatile internal var lastFrameWasChoosePartyScreen: Boolean = false
+    @Volatile internal var pendingPartySettleObs: PendingPartyCandidateObs? = null
+    @Volatile internal var activePartyPreview: MatchedPartyPreviewState? = null
+    @Volatile internal var alreadyActivePartyName: String = ""
+    @Volatile internal var alreadyActivePartyUntilMs: Long = 0L
+    @Volatile internal var unmatchedPartySummaryText: String = ""
+    @Volatile internal var unmatchedPartyUntilMs: Long = 0L
+    @Volatile internal var lastLockedPartyBannerText: String = ""
+    @Volatile internal var lastLockedPartyBannerUntilMs: Long = 0L
+    @Volatile internal var dismissedPartySignature: String = ""
+    @Volatile internal var lockedPartyLeadOverrideName: String? = null
+    @Volatile internal var lockedPartyLeadOverridePresetId: String? = null
     internal var cachedLiveHudSyncLogsRaw: String = ""
     internal var cachedLiveHudSyncLogsKey: String = ""
     internal var cachedLiveHudSyncLogsParsed: List<SyncBattleLogRecord> = emptyList()
@@ -5680,6 +5729,7 @@ class OverlayService : LifecycleService() {
             ?: DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
         enableAltFastMoveDetect = prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
         enableAutoShadowDetect = prefs.getBoolean(PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
+        autoTeamScanEnabled = prefs.getBoolean(PREFS_KEY_AUTO_TEAM_SCAN_ENABLED, true)
         overlayScalePct = prefs.getInt("overlay_scale_pct", 78).coerceIn(50, 100)
         overlayTransparencyPct = prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50).coerceIn(0, 100)
         val rawSavedThemeId = prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
@@ -6983,6 +7033,7 @@ class OverlayService : LifecycleService() {
                 } else {
                     prefs.getBoolean(PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
                 }
+                autoTeamScanEnabled = prefs.getBoolean(PREFS_KEY_AUTO_TEAM_SCAN_ENABLED, true)
                 aiAdviceHudPosition = if (intent?.hasExtra(EXTRA_AI_ADVICE_HUD_POSITION) == true) {
                     (intent.getStringExtra(EXTRA_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION).lowercase()
                         .let { if (it == "top") "top" else "bottom" }
@@ -7052,6 +7103,10 @@ class OverlayService : LifecycleService() {
                     try {
                         val incoming = gson.fromJson(presetJson, TeamPreset::class.java)
                         if (incoming != null && incoming.pokemon.isNotEmpty()) {
+                            lockedPartyLeadOverridePresetId = null
+                            lockedPartyLeadOverrideName = null
+                            activePartyPreview = null
+                            pendingPartySettleObs = null
                             currentPreset = incoming
                             activeUserPokemonName = incoming.pokemon.first().name
                             loadInitialDataIntoOverlay()
@@ -7124,6 +7179,7 @@ class OverlayService : LifecycleService() {
                 } else {
                     enableAutoShadowDetect = prefs.getBoolean(PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, enableAutoShadowDetect)
                 }
+                autoTeamScanEnabled = prefs.getBoolean(PREFS_KEY_AUTO_TEAM_SCAN_ENABLED, autoTeamScanEnabled)
                 if (intent?.hasExtra(EXTRA_VISION_BATTERY_SAVER) == true) {
                     activeVisionBatterySaver = intent.getBooleanExtra(EXTRA_VISION_BATTERY_SAVER, DEFAULT_VISION_BATTERY_SAVER)
                 } else {
@@ -7942,6 +7998,803 @@ class OverlayService : LifecycleService() {
         recalculateAndPushBattleData()
     }
 
+    private var partyBannerExpiryJob: Job? = null
+
+    private fun schedulePartyBannerExpiryPush(delayMs: Long) {
+        partyBannerExpiryJob?.cancel()
+        partyBannerExpiryJob = lifecycleScope.launch(Dispatchers.Main) {
+            delay(delayMs)
+            recalculateAndPushBattleData()
+        }
+    }
+
+    internal fun loadBuiltPokemonRoster(): List<BuiltPokemonEntry> {
+        if (!::prefs.isInitialized) return emptyList()
+        val raw = prefs.getString(PREFS_KEY_BUILT_POKEMON_ROSTER, null) ?: return emptyList()
+        if (raw.isBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<BuiltPokemonEntry>>() {}.type
+            val parsed: List<BuiltPokemonEntry>? = gson.fromJson(raw, type)
+            parsed?.filter { it.id.isNotBlank() && it.speciesName.isNotBlank() } ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Zero-allocation HSV & Shadow-wisp sampler inside the 3 party sprite boxes (`y=[0.695..0.768]`)
+     * on "CHOOSE YOUR PARTY", skipping Lucky golden sparkles and Slot-0 top-left HUD overlap.
+     */
+    private fun samplePartyCardSlotVisualsLocked(screen: Bitmap, w: Int, h: Int): List<PartySlotBoxVisualSample> {
+        if (w <= 40 || h <= 80 || screen.isRecycled) return emptyList()
+        val xMins = floatArrayOf(0.130f, 0.388f, 0.660f)
+        val xMaxs = floatArrayOf(0.335f, 0.594f, 0.865f)
+        val yMin = 0.695f
+        val yMax = 0.768f
+        val hsv = FloatArray(3)
+        val out = ArrayList<PartySlotBoxVisualSample>(3)
+        for (slotIdx in 0..2) {
+            var fg = 0
+            var shadowPurple = 0
+            var darkCharcoal = 0
+            var magentaPink = 0
+            var orangeFlame = 0
+            var iceCyanWhite = 0
+            var poisonGreen = 0
+            for (yi in 0 until 14) {
+                val yf = yMin + (yMax - yMin) * (yi / 13f)
+                val py = (h * yf).toInt().coerceIn(0, h - 1)
+                for (xi in 0 until 14) {
+                    val xf = xMins[slotIdx] + (xMaxs[slotIdx] - xMins[slotIdx]) * (xi / 13f)
+                    if (slotIdx == 0 && xf < 0.245f && yf < 0.738f) continue
+                    val px = (w * xf).toInt().coerceIn(0, w - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = (c shr 16) and 0xFF
+                    val g = (c shr 8) and 0xFF
+                    val b = c and 0xFF
+                    Color.RGBToHSV(r, g, b, hsv)
+                    val hue = hsv[0]
+                    val sat = hsv[1]
+                    val valV = hsv[2]
+                    if (sat < 0.14f && valV > 0.78f) continue
+                    if (hue in 36f..64f && sat in 0.25f..0.90f && valV >= 0.65f) continue
+                    fg++
+                    if (hue in 262f..298f && sat >= 0.42f && valV in 0.32f..0.95f) shadowPurple++
+                    if (valV < 0.28f) darkCharcoal++
+                    if (hue in 299f..350f && sat >= 0.35f && valV >= 0.40f) magentaPink++
+                    if (hue in 8f..34f && sat >= 0.48f && valV >= 0.46f) orangeFlame++
+                    if ((hue in 176f..226f && sat in 0.14f..0.80f && valV >= 0.58f) || (sat < 0.14f && valV in 0.58f..0.78f)) iceCyanWhite++
+                    if (hue in 82f..156f && sat >= 0.32f && valV >= 0.30f) poisonGreen++
+                }
+            }
+            val denom = fg.coerceAtLeast(1).toFloat()
+            out.add(
+                PartySlotBoxVisualSample(
+                    fgCount = fg,
+                    shadowPurpleRatio = shadowPurple / denom,
+                    darkCharcoalRatio = darkCharcoal / denom,
+                    magentaPinkRatio = magentaPink / denom,
+                    orangeFlameRatio = orangeFlame / denom,
+                    iceCyanWhiteRatio = iceCyanWhite / denom,
+                    poisonGreenRatio = poisonGreen / denom
+                )
+            )
+        }
+        return out
+    }
+
+    private fun isBaseSpeciesCpLegalForParty(
+        baseLower: String,
+        observedCp: Int,
+        allMeta: List<PokemonMeta>,
+        maxCpCache: HashMap<String, Int>
+    ): Boolean {
+        if (observedCp < 100) return true
+        val cached = maxCpCache[baseLower]
+        val maxCap = if (cached != null) {
+            cached
+        } else {
+            val computed = allMeta
+                .filter { it.baseSpecies.equals(baseLower, ignoreCase = true) }
+                .maxOfOrNull { FormResolver.computeLevel51MaxCpForVariant(it) }
+                ?: 9999
+            maxCpCache[baseLower] = computed
+            computed
+        }
+        return maxCap + 15 >= observedCp
+    }
+
+    private fun extractPartyNicknameSpeciesCandidates(
+        rawNick: String,
+        observedCp: Int,
+        allMeta: List<PokemonMeta>,
+        maxCpCache: HashMap<String, Int>
+    ): Set<String> {
+        val cleanedRaw = rawNick
+            .replace(Regex("[\\u2460-\\u24FF\\u2776-\\u2793★☆•+_%♠♣♥♦▲▼◆◇○●◎⚡🔥💧❄️~*^`´'’\"]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (cleanedRaw.length < 2) return emptySet()
+
+        val stems = LinkedHashSet<String>()
+        fun addStemVariants(tok: String) {
+            val t = tok.trim()
+            if (t.length < 3) return
+            stems.add(t)
+
+            val noPrefix = t
+                .replace(Regex("^(?:[UGLMXSuglmxs]\\s*[-_.]?\\s*[0-9]{1,4}|[0-9]{1,4}[-_.]?|[UGLM0O@](?=[A-Z][a-z]{2,})|\\([UGLMuglm]\\))\\s*"), "")
+                .replace(Regex("(?i)^(?:sh|shad|shadow|gl|ul|ml|lc|xl|bb|rk|r)[.\\-_\\s]+(?=[A-Za-z]{3,})"), "")
+                .replace(Regex("(?i)^[aghp]\\.(?=[A-Za-z]{3,})"), "")
+                .replace(Regex("^(?:[Ss]\\.)(?=[A-Za-z]{3,})"), "")
+                .trim()
+            val prefixTargets = if (noPrefix.length >= 3 && noPrefix != t) listOf(t, noPrefix) else listOf(t)
+            for (cand in prefixTargets) {
+                stems.add(cand)
+                val noNumTail = cand.replace(Regex("[0-9]+(?:\\.[0-9]+)?$"), "").trim()
+                if (noNumTail.length >= 3) {
+                    stems.add(noNumTail)
+                    val camel1 = Regex("^([A-Z][a-z]{3,})([A-Z]{1,4})$").find(noNumTail)
+                    if (camel1 != null) stems.add(camel1.groupValues[1])
+                    val camel2 = Regex("^([A-Z][a-z]{2,})([A-Z]{2,4})$").find(noNumTail)
+                    if (camel2 != null) stems.add(camel2.groupValues[1])
+                }
+            }
+        }
+
+        addStemVariants(cleanedRaw)
+        val noSpace = cleanedRaw.replace(" ", "")
+        if (noSpace.length >= 3) addStemVariants(noSpace)
+        for (part in cleanedRaw.split(Regex("[\\s/_*]+"))) {
+            addStemVariants(part)
+        }
+
+        val uniqueBases = allMeta.map { it.baseSpecies.lowercase() }.distinct()
+        val exactMatches = LinkedHashSet<String>()
+        for (stem in stems) {
+            val norms = listOf(
+                normalizeOcrToken(stem, oneAsL = false, rnAsM = false, vAsY = false),
+                normalizeOcrToken(stem, oneAsL = true, rnAsM = false, vAsY = false),
+                normalizeOcrToken(stem, oneAsL = false, rnAsM = true, vAsY = false),
+                normalizeOcrToken(stem, oneAsL = false, rnAsM = true, vAsY = true),
+                normalizeOcrToken(stem, oneAsL = false, rnAsM = false, vAsY = true)
+            ).filter { it.length >= 3 && !isIgnoredMenuToken(it) }.distinct()
+            for (n in norms) {
+                for (baseLower in uniqueBases) {
+                    val bNorm = normalizeOcrToken(baseLower)
+                    if (bNorm == n && isBaseSpeciesCpLegalForParty(baseLower, observedCp, allMeta, maxCpCache)) {
+                        exactMatches.add(baseLower)
+                    }
+                }
+            }
+            if (exactMatches.isNotEmpty()) return exactMatches
+        }
+
+        val orderedStemsDesc = stems.sortedByDescending { it.length }
+        val prefixMatches = LinkedHashSet<String>()
+        for (stem in orderedStemsDesc) {
+            val norms = listOf(
+                normalizeOcrToken(stem, oneAsL = false, rnAsM = false, vAsY = false),
+                normalizeOcrToken(stem, oneAsL = true, rnAsM = false, vAsY = false),
+                normalizeOcrToken(stem, oneAsL = false, rnAsM = true, vAsY = true)
+            ).filter { it.length >= 4 && !isIgnoredMenuToken(it) }.distinct()
+            for (n in norms) {
+                for (baseLower in uniqueBases) {
+                    val bNorm = normalizeOcrToken(baseLower)
+                    if (bNorm.startsWith(n) && isBaseSpeciesCpLegalForParty(baseLower, observedCp, allMeta, maxCpCache)) {
+                        prefixMatches.add(baseLower)
+                    }
+                }
+            }
+            if (prefixMatches.isNotEmpty()) return prefixMatches
+        }
+
+        val subMatches = LinkedHashSet<String>()
+        for (stem in orderedStemsDesc) {
+            val n = normalizeOcrToken(stem, oneAsL = true, rnAsM = true, vAsY = true)
+            if (n.length < 5 || isIgnoredMenuToken(n)) continue
+            for (baseLower in uniqueBases) {
+                val bNorm = normalizeOcrToken(baseLower)
+                if (bNorm.length >= 5 && n.contains(bNorm) && isBaseSpeciesCpLegalForParty(baseLower, observedCp, allMeta, maxCpCache)) {
+                    subMatches.add(baseLower)
+                }
+            }
+            if (subMatches.isNotEmpty()) return subMatches
+        }
+
+        val fuzzyMatches = LinkedHashSet<String>()
+        for (stem in orderedStemsDesc) {
+            val n = normalizeOcrToken(stem, oneAsL = true, rnAsM = true, vAsY = true)
+            if (n.length < 5 || isIgnoredMenuToken(n)) continue
+            for (baseLower in uniqueBases) {
+                val bNorm = normalizeOcrToken(baseLower)
+                if (bNorm.length >= 5 &&
+                    bNorm.first() == n.first() &&
+                    kotlin.math.abs(bNorm.length - n.length) <= 1 &&
+                    levenshteinDistance(n, bNorm) <= 1 &&
+                    isBaseSpeciesCpLegalForParty(baseLower, observedCp, allMeta, maxCpCache)
+                ) {
+                    fuzzyMatches.add(baseLower)
+                }
+            }
+            if (fuzzyMatches.isNotEmpty()) return fuzzyMatches
+        }
+        return emptySet()
+    }
+
+    private fun resolvePartySlotFormAndShadow(
+        baseSpecies: String,
+        targetLeague: String,
+        effectiveCpCap: Int,
+        observedCp: Int,
+        visual: PartySlotBoxVisualSample?,
+        rawNick: String,
+        builtRoster: List<BuiltPokemonEntry>
+    ): Pair<String, Boolean> {
+        val baseLower = baseSpecies.lowercase()
+        val prefsOrNull = if (isPrefsInitialized) prefs else null
+
+        // Tier 1: Exact (BaseSpecies + Compatible League/CP-Cap + CP ±1) in My Built Pokémon
+        if (observedCp >= 100) {
+            val exactBuilt = builtRoster
+                .filter { entry ->
+                    FormResolver.extractBaseSpecies(entry.speciesName).equals(baseLower, ignoreCase = true) &&
+                        (getLeagueCpCapStatic(entry.league, prefsOrNull) == effectiveCpCap || entry.cpCap == effectiveCpCap) &&
+                        kotlin.math.abs(entry.cp - observedCp) <= 1
+                }
+                .sortedByDescending { entry ->
+                    if (normalizeLeagueKeyStatic(entry.league).equals(normalizeLeagueKeyStatic(targetLeague), ignoreCase = true)) 1 else 0
+                }
+                .firstOrNull()
+            if (exactBuilt != null) {
+                val disp = if (exactBuilt.isShadow && !exactBuilt.speciesName.startsWith("Shadow ", ignoreCase = true)) {
+                    "Shadow ${exactBuilt.speciesName}"
+                } else {
+                    exactBuilt.speciesName
+                }
+                return disp to exactBuilt.isShadow
+            }
+        }
+
+        // Tier 2: Legal CP variants + Nickname hints + Interior sprite-box HSV palette & Shadow wisps
+        val variants = FormResolver.getEligibleAutoDisambiguationVariants(baseLower, targetLeague, observedCp)
+        val nickLow = rawNick.lowercase()
+        var chosen: PokemonMeta? = variants.firstOrNull()
+        val formKeyword = when {
+            nickLow.contains("alol") || Regex("(?:^|\\s)a\\.[a-z]{3,}").containsMatchIn(nickLow) -> "alolan"
+            nickLow.contains("galar") || Regex("(?:^|\\s)g\\.[a-z]{3,}").containsMatchIn(nickLow) -> "galarian"
+            nickLow.contains("hisui") || Regex("(?:^|\\s)h\\.[a-z]{3,}").containsMatchIn(nickLow) -> "hisuian"
+            nickLow.contains("paldea") || Regex("(?:^|\\s)p\\.[a-z]{3,}").containsMatchIn(nickLow) -> "paldean"
+            nickLow.contains("origin") -> "origin"
+            nickLow.contains("altered") -> "altered"
+            nickLow.contains("therian") -> "therian"
+            nickLow.contains("incarnate") -> "incarnate"
+            nickLow.contains("crowned") -> "crowned"
+            else -> null
+        }
+        if (formKeyword != null && variants.size > 1) {
+            variants.firstOrNull {
+                it.formLabel.lowercase().contains(formKeyword) || it.speciesId.lowercase().contains(formKeyword)
+            }?.let { chosen = it }
+        } else if (variants.size > 1 && visual != null && visual.fgCount >= 8) {
+            fun findByForm(key: String): PokemonMeta? = variants.firstOrNull {
+                it.formLabel.lowercase().contains(key) || it.speciesId.lowercase().contains(key)
+            }
+            fun findKantoBase(): PokemonMeta? = variants.firstOrNull {
+                val fl = it.formLabel.lowercase()
+                fl == "base" || fl == "kanto" || it.speciesId.equals(baseLower, ignoreCase = true)
+            }
+            when (baseLower) {
+                "moltres" -> {
+                    if ((visual.magentaPinkRatio >= 0.08f || visual.darkCharcoalRatio >= 0.12f) && visual.orangeFlameRatio < 0.10f) {
+                        findByForm("galar")?.let { chosen = it }
+                    } else if (visual.orangeFlameRatio >= 0.16f && visual.magentaPinkRatio < 0.06f) {
+                        findKantoBase()?.let { chosen = it }
+                    }
+                }
+                "articuno" -> {
+                    if ((visual.magentaPinkRatio + visual.shadowPurpleRatio) >= 0.12f) {
+                        findByForm("galar")?.let { chosen = it }
+                    } else if (visual.iceCyanWhiteRatio >= 0.18f) {
+                        findKantoBase()?.let { chosen = it }
+                    }
+                }
+                "zapdos" -> {
+                    if (visual.orangeFlameRatio >= 0.20f) findByForm("galar")?.let { chosen = it }
+                }
+                "ninetales", "vulpix", "sandslash", "sandshrew" -> {
+                    if (visual.iceCyanWhiteRatio >= 0.20f && visual.orangeFlameRatio < 0.12f) {
+                        findByForm("alol")?.let { chosen = it }
+                    } else if (visual.orangeFlameRatio >= 0.16f) {
+                        findKantoBase()?.let { chosen = it }
+                    }
+                }
+                "marowak" -> if (visual.darkCharcoalRatio >= 0.24f) findByForm("alol")?.let { chosen = it }
+                "muk", "grimer" -> if (visual.poisonGreenRatio >= 0.18f) findByForm("alol")?.let { chosen = it }
+                "weezing" -> if (visual.poisonGreenRatio >= 0.16f || visual.darkCharcoalRatio >= 0.22f) findByForm("galar")?.let { chosen = it }
+                "rapidash", "ponyta" -> if ((visual.magentaPinkRatio + visual.iceCyanWhiteRatio) >= 0.18f && visual.orangeFlameRatio < 0.12f) findByForm("galar")?.let { chosen = it }
+            }
+        }
+
+        val resolvedMeta = chosen ?: getPokemonMeta(baseSpecies, targetLeague, false)
+        val explicitShadowNick = nickLow.contains("shadow") || Regex("(?:^|\\s)(?:sh|s)\\.[a-z]{3,}").containsMatchIn(nickLow)
+        val isShadow = when {
+            !FormResolver.isShadowEligibleVariant(resolvedMeta) -> false
+            explicitShadowNick -> true
+            visual != null && visual.fgCount >= 8 &&
+                !PARTY_CARD_INHERENT_PURPLE_SPECIES.contains(baseLower) &&
+                visual.shadowPurpleRatio >= 0.085f -> true
+            else -> FormResolver.resolveBestDefaultFormAndShadow(resolvedMeta, rawNick, targetLeague).second
+        }
+        val disp = if (isShadow && !resolvedMeta.name.startsWith("Shadow ", ignoreCase = true)) {
+            "Shadow ${resolvedMeta.name}"
+        } else {
+            resolvedMeta.name
+        }
+        return disp to isShadow
+    }
+
+    private fun parsePartyScreenLeagueAndCpCap(
+        nonSelfLines: List<Text.Line>,
+        cropLeft: Int,
+        cropTop: Int,
+        scale: Float,
+        fullW: Int,
+        fullH: Int
+    ): Pair<String?, Int?> {
+        var explicitCpCap: Int? = null
+        val headerTexts = mutableListOf<String>()
+        for (line in nonSelfLines) {
+            val box = line.boundingBox ?: continue
+            val normCx = (cropLeft + (box.left + box.right) * 0.5f / scale) / fullW.toFloat()
+            val normCy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            if (normCy !in 0.25f..0.46f || normCx !in 0.16f..0.84f) continue
+            val txt = line.text.trim()
+            if (txt.isEmpty()) continue
+            val capMatch = Regex("""(?i)(?:max\s*cp[^0-9]{0,20}|cp\s*[:\-]?\s*)(500|1[.,]?500|2[.,]?500)""").find(txt)
+            if (capMatch != null) {
+                val num = capMatch.groupValues[1].replace(".", "").replace(",", "").toIntOrNull()
+                if (num == 500 || num == 1500 || num == 2500) {
+                    explicitCpCap = num
+                    continue
+                }
+            }
+            if (!txt.lowercase().contains("max cp")) {
+                headerTexts.add(txt)
+            }
+        }
+        val combined = headerTexts.joinToString(" ").trim()
+        if (combined.isEmpty()) return null to explicitCpCap
+        val combinedLower = combined.lowercase()
+        val catalogMatches = (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG)
+            .filter { cat ->
+                val tLow = cat.title.lowercase().trim()
+                val kLow = cat.leagueKey.lowercase().trim()
+                (tLow.length >= 6 && combinedLower.contains(tLow)) || (kLow.length >= 6 && combinedLower.contains(kLow))
+            }
+            .sortedByDescending { it.title.length }
+        val explicitLeague: String? = catalogMatches.firstOrNull()?.leagueKey ?: when {
+            combinedLower.contains("mega master") -> "MEGA MASTER LEAGUE"
+            combinedLower.contains("mega ultra") -> "MEGA ULTRA LEAGUE"
+            combinedLower.contains("mega great") -> "MEGA GREAT LEAGUE"
+            combinedLower.contains("master") && combinedLower.contains("premier") -> "MASTER LEAGUE PREMIER"
+            combinedLower.contains("master league") || combinedLower == "master" -> "MASTER LEAGUE"
+            combinedLower.contains("ultra league") || combinedLower == "ultra" -> "ULTRA LEAGUE"
+            combinedLower.contains("great league") || combinedLower == "great" -> "GREAT LEAGUE"
+            combinedLower.contains("little") -> "Little Cup"
+            else -> null
+        }
+        val finalCap = explicitCpCap ?: explicitLeague?.let { getLeagueCpCapStatic(it, if (isPrefsInitialized) prefs else null) }
+        return explicitLeague to finalCap
+    }
+
+    internal fun commitMatchedPartyPreset(preview: MatchedPartyPreviewState, source: String) {
+        val presets = loadPresets()
+        val chosen = presets.find { it.id == preview.presetId } ?: return
+        val leadName = preview.leadPokemonName.takeIf { l ->
+            chosen.pokemon.any { it.name.equals(l, ignoreCase = true) }
+        } ?: chosen.pokemon.firstOrNull()?.name
+        currentPreset = chosen
+        activeUserPokemonName = leadName
+        lockedPartyLeadOverridePresetId = chosen.id
+        lockedPartyLeadOverrideName = leadName
+        if (isPrefsInitialized) {
+            val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+            val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
+            prefs.edit().putString(selKey, chosen.id).apply()
+        }
+        activePartyPreview = null
+        pendingPartySettleObs = null
+        alreadyActivePartyUntilMs = 0L
+        unmatchedPartyUntilMs = 0L
+        dismissedPartySignature = ""
+        lastLockedPartyBannerText = "✅ Team Locked: ${chosen.name}"
+        lastLockedPartyBannerUntilMs = System.currentTimeMillis() + 6500L
+        schedulePartyBannerExpiryPush(6600L)
+        lifecycleScope.launch(Dispatchers.Default) {
+            try {
+                OverlayService.precomputeActiveTeamTop200MatrixStatic(chosen)
+                recalculateAndPushBattleData()
+            } catch (_: Exception) {}
+        }
+        recalculateAndPushBattleData()
+        OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+        val leadHint = if (!leadName.isNullOrBlank()) " (★ $leadName)" else ""
+        showBattleToast("🔍 Team Locked ($source): ${chosen.name}$leadHint")
+    }
+
+    internal fun commitPendingPartyScanIfEligible(source: String) {
+        val preview = activePartyPreview ?: return
+        val nowMs = System.currentTimeMillis()
+        if ((nowMs - preview.lastSeenOnPartyScreenMs) in 0L..45_000L) {
+            commitMatchedPartyPreset(preview, source)
+        } else {
+            activePartyPreview = null
+        }
+    }
+
+    private fun processIdlePartyAndMatchmakingVision(
+        visionText: Text,
+        slotVisuals: List<PartySlotBoxVisualSample>,
+        cropLeft: Int,
+        cropTop: Int,
+        scale: Float,
+        fullW: Int,
+        fullH: Int,
+        obsDoneMs: Long
+    ) {
+        if (fullW <= 0 || fullH <= 0 || scale <= 0f) return
+        val nonSelfLines = visionText.textBlocks.flatMap { it.lines }.filter { line ->
+            val low = line.text.trim().lowercase()
+            low.isNotEmpty() && !isOverlayHudSelfText(low)
+        }
+        if (nonSelfLines.isEmpty()) return
+
+        val joinedLower = nonSelfLines.joinToString(" ") { it.text }.lowercase()
+        val isNonPartyPokemonUi = joinedLower.contains("appraise") ||
+            joinedLower.contains("power up") ||
+            joinedLower.contains("new attack") ||
+            joinedLower.contains("pokedex") ||
+            joinedLower.contains("pokédex") ||
+            joinedLower.contains("xl candy") ||
+            joinedLower.contains("purify") ||
+            joinedLower.contains("evolve") ||
+            Regex("\\btransfer\\b").containsMatchIn(joinedLower)
+        if (isNonPartyPokemonUi) {
+            lastFrameWasChoosePartyScreen = false
+            pendingPartySettleObs = null
+            if (activePartyPreview != null || alreadyActivePartyUntilMs > 0L || unmatchedPartyUntilMs > 0L) {
+                activePartyPreview = null
+                alreadyActivePartyUntilMs = 0L
+                unmatchedPartyUntilMs = 0L
+                recalculateAndPushBattleData()
+            }
+            return
+        }
+
+        val hasChooseHeader = nonSelfLines.any { line ->
+            val box = line.boundingBox ?: return@any false
+            val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            val low = line.text.lowercase()
+            cy in 0.45f..0.58f && (low.contains("choose your party") || (low.contains("choose your") && low.contains("party")))
+        }
+        val hasUsePartyBtn = nonSelfLines.any { line ->
+            val box = line.boundingBox ?: return@any false
+            val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            val low = line.text.lowercase().replace(Regex("[^a-z]"), "")
+            cy in 0.80f..0.94f && low.contains("usethisparty")
+        }
+        val hasTapToSwap = nonSelfLines.any { line ->
+            val box = line.boundingBox ?: return@any false
+            val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            cy in 0.58f..0.67f && line.text.lowercase().contains("tap to swap")
+        }
+        val cpCols = BooleanArray(3)
+        for (line in nonSelfLines) {
+            val box = line.boundingBox ?: continue
+            val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            val cx = (cropLeft + (box.left + box.right) * 0.5f / scale) / fullW.toFloat()
+            if (cy in 0.635f..0.702f && cx in 0.085f..0.910f && Regex("(?i)\\bcp\\s*[1-9]").containsMatchIn(line.text)) {
+                val col = when {
+                    cx <= 0.365f -> 0
+                    cx <= 0.628f -> 1
+                    else -> 2
+                }
+                cpCols[col] = true
+            }
+        }
+        val isChoosePartyScreen = hasChooseHeader || (hasUsePartyBtn && (hasTapToSwap || cpCols.count { it } >= 2))
+
+        if (!isChoosePartyScreen) {
+            lastFrameWasChoosePartyScreen = false
+            pendingPartySettleObs = null
+            val preview = activePartyPreview ?: return
+            if ((obsDoneMs - preview.lastSeenOnPartyScreenMs) !in 0L..45_000L) {
+                activePartyPreview = null
+                recalculateAndPushBattleData()
+                return
+            }
+            val hasLobbyBackOut = joinedLower.contains("battles played") ||
+                joinedLower.contains("current season") ||
+                joinedLower.contains("schedule") ||
+                joinedLower.contains("rewards") ||
+                joinedLower.contains("train")
+            if (hasLobbyBackOut) {
+                activePartyPreview = null
+                alreadyActivePartyUntilMs = 0L
+                unmatchedPartyUntilMs = 0L
+                recalculateAndPushBattleData()
+                return
+            }
+            val hasCancelBottom = nonSelfLines.any { line ->
+                val box = line.boundingBox ?: return@any false
+                val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+                cy in 0.78f..0.96f && line.text.trim().equals("cancel", ignoreCase = true)
+            }
+            val isMatchmaking = joinedLower.contains("finding opponent") ||
+                joinedLower.contains("searching for") ||
+                joinedLower.contains("matchmaking") ||
+                hasCancelBottom
+            if (isMatchmaking) {
+                commitMatchedPartyPreset(preview, source = "MATCHMAKING")
+            }
+            return
+        }
+
+        lastFrameWasChoosePartyScreen = true
+        if (!autoTeamScanEnabled && obsDoneMs >= forcePartyScanUntilMs) return
+
+        val (explicitLeagueKey, explicitCpCap) = parsePartyScreenLeagueAndCpCap(nonSelfLines, cropLeft, cropTop, scale, fullW, fullH)
+
+        // Card Party Title (`y=[0.568..0.616]`, centered)
+        var customPartyName = ""
+        for (line in nonSelfLines) {
+            val box = line.boundingBox ?: continue
+            val cx = (cropLeft + (box.left + box.right) * 0.5f / scale) / fullW.toFloat()
+            val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+            if (cx !in 0.22f..0.78f || cy !in 0.568f..0.616f) continue
+            val txt = line.text.trim()
+            val normTitle = txt.lowercase().replace(Regex("[^a-z]"), "")
+            if (txt.isEmpty() || normTitle.contains("taptoswap") || normTitle.contains("chooseyour") || normTitle.contains("recommended")) continue
+            val isDefaultNewParty = normTitle == "newparty" || (normTitle.length in 7..9 && levenshteinDistance(normTitle, "newparty") <= 1)
+            customPartyName = if (isDefaultNewParty) "" else txt
+            break
+        }
+
+        // Cluster Elements into the 3 Card Columns (`x=[0.085..0.910]` rejects left/right carousel peek cards)
+        val cpElemsByCol = Array(3) { mutableListOf<Pair<Int, String>>() }
+        val nickElemsByCol = Array(3) { mutableListOf<Triple<Int, Int, String>>() }
+        for (line in nonSelfLines) {
+            for (elem in line.elements) {
+                val box = elem.boundingBox ?: continue
+                val cx = (cropLeft + (box.left + box.right) * 0.5f / scale) / fullW.toFloat()
+                val cy = (cropTop + (box.top + box.bottom) * 0.5f / scale) / fullH.toFloat()
+                if (cx !in 0.085f..0.910f) continue
+                val col = when {
+                    cx <= 0.365f -> 0
+                    cx <= 0.628f -> 1
+                    else -> 2
+                }
+                val t = elem.text.trim()
+                if (t.isEmpty()) continue
+                if (cy in 0.635f..0.702f) {
+                    cpElemsByCol[col].add(box.left to t)
+                } else if (cy in 0.765f..0.828f) {
+                    nickElemsByCol[col].add(Triple(box.left, box.right, t))
+                }
+            }
+        }
+
+        val slotCps = IntArray(3) { -1 }
+        val slotNicks = Array(3) { "" }
+        for (col in 0..2) {
+            val cpJoined = cpElemsByCol[col].sortedBy { it.first }.joinToString(" ") { it.second }
+            val cpMatch = Regex("(?i)(?:cp\\s*)?([1-9][0-9OIlS]{1,3})").find(cpJoined)
+            if (cpMatch != null) {
+                val fixed = cpMatch.groupValues[1]
+                    .replace('O', '0').replace('o', '0')
+                    .replace('I', '1').replace('i', '1').replace('l', '1').replace('L', '1')
+                    .replace('S', '5').replace('s', '5')
+                slotCps[col] = fixed.toIntOrNull()?.takeIf { it in 10..6500 } ?: -1
+            }
+            val nElems = nickElemsByCol[col].sortedBy { it.first }
+            if (nElems.isNotEmpty()) {
+                val sb = StringBuilder()
+                for (idx in nElems.indices) {
+                    if (idx > 0) {
+                        val gap = nElems[idx].first - nElems[idx - 1].second
+                        if (gap > 8) sb.append(' ')
+                    }
+                    sb.append(nElems[idx].third)
+                }
+                slotNicks[col] = sb.toString().trim()
+            }
+        }
+
+        val nickCount = slotNicks.count { it.isNotBlank() }
+        val cpCount = slotCps.count { it >= 10 }
+        if (nickCount < 3 && !(nickCount >= 2 && cpCount == 3 && customPartyName.isNotEmpty())) return
+
+        val maxObservedCp = slotCps.maxOrNull() ?: -1
+        val effectiveCpCap = explicitCpCap ?: when {
+            maxObservedCp > 2515 -> 10000
+            maxObservedCp in 1515..2515 -> 2500
+            maxObservedCp in 515..1515 -> 1500
+            else -> 500
+        }
+        val targetLeague = explicitLeagueKey ?: when (effectiveCpCap) {
+            500 -> "Little Cup"
+            1500 -> "GREAT LEAGUE"
+            2500 -> "ULTRA LEAGUE"
+            else -> "MASTER LEAGUE"
+        }
+
+        val allMeta = OverlayService.getAllPokemonMeta()
+        val maxCpCache = HashMap<String, Int>(16)
+        val slotCandidates = Array(3) { col ->
+            extractPartyNicknameSpeciesCandidates(slotNicks[col], slotCps[col], allMeta, maxCpCache)
+        }
+        val builtRoster = loadBuiltPokemonRoster()
+        val slotDisplayNames = Array(3) { "" }
+        val slotShadows = BooleanArray(3) { false }
+        for (col in 0..2) {
+            val candBase = slotCandidates[col].firstOrNull()
+            if (candBase != null) {
+                val (disp, isShad) = resolvePartySlotFormAndShadow(
+                    baseSpecies = candBase,
+                    targetLeague = targetLeague,
+                    effectiveCpCap = effectiveCpCap,
+                    observedCp = slotCps[col],
+                    visual = slotVisuals.getOrNull(col),
+                    rawNick = slotNicks[col],
+                    builtRoster = builtRoster
+                )
+                slotDisplayNames[col] = disp
+                slotShadows[col] = isShad
+            }
+        }
+
+        // Strict Saved-Preset-Only Matching (`loadPresets()` — never auto-create new presets)
+        val prefsOrNull = if (isPrefsInitialized) prefs else null
+        val savedPresets = loadPresets().filter {
+            it.pokemon.size >= 3 && getLeagueCpCapStatic(it.league, prefsOrNull) == effectiveCpCap
+        }
+        val perms: List<IntArray> = listOf(
+            intArrayOf(0, 1, 2), intArrayOf(0, 2, 1),
+            intArrayOf(1, 0, 2), intArrayOf(1, 2, 0),
+            intArrayOf(2, 0, 1), intArrayOf(2, 1, 0)
+        )
+        var bestPreset: TeamPreset? = null
+        var bestPerm: IntArray? = null
+        var bestScore = Int.MIN_VALUE
+
+        val normCardName = customPartyName.lowercase().replace(Regex("[^a-z0-9]"), "")
+        for (preset in savedPresets) {
+            val exactTitleMatch = customPartyName.isNotEmpty() && preset.name.trim().equals(customPartyName, ignoreCase = true)
+            val normPresetTitle = preset.name.lowercase().replace(Regex("[^a-z0-9]"), "")
+            val fuzzyTitleMatch = normCardName.length >= 3 && normPresetTitle.isNotEmpty() &&
+                (normPresetTitle == normCardName || normPresetTitle.contains(normCardName) || normCardName.contains(normPresetTitle))
+
+            for (perm in perms) {
+                var directMatches = 0
+                var rescueIdx = -1
+                var allLegal = true
+                for (col in 0..2) {
+                    val pSlot = preset.pokemon[perm[col]]
+                    val pBase = FormResolver.extractBaseSpecies(pSlot.name).lowercase()
+                    val cpLegal = slotCps[col] < 100 || isBaseSpeciesCpLegalForParty(pBase, slotCps[col], allMeta, maxCpCache)
+                    if (!cpLegal) {
+                        allLegal = false
+                        break
+                    }
+                    if (slotCandidates[col].contains(pBase)) {
+                        directMatches++
+                    } else if (rescueIdx == -1 && (exactTitleMatch || fuzzyTitleMatch) && slotCandidates[col].isEmpty()) {
+                        rescueIdx = col
+                    } else {
+                        allLegal = false
+                        break
+                    }
+                }
+                if (!allLegal) continue
+                if (directMatches < 3 && !(directMatches == 2 && rescueIdx >= 0)) continue
+
+                var score = 0
+                if (exactTitleMatch) score += 500 else if (fuzzyTitleMatch) score += 300
+                if (perm[0] == 0 && perm[1] == 1 && perm[2] == 2) score += 160
+                if (perm[0] == 0) score += 80
+                if (explicitLeagueKey != null && normalizeLeagueKeyStatic(preset.league).equals(explicitLeagueKey, ignoreCase = true)) {
+                    score += 120
+                }
+                if (preset.id == currentPreset?.id) score += 40
+
+                for (col in 0..2) {
+                    val pSlot = preset.pokemon[perm[col]]
+                    val pBase = FormResolver.extractBaseSpecies(pSlot.name).lowercase()
+                    if (slotCps[col] >= 100 && kotlin.math.abs(pSlot.cp - slotCps[col]) <= 2) score += 60
+                    val pIsShadow = pSlot.name.contains("shadow", ignoreCase = true)
+                    val pStrip = pSlot.name.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
+                    val (resolvedFormDisp, resolvedIsShad) = resolvePartySlotFormAndShadow(
+                        baseSpecies = pBase,
+                        targetLeague = preset.league,
+                        effectiveCpCap = effectiveCpCap,
+                        observedCp = slotCps[col],
+                        visual = slotVisuals.getOrNull(col),
+                        rawNick = slotNicks[col],
+                        builtRoster = builtRoster
+                    )
+                    val rStrip = resolvedFormDisp.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
+                    if (pStrip.equals(rStrip, ignoreCase = true) && pIsShadow == resolvedIsShad) {
+                        score += 45
+                    }
+                }
+                if (score > bestScore) {
+                    bestScore = score
+                    bestPreset = preset
+                    bestPerm = perm
+                }
+            }
+        }
+
+        val resolvedLeadName = if (bestPreset != null && bestPerm != null) {
+            bestPreset.pokemon[bestPerm[0]].name
+        } else {
+            slotDisplayNames.firstOrNull { it.isNotBlank() }.orEmpty()
+        }
+        val signature = "$effectiveCpCap|${customPartyName.lowercase()}|${bestPreset?.id ?: slotDisplayNames.joinToString("/")}|$resolvedLeadName"
+        val prevObs = pendingPartySettleObs
+        val nextCount = if (prevObs != null && prevObs.signature == signature && (obsDoneMs - prevObs.observedAtMs) in 0L..6000L) {
+            (prevObs.count + 1).coerceAtMost(10)
+        } else {
+            1
+        }
+        pendingPartySettleObs = PendingPartyCandidateObs(signature, nextCount, obsDoneMs)
+        if (nextCount < 2) return
+
+        forcePartyScanUntilMs = 0L
+        if (bestPreset != null && bestPerm != null) {
+            val orderedNames = listOf(
+                bestPreset.pokemon[bestPerm[0]].name,
+                bestPreset.pokemon[bestPerm[1]].name,
+                bestPreset.pokemon[bestPerm[2]].name
+            )
+            val isAlreadyActiveLead = bestPreset.id == currentPreset?.id &&
+                activeUserPokemonName.equals(resolvedLeadName, ignoreCase = true)
+            if (isAlreadyActiveLead) {
+                activePartyPreview = null
+                alreadyActivePartyName = bestPreset.name
+                alreadyActivePartyUntilMs = obsDoneMs + 5000L
+                unmatchedPartyUntilMs = 0L
+                schedulePartyBannerExpiryPush(5100L)
+                recalculateAndPushBattleData()
+            } else if (dismissedPartySignature != signature) {
+                activePartyPreview = MatchedPartyPreviewState(
+                    signature = signature,
+                    presetId = bestPreset.id,
+                    presetName = bestPreset.name,
+                    league = bestPreset.league,
+                    leadPokemonName = resolvedLeadName,
+                    orderedDisplayNames = orderedNames,
+                    cardPartyName = customPartyName,
+                    lastSeenOnPartyScreenMs = obsDoneMs
+                )
+                alreadyActivePartyUntilMs = 0L
+                unmatchedPartyUntilMs = 0L
+                recalculateAndPushBattleData()
+            }
+        } else {
+            activePartyPreview = null
+            alreadyActivePartyUntilMs = 0L
+            val allResolved = slotDisplayNames.all { it.isNotBlank() }
+            if (allResolved && dismissedPartySignature != signature) {
+                unmatchedPartySummaryText = slotDisplayNames.joinToString(" / ")
+                unmatchedPartyUntilMs = obsDoneMs + 5000L
+                schedulePartyBannerExpiryPush(5100L)
+                recalculateAndPushBattleData()
+            }
+        }
+    }
+
     internal fun startIdleStandbyEloMonitorLoop() {
         if (battleLoopJob?.isActive == true || mediaProjection == null || !isInstanceRunning) return
         if (idleStandbyEloJob?.isActive == true) return
@@ -7963,7 +8816,8 @@ class OverlayService : LifecycleService() {
                         maybeTriggerIdleGblEloOcr(bmp, bmp.width, bmp.height, nowMs, forceGuided = false)
                     }
                 }
-                delay(1400L)
+                val loopDelayMs = if (lastFrameWasChoosePartyScreen || System.currentTimeMillis() < forcePartyScanUntilMs) 420L else 1400L
+                delay(loopDelayMs)
             }
         }
     }
@@ -8406,23 +9260,28 @@ class OverlayService : LifecycleService() {
             }
             return
         }
-        if (::prefs.isInitialized && prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6") return
+        val isGblMode = !::prefs.isInitialized || prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") != "show6"
+        val isForcePartyScan = nowMs < forcePartyScanUntilMs
+        val wantPartyScan = autoTeamScanEnabled || isForcePartyScan || activePartyPreview != null
+        if (!isGblMode && !wantPartyScan) return
         if (isIdleEloOcrInFlight) return
 
         val isGuided = forceGuided || nowMs < guidedEloScanUntilMs
         val minIntervalMs = when {
-            isGuided -> 220L
-            pendingIdleLobbyElo != null -> 550L
+            isGuided || isForcePartyScan -> 220L
+            lastFrameWasChoosePartyScreen && autoTeamScanEnabled -> 420L
+            pendingIdleLobbyElo != null || activePartyPreview != null -> 550L
             else -> 950L
         }
         if ((nowMs - idleEloLastOcrAttemptMs) < minIntervalMs) return
 
         val screenSig: Long
-        if (!isGuided) {
+        if (!isGuided && !isForcePartyScan) {
             val (passesGate, sig) = evaluateIdleGblCardPixelGate(screen, w, h)
-            if (!passesGate) return
+            if (!passesGate && activePartyPreview == null) return
             screenSig = sig
-            if (pendingIdleLobbyElo == null && screenSig == lastIdleEloScreenSig && (nowMs - idleEloLastOcrAttemptMs) < 1800L) {
+            val needSecondSettleFrame = lastFrameWasChoosePartyScreen && (pendingPartySettleObs?.count ?: 0) == 1
+            if (pendingIdleLobbyElo == null && !needSecondSettleFrame && screenSig == lastIdleEloScreenSig && (nowMs - idleEloLastOcrAttemptMs) < 1800L) {
                 return
             }
         } else {
@@ -8440,9 +9299,13 @@ class OverlayService : LifecycleService() {
         val scale = 0.82f
         val dstW = (srcW * scale).toInt().coerceAtLeast(32)
         val dstH = (srcH * scale).toInt().coerceAtLeast(32)
+        var slotVisuals: List<PartySlotBoxVisualSample> = emptyList()
         val cropBmp = try {
             synchronized(captureLock) {
                 if (screen.isRecycled) return
+                if (wantPartyScan) {
+                    slotVisuals = samplePartyCardSlotVisualsLocked(screen, w, h)
+                }
                 val b = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(b)
                 canvas.drawBitmap(screen, Rect(cropLeft, cropTop, cropRight, cropBottom), Rect(0, 0, dstW, dstH), ocrFilterPaint)
@@ -8453,7 +9316,7 @@ class OverlayService : LifecycleService() {
         }
 
         idleEloLastOcrAttemptMs = nowMs
-        if (!isGuided) {
+        if (!isGuided && !isForcePartyScan) {
             lastIdleEloScreenSig = screenSig
         }
         isIdleEloOcrInFlight = true
@@ -8472,42 +9335,47 @@ class OverlayService : LifecycleService() {
                     introCountdownConfirmFrames == 0
                 if (visionText != null && stillEligible) {
                     val obsDoneMs = System.currentTimeMillis()
-                    parseIdleGblSetBattlesPlayed(visionText, cropTop, scale, h)?.let { played ->
-                        onIdleGblSetBattlesPlayedObserved(played, obsDoneMs)
-                    }
-                    val parsed = parseIdleGblEloFromVisionResult(visionText, cropLeft, cropTop, scale, w, h)
-                    if (parsed != null) {
-                        if (parsed.isEndOfSetModal) {
-                            pendingIdleLobbyElo = null
-                            onIdleGblEloConfirmed(parsed.elo, source = scanSource)
-                        } else {
-                            if (pendingIdleLobbyElo == parsed.elo && (obsDoneMs - pendingIdleLobbyEloAtMs) in 0L..12_000L) {
+                    if (isGblMode) {
+                        parseIdleGblSetBattlesPlayed(visionText, cropTop, scale, h)?.let { played ->
+                            onIdleGblSetBattlesPlayedObserved(played, obsDoneMs)
+                        }
+                        val parsed = parseIdleGblEloFromVisionResult(visionText, cropLeft, cropTop, scale, w, h)
+                        if (parsed != null) {
+                            if (parsed.isEndOfSetModal) {
                                 pendingIdleLobbyElo = null
                                 onIdleGblEloConfirmed(parsed.elo, source = scanSource)
                             } else {
-                                pendingIdleLobbyElo = parsed.elo
-                                pendingIdleLobbyEloAtMs = obsDoneMs
-                                val nextHint = "Locking ${String.format(java.util.Locale.US, "%,d", parsed.elo)}..."
+                                if (pendingIdleLobbyElo == parsed.elo && (obsDoneMs - pendingIdleLobbyEloAtMs) in 0L..12_000L) {
+                                    pendingIdleLobbyElo = null
+                                    onIdleGblEloConfirmed(parsed.elo, source = scanSource)
+                                } else {
+                                    pendingIdleLobbyElo = parsed.elo
+                                    pendingIdleLobbyEloAtMs = obsDoneMs
+                                    val nextHint = "Locking ${String.format(java.util.Locale.US, "%,d", parsed.elo)}..."
+                                    if (guidedEloScanHintText != nextHint) {
+                                        guidedEloScanHintText = nextHint
+                                        if (isGuided) recalculateAndPushBattleData()
+                                    }
+                                }
+                            }
+                        } else {
+                            pendingIdleLobbyElo = null
+                            if (isGuided) {
+                                val rawLower = visionText.text.lowercase()
+                                val nextHint = if (rawLower.contains("battles played") && !rawLower.contains("current season")) {
+                                    "Scroll down to CURRENT SEASON"
+                                } else {
+                                    "Scroll down to CURRENT SEASON"
+                                }
                                 if (guidedEloScanHintText != nextHint) {
                                     guidedEloScanHintText = nextHint
-                                    if (isGuided) recalculateAndPushBattleData()
+                                    recalculateAndPushBattleData()
                                 }
                             }
                         }
-                    } else {
-                        pendingIdleLobbyElo = null
-                        if (isGuided) {
-                            val rawLower = visionText.text.lowercase()
-                            val nextHint = if (rawLower.contains("battles played") && !rawLower.contains("current season")) {
-                                "Scroll down to CURRENT SEASON"
-                            } else {
-                                "Scroll down to CURRENT SEASON"
-                            }
-                            if (guidedEloScanHintText != nextHint) {
-                                guidedEloScanHintText = nextHint
-                                recalculateAndPushBattleData()
-                            }
-                        }
+                    }
+                    if (wantPartyScan) {
+                        processIdlePartyAndMatchmakingVision(visionText, slotVisuals, cropLeft, cropTop, scale, w, h, obsDoneMs)
                     }
                 }
             } catch (_: Exception) {
@@ -8588,10 +9456,14 @@ class OverlayService : LifecycleService() {
             return
         }
 
+        val partySettlePending = lastFrameWasChoosePartyScreen && (pendingPartySettleObs?.count ?: 0) == 1
+        val forcePartyBurstActive = System.currentTimeMillis() < forcePartyScanUntilMs
         val isIdleStandbyWindow = !isBattleActive && !isBattleIntroCountdownActive
         if (isIdleStandbyWindow &&
             introCountdownConfirmFrames == 0 &&
             !isCountdownDimmedState &&
+            !partySettlePending &&
+            !forcePartyBurstActive &&
             visionFrameSeq == lastIdleProcessedFrameSeq
         ) {
             return
@@ -9466,8 +10338,13 @@ class OverlayService : LifecycleService() {
             ) {
                 val goMatch = goLeadRegex.find(raw)
                 if (goMatch != null) {
+                    if (!isBattleActive) {
+                        commitPendingPartyScanIfEligible("GO_BANNER")
+                    }
+                    val activeGoPreset = currentPreset ?: preset
+                    val activeGoLeague = activeGoPreset?.league ?: activeLeague
                     val goCandidate = findPokemonInText(goMatch.groupValues[1].trim())
-                    val isUserTeamMon = goCandidate != null && preset?.pokemon?.any { uMon ->
+                    val isUserTeamMon = goCandidate != null && activeGoPreset?.pokemon?.any { uMon ->
                         FormResolver.extractBaseSpecies(uMon.name).equals(goCandidate.baseSpecies, ignoreCase = true)
                     } == true
                     val isExplicitOppSendOut = raw.contains("sent out", ignoreCase = true)
@@ -9476,12 +10353,12 @@ class OverlayService : LifecycleService() {
                     if (goCandidate != null && (!isUserTeamMon || isExplicitOppSendOut) && isNewMidBattleOpp) {
                         val base = goCandidate.baseSpecies.lowercase()
                         val manualFormName = manualFormOverrides[base]
-                        val (bestVar, defaultShadow) = FormResolver.resolveBestDefaultFormAndShadow(goCandidate, raw, activeLeague)
+                        val (bestVar, defaultShadow) = FormResolver.resolveBestDefaultFormAndShadow(goCandidate, raw, activeGoLeague)
                         val isShadowHint = manualShadowOverrides[base] ?: (raw.contains("shadow", ignoreCase = true) || defaultShadow)
                         val resolved = if (manualFormName != null) {
-                            getPokemonMeta(manualFormName, activeLeague, isShadowHint)
+                            getPokemonMeta(manualFormName, activeGoLeague, isShadowHint)
                         } else {
-                            OverlayService.applyRankingMovesForLeague(OverlayService.applyRecommendedMoves(bestVar), activeLeague, isShadowHint)
+                            OverlayService.applyRankingMovesForLeague(OverlayService.applyRecommendedMoves(bestVar), activeGoLeague, isShadowHint)
                         }
                         if (!isBattleActive) {
                             startNewBattle()
@@ -15839,6 +16716,20 @@ class OverlayService : LifecycleService() {
                 lower.contains("bench:") ||
                 lower.contains("opt 1") ||
                 lower.contains("opt 2") ||
+                lower.contains("party verified") ||
+                lower.contains("unsaved party") ||
+                lower.contains("no saved preset") ||
+                lower.contains("team locked") ||
+                lower.contains("🔍 auto") ||
+                lower.contains("🔍 off") ||
+                lower.contains("🔍 scan") ||
+                lower.contains("🔍 party:") ||
+                lower.contains("full hud") ||
+                lower.contains("compact hud") ||
+                lower.contains("scan elo") ||
+                lower.contains("🏆") ||
+                lower.contains("📐") ||
+                lower.contains("🎯") ||
                 lower.contains("⚔") ||
                 lower.contains("→") ||
                 Regex("^vs\\s+").containsMatchIn(lower.trim()) ||
@@ -18369,6 +19260,7 @@ class OverlayService : LifecycleService() {
         if (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0) {
             abortOneBattleDvrAsync(disarm = false)
         }
+        commitPendingPartyScanIfEligible("BATTLE_START")
         stoppedBattleDiscardDvr = false
         stoppedBattleFlagBugReport = false
 
@@ -18409,7 +19301,11 @@ class OverlayService : LifecycleService() {
         isOpponentShadow = false
         availableOpponentForms = emptyList()
         currentFormIndex = 0
-        activeUserPokemonName = currentPreset?.pokemon?.firstOrNull()?.name ?: activeUserPokemonName
+        val overrideLead = lockedPartyLeadOverrideName?.takeIf { ov ->
+            lockedPartyLeadOverridePresetId == currentPreset?.id &&
+                currentPreset?.pokemon?.any { it.name.equals(ov, ignoreCase = true) } == true
+        }
+        activeUserPokemonName = overrideLead ?: currentPreset?.pokemon?.firstOrNull()?.name ?: activeUserPokemonName
 
         // Phase 2: Reset Clock Anchor (t_0) & Timeline Event Logger
         battleClockAnchorMs = 0L
@@ -20611,6 +21507,10 @@ class OverlayService : LifecycleService() {
         }
 
         activeUserPokemonName = pokemonName
+        if (!isBattleActive || isWaitingForOpponent) {
+            lockedPartyLeadOverridePresetId = currentPreset?.id
+            lockedPartyLeadOverrideName = pokemonName
+        }
         recalculateAndPushBattleData()
         if (::prefs.isInitialized) {
             showBattleToast("Active Lead: $pokemonName")
@@ -21565,6 +22465,43 @@ class OverlayService : LifecycleService() {
                         "guidedHintText" to (if (guidedActive) guidedEloScanHintText else ""),
                         "promptDue" to promptDue,
                         "confirmBannerText" to confirmText
+                    )
+                    stateMap
+                },
+                "partyScanState" to run {
+                    val preview = activePartyPreview
+                    val curConfirmText = if (!isReplayMode && nowMs < lastLockedPartyBannerUntilMs) lastLockedPartyBannerText else ""
+                    val statusKind = when {
+                        isReplayMode -> "NONE"
+                        curConfirmText.isNotBlank() -> "LOCKED_CONFIRM"
+                        preview != null && (nowMs - preview.lastSeenOnPartyScreenMs) in 0L..45_000L -> "MATCHED_PREVIEW"
+                        nowMs < alreadyActivePartyUntilMs && alreadyActivePartyName.isNotBlank() -> "ALREADY_ACTIVE"
+                        nowMs < unmatchedPartyUntilMs && unmatchedPartySummaryText.isNotBlank() -> "UNMATCHED"
+                        else -> "NONE"
+                    }
+                    val detectedSummary = when (statusKind) {
+                        "MATCHED_PREVIEW" -> preview?.orderedDisplayNames?.mapIndexed { idx, n ->
+                            if (idx == 0) "★ $n" else n
+                        }?.joinToString(" / ").orEmpty()
+                        "UNMATCHED" -> unmatchedPartySummaryText
+                        else -> ""
+                    }
+                    val stateMap: Map<String, Any?> = mapOf(
+                        "autoEnabled" to autoTeamScanEnabled,
+                        "forceScanActive" to (!isReplayMode && nowMs < forcePartyScanUntilMs),
+                        "statusKind" to statusKind,
+                        "matchedPresetId" to (preview?.presetId ?: ""),
+                        "matchedPresetName" to when (statusKind) {
+                            "MATCHED_PREVIEW" -> preview?.presetName ?: ""
+                            "ALREADY_ACTIVE" -> alreadyActivePartyName
+                            "LOCKED_CONFIRM" -> (currentPreset?.name ?: "")
+                            else -> ""
+                        },
+                        "matchedLeague" to (preview?.league ?: ""),
+                        "matchedLeadName" to (preview?.leadPokemonName ?: ""),
+                        "detectedSummary" to detectedSummary,
+                        "cardPartyName" to (preview?.cardPartyName ?: ""),
+                        "confirmText" to curConfirmText
                     )
                     stateMap
                 },
@@ -23954,6 +24891,12 @@ class OverlayService : LifecycleService() {
                 val presets = loadPresets()
                 val chosen = presets.find { it.id == presetId }
                 if (chosen != null) {
+                    lockedPartyLeadOverridePresetId = null
+                    lockedPartyLeadOverrideName = null
+                    activePartyPreview = null
+                    pendingPartySettleObs = null
+                    alreadyActivePartyUntilMs = 0L
+                    unmatchedPartyUntilMs = 0L
                     currentPreset = chosen
                     activeUserPokemonName = chosen.pokemon.firstOrNull()?.name
                     val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
@@ -24353,6 +25296,65 @@ class OverlayService : LifecycleService() {
         fun dismissEloConfirmBanner() {
             Handler(Looper.getMainLooper()).post {
                 this@OverlayService.dismissEloConfirmBannerFromOverlay()
+            }
+        }
+
+        @JavascriptInterface
+        fun toggleAutoTeamScan() {
+            Handler(Looper.getMainLooper()).post {
+                val next = !autoTeamScanEnabled
+                autoTeamScanEnabled = next
+                if (isPrefsInitialized) {
+                    prefs.edit().putBoolean(PREFS_KEY_AUTO_TEAM_SCAN_ENABLED, next).apply()
+                }
+                if (next) {
+                    val nowMs = System.currentTimeMillis()
+                    forcePartyScanUntilMs = nowMs + 3000L
+                    idleEloLastOcrAttemptMs = 0L
+                    lastIdleProcessedFrameSeq = -1L
+                    dismissedPartySignature = ""
+                    if (battleLoopJob?.isActive != true) {
+                        startIdleStandbyEloMonitorLoop()
+                    }
+                    schedulePartyBannerExpiryPush(3100L)
+                    recalculateAndPushBattleData()
+                    showBattleToast("🔍 Auto Team Scan: ON")
+                } else {
+                    forcePartyScanUntilMs = 0L
+                    activePartyPreview = null
+                    pendingPartySettleObs = null
+                    alreadyActivePartyUntilMs = 0L
+                    unmatchedPartyUntilMs = 0L
+                    lastFrameWasChoosePartyScreen = false
+                    recalculateAndPushBattleData()
+                    showBattleToast("🔍 Auto Team Scan: OFF")
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun confirmDetectedPartyPreset() {
+            Handler(Looper.getMainLooper()).post {
+                val preview = activePartyPreview
+                if (preview != null) {
+                    commitMatchedPartyPreset(preview, source = "HUD")
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun dismissDetectedPartyPreview() {
+            Handler(Looper.getMainLooper()).post {
+                activePartyPreview?.let {
+                    dismissedPartySignature = it.signature
+                }
+                activePartyPreview = null
+                pendingPartySettleObs = null
+                alreadyActivePartyUntilMs = 0L
+                unmatchedPartyUntilMs = 0L
+                lastLockedPartyBannerUntilMs = 0L
+                lastLockedPartyBannerText = ""
+                recalculateAndPushBattleData()
             }
         }
     }

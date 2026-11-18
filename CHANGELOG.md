@@ -2,6 +2,17 @@
 
 ---
 
+## v7.60 (2026-11-18) — Auto-Detect Team & League from "Choose Your Party" Screen + Idle HUD `🔍 Auto` Team Scan Toggle
+*Idle pre-battle workflow & HUD enhancement (`v7.60`, `versionCode = 1760`) introducing automatic League/Cup and 3-Pokémon preset detection from Pokémon GO's `"CHOOSE YOUR PARTY"` screen, paired with a persistent `🔍 Auto` toggle pill directly beside your 3 Pokémon on the idle HUD.*
+
+- **Idle HUD `🔍 Auto` Toggle & Non-Destructive Swipe Preview (`overlay.html`, `OverlayService.kt`)**: Added a persistent `🔍 Auto` / `🔍 Off` / `🔍 Scan…` toggle pill inside `.idle-team-line2` right next to your 3 `.idle-poke-pill` team Pokémon across both Full and Compact HUD modes (hidden in `/watch` replays), arming an instant `3s` fast-scan burst (`220ms` cadence) when enabled and displaying non-destructive swipe previews (`🔍 Party: <Preset> [✓ Use] [✕]`, `✓ Party Verified`, or `🔍 Unsaved Party — No saved preset`) with dynamic `scheduleNotifyHeight()` touch-zone resizing.
+- **Zero-Overhead `"CHOOSE YOUR PARTY"` Vision & PvP Nickname Stem Parser (`OverlayService.kt`)**: Piggybacks on the shared idle `MediaProjection` frame (`cropTop = 0.20..0.985`, active in both GBL and Show 6 modes when `🔍 Auto` is ON), detects `"CHOOSE YOUR PARTY"` / `"USE THIS PARTY"` / `"Tap to swap"`, clamps slot centers to `x=[0.085..0.910]` to ignore adjacent carousel peek cards, parses League/Max-CP headers + party titles (`!= "New Party"`), and extracts species + CP from PvP IV nicknames (`X1113MelmEFD` → *Melmetal*, `U1Mimikyu`, `ⓊMoltres`, `U1Tinkaton+`, `ⓊSwampert99`) using prefix/suffix stripping, CamelCase trailing move-code splitting, 4+ char stems, and Lv51 max-CP legality filtering.
+- **3-Tier Form & Shadow Disambiguation (`OverlayService.kt`)**: Resolves regional/alternate forms and Shadow state via (1) exact `(BaseSpecies + League/CP-Cap + CP ±1)` lookup in `My Built Pokémon` (`PREFS_KEY_BUILT_POKEMON_ROSTER`), (2) legal CP filtering + zero-allocation `14×14` sprite-box HSV palette & Shadow purple-wisp sampling (`y=[0.695..0.768]`, ignoring Lucky golden sparkles & Slot-0 top-left overlay overlap — e.g. resolving `ⓊMoltres` `CP 2498` charcoal/magenta as *Moltres (Galarian)*), and (3) PvPoke league rank priors.
+- **Strict Saved-Preset-Only Matching & Safe Commit Hooks (`OverlayService.kt`)**: Matches exclusively against existing saved `TeamPreset`s in compatible CP caps (boosting custom party card titles + exact `[Lead, Switch, Closer]` order + slot CPs + 2-of-3 named-party rescue, never creating ad-hoc presets), debounces for `2` settled frames while swiping, and locks `currentPreset` + exact Slot-0 Lead (`activeUserPokemonName`) on `[✓ Use]`, Matchmaking (`"Finding opponent"` / `"Cancel"`), `3-2-1` (`startNewBattle()`), or `"Go!"` banner while clearing pending previews if backing out to the GBL lobby.
+- **Agent Rule Hardening (`AGENTS.md`)**: Added the post-subagent wakeup & pre-send `ask_question` guardrail to Section `1.3` (`/learn`).
+
+---
+
 ## v7.56 (2026-11-18) — Shadow Aura & Entry-OCR Hardening, Strict OCR-Only Mimikyu Disguise, Shield Sync & Context-Triggered Survey Refresh
 *Live-combat accuracy, Mimikyu Disguise & telemetry UX release (`v7.56`, `versionCode = 1756`) resolving all four user-flagged Ultra League DVR reports (`-139`, `-880`, `-794`, `-366`), refreshing the in-app post-battle 1-tap survey pool, and splitting the morning telemetry pipeline into a 4:00 AM scan, 5:15 AM plan, and 6:00 AM Telegram summary.*
 

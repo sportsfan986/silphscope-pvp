@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.60',
+    codename: 'Auto-Detect Team & League from "Choose Your Party" + Idle HUD Auto Team Scan Toggle',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Adds a persistent 🔍 Auto team-scan toggle right beside your 3 Pokémon on the idle HUD, parsing League/CP caps, PvP IV nicknames, 3-tier regional/Shadow sprites, and matching saved TeamPresets with swipe preview & automatic lock on Matchmaking or battle start.',
+    icon: '🔍',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Added persistent 🔍 Auto / 🔍 Off toggle pill inside .idle-team-line2 across Full & Compact HUDs (with instant 3s fast-scan burst on enable and non-destructive swipe preview strip)',
+      'Piggybacks on shared idle OCR on "CHOOSE YOUR PARTY" with peek-card X-clamping (0.085..0.910), League/Max-CP parsing, and custom party title matching (!= "New Party")',
+      'Strips PvP IV prefixes/suffixes and CamelCase move codes (e.g., X1113MelmEFD -> Melmetal, U1Mimikyu, ⓊMoltres, U1Tinkaton+, ⓊSwampert99) with 4+ char stems and Lv51 CP legality checks',
+      '3-tier regional form & Shadow disambiguation via My Built Pokémon exact CP lookup, 14x14 sprite-box HSV palette sampling (e.g., Galarian vs. Kanto Moltres, Lucky-safe), and PvPoke rank priors',
+      'Strict saved-preset-only matching with 2-frame swipe settle preview and automatic team + Slot-0 Lead lock on [✓ Use], Matchmaking, 3-2-1 countdown, or "Go!" battle start'
+    ]
+  },
+  {
     version: 'v7.56',
     codename: 'Shadow Aura & Entry-OCR Hardening, Strict OCR-Only Mimikyu Disguise, Shield Sync & Survey Refresh',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Eliminates Go-banner player Shadow leaks and Fairy Wind Aura blocks, unlocks 3D Shadow Aura sampling when 1 action circle dims, enforces strict OCR-only Mimikyu Disguise busts, fixes BLOCKED! & KO-faint shield desyncs, and refreshes the in-app post-battle 1-tap survey pool.',
     icon: '🛡️',
@@ -484,21 +499,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Shiny Origin Dialga Midnight invariant default for first load & anonymous sessions',
       'Dynamic CSS theme variables applied consistently across Marketing site & Simulator',
       'User theme preference synced across devices via Cloudflare D1 Vault Sync'
-    ]
-  },
-  {
-    id: 'auto-detect-party-screen',
-    title: 'Auto-Detect Team & League from "Choose Your Party" Screen',
-    badge: 'VISION & TEAM SYNC',
-    status: 'Planned',
-    statusColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-    category: 'HUD / Combat Engine',
-    icon: '🔍',
-    description: 'Automatically detect the active League/Cup and 3-Pokémon team from Pokémon GO\'s pre-battle "CHOOSE YOUR PARTY" screen—handling custom PvP IV nicknames (e.g., X1113MelmEFD, U1Mimikyu, ⓊMoltres, U1Tinkaton+, ⓊSwampert99) via fuzzy species matching, CP/form disambiguation, and Built Pokémon roster matching.',
-    keyGoals: [
-      'Idle-only OCR of "CHOOSE YOUR PARTY" league header, party name, and 3 slot CP + nickname labels',
-      'Fuzzy nickname-to-species parser stripping PvP IV prefixes/suffixes (U1, X1113, Ⓤ, +, 99, move codes)',
-      'CP + sprite/color disambiguation for regional/alternate forms (e.g., Galarian vs. Kanto Moltres) and Built Roster matching'
     ]
   },
   {

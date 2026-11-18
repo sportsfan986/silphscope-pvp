@@ -1631,6 +1631,58 @@
             color: #ffffff;
             font-weight: 900;
         }
+        .idle-auto-team-btn {
+            flex: 0 0 auto;
+            padding: 1.5px 4.5px;
+            border-radius: 3px;
+            font-size: 7px;
+            font-weight: 900;
+            letter-spacing: 0.2px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .idle-auto-team-btn.on {
+            border: 1px solid rgba(45, 212, 191, 0.72);
+            background: rgba(13, 148, 136, 0.34);
+            color: #5eead4;
+        }
+        .idle-auto-team-btn.scanning {
+            border: 1px solid rgba(250, 204, 21, 0.82);
+            background: rgba(161, 98, 7, 0.38);
+            color: #fde047;
+        }
+        .idle-auto-team-btn.off {
+            border: 1px solid rgba(100, 116, 139, 0.42);
+            background: rgba(15, 23, 42, 0.65);
+            color: #94a3b8;
+        }
+        .idle-party-preview-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 4px;
+            margin-top: 1.5px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 7.4px;
+            font-weight: 800;
+        }
+        .idle-party-preview-row.preview-match {
+            border: 1px solid rgba(45, 212, 191, 0.68);
+            background: rgba(13, 148, 136, 0.28);
+        }
+        .idle-party-preview-row.preview-active {
+            border: 1px solid rgba(52, 211, 153, 0.42);
+            background: rgba(6, 78, 59, 0.28);
+        }
+        .idle-party-preview-row.preview-unmatched {
+            border: 1px solid rgba(148, 163, 184, 0.42);
+            background: rgba(30, 41, 59, 0.55);
+        }
+        .idle-party-preview-row.preview-locked {
+            border: 1px solid rgba(52, 211, 153, 0.85);
+            background: rgba(6, 78, 59, 0.50);
+        }
 
         .compact-pacing-strip {
             display: flex;
@@ -3114,6 +3166,27 @@
             }
         }
 
+        function toggleAutoTeamScanHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.toggleAutoTeamScan) {
+                window.AndroidOverlay.toggleAutoTeamScan();
+            }
+        }
+
+        function confirmDetectedPartyHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.confirmDetectedPartyPreset) {
+                window.AndroidOverlay.confirmDetectedPartyPreset();
+            }
+        }
+
+        function dismissDetectedPartyHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.dismissDetectedPartyPreview) {
+                window.AndroidOverlay.dismissDetectedPartyPreview();
+            }
+        }
+
         function deleteLastBattleDvrPrompt(explicitBattleId) {
             const bId = explicitBattleId !== undefined
                 ? explicitBattleId
@@ -4031,9 +4104,11 @@
             const guidedRemSec = eloState && typeof eloState.guidedRemainingSec === "number" ? eloState.guidedRemainingSec : 0;
             const confirmTextVal = eloState && eloState.confirmBannerText ? String(eloState.confirmBannerText).trim() : "";
             const promptDueVal = !!(eloState && eloState.promptDue) && !startBattleMenuOpen;
+            const partyState = (!isReplay && battleData && battleData.partyScanState) ? battleData.partyScanState : null;
 
             if (isWaitingState) {
                 if (idleTeamBannerEl) {
+                    const wasIdleBannerHidden = idleTeamBannerEl.classList.contains("hidden");
                     idleTeamBannerEl.classList.remove("hidden");
                     const isCompactNow = isReplay ? (window.replayHudMode === "compact") : (window.liveHudMode === "compact");
                     const cfgIdle = window.compactHudConfig || {};
@@ -4061,7 +4136,30 @@
                         const prefix = isActLead ? "★ " : "";
                         return `<span class="idle-poke-pill ${isActLead ? 'active-lead' : ''}" onclick="selectUserPokemonByIndex(${mIdx})" title="${isActLead ? 'Active Lead: ' : 'Tap to set as Lead: '}${escapeHtml(fullName)}">${prefix}${escapeHtml(fullName)}</span>`;
                     }).join("");
-                    setHtmlIfChanged(idleTeamBannerEl, `
+                    const autoPartyOn = partyState ? !!partyState.autoEnabled : true;
+                    const forcePartyScan = !!(partyState && partyState.forceScanActive);
+                    const autoBtnCls = forcePartyScan ? "scanning" : (autoPartyOn ? "on" : "off");
+                    const autoBtnLabel = forcePartyScan ? "🔍 Scan…" : (autoPartyOn ? "🔍 Auto" : "🔍 Off");
+                    const autoTeamBtnHtml = !isReplay
+                        ? `<button type="button" class="idle-auto-team-btn ${autoBtnCls}" onclick="toggleAutoTeamScanHud(event)" title="Auto Team Scan on 'CHOOSE YOUR PARTY' (Tap to toggle ON/OFF; turning ON scans immediately)">${autoBtnLabel}</button>`
+                        : "";
+                    let partyPreviewHtml = "";
+                    if (!isReplay && !guidedActiveVal && partyState && partyState.statusKind && partyState.statusKind !== "NONE") {
+                        const kind = String(partyState.statusKind);
+                        const pPresetName = String(partyState.matchedPresetName || "");
+                        const pDetSummary = String(partyState.detectedSummary || "");
+                        const pConfirmTxt = String(partyState.confirmText || "");
+                        if (kind === "MATCHED_PREVIEW") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-match"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#5eead4;">🔍 Party: <strong>${escapeHtml(pPresetName)}</strong> (${escapeHtml(pDetSummary)})</span><div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;"><button type="button" class="menu-btn menu-btn-win" onclick="confirmDetectedPartyHud(event)" title="Switch to this saved preset now">✓ Use</button><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss party preview">✕</button></div></div>`;
+                        } else if (kind === "ALREADY_ACTIVE") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-active"><span style="color:#6ee7b7;">✓ Party Verified: ${escapeHtml(pPresetName)}</span></div>`;
+                        } else if (kind === "UNMATCHED") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-unmatched"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1;">🔍 Unsaved Party (${escapeHtml(pDetSummary)}) — No saved preset</span><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss">✕</button></div>`;
+                        } else if (kind === "LOCKED_CONFIRM") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-locked"><span style="color:#6ee7b7;">${escapeHtml(pConfirmTxt || ("✅ Team Locked: " + pPresetName))}</span><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss">✕</button></div>`;
+                        }
+                    }
+                    const idleBannerChanged = setHtmlIfChanged(idleTeamBannerEl, `
                         <div class="idle-team-line1">
                             <span class="idle-league-pill" title="Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}">🏆 ${escapeHtml(activeLeagueStr)} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
                             <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
@@ -4070,8 +4168,10 @@
                                 ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
                             </div>
                         </div>
-                        ${guidedActiveVal ? "" : `<div class="idle-team-line2">${pokePillsHtml}</div>`}
+                        ${guidedActiveVal ? "" : `<div class="idle-team-line2">${pokePillsHtml}${autoTeamBtnHtml}</div>`}
+                        ${partyPreviewHtml}
                     `);
+                    if (wasIdleBannerHidden || idleBannerChanged) scheduleNotifyHeight();
                 }
                 if (eloBannerEl) {
                     const guidedHintVal = eloState && eloState.guidedHintText ? String(eloState.guidedHintText).trim() : "";
@@ -4186,7 +4286,9 @@
                 }
             } else {
                 if (idleTeamBannerEl) {
+                    const wasIdleBannerShown = !idleTeamBannerEl.classList.contains("hidden");
                     idleTeamBannerEl.classList.add("hidden");
+                    if (wasIdleBannerShown) scheduleNotifyHeight();
                 }
                 if (eloBannerEl) {
                     const wasShown = !eloBannerEl.classList.contains("hidden");
