@@ -1091,6 +1091,20 @@ export const PVPOKE_ENDPOINTS = {
   RANKINGS_BF_MASTER: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json"
 } as const;
 
+export interface MetaPoolBrSnapshot {
+  league: string;
+  leadAggBr: number;
+  machineAggBr: number;
+  safeSwapBr: number;
+  closerSwapBr: number;
+  closerBr: number;
+  topMetaTargetsTotal?: number;
+  topMetaWinsCount?: number;
+  keyMetaTargetsBeaten?: string[];
+  keyThreats?: string[];
+  coreBreakers?: string[];
+}
+
 export interface TeamPreset {
   id: string;
   name: string;
@@ -1114,6 +1128,7 @@ export interface TeamPreset {
   coreBreakers?: string[];
   altMovesetSlots?: AntiMetaAltMovesetInfo[];
   synergySummary?: string;
+  metaPoolMetrics?: Record<string, MetaPoolBrSnapshot>;
   metricsUpdatedAt?: number;
   updatedAt?: number;
 }

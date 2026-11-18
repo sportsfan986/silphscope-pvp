@@ -2556,6 +2556,26 @@ export default function App() {
     } catch {}
   }, []);
 
+  // v7.62: Ensure multi-meta presets always have cached metaPoolMetrics for every assigned meta pool
+  useEffect(() => {
+    const needsBackfill = (p: TeamPreset) => {
+      const assigned = getEffectiveAssignedLeagues(p);
+      if (assigned.length <= 1) return false;
+      const poolKeys = Object.keys(p.metaPoolMetrics || {}).map((k) => k.toLowerCase());
+      return assigned.some((lg) => !poolKeys.includes(lg.toLowerCase()));
+    };
+    if (gblPresets.some(needsBackfill)) {
+      setGblPresets((prev) =>
+        prev.map((p) => (needsBackfill(p) ? evaluateTeamPresetMetrics(p, gblBattleLogs) : p))
+      );
+    }
+    if (show6Presets3.some(needsBackfill)) {
+      setShow6Presets3((prev) =>
+        prev.map((p) => (needsBackfill(p) ? evaluateTeamPresetMetrics(p, show6BattleLogs) : p))
+      );
+    }
+  }, [gblPresets, show6Presets3]);
+
   const handleTogglePinnedGblMeta = async (metaId: string) => {
     const exists = pinnedGblMetas.includes(metaId);
     const next = exists ? pinnedGblMetas.filter((id) => id !== metaId) : [...pinnedGblMetas, metaId];
@@ -6708,7 +6728,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.61 • Android Native Overlay
+                  v7.62 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -11998,13 +12018,32 @@ export default function App() {
                                   (lg) => lg.toLowerCase() === preset.league.toLowerCase()
                                 );
                                 const nextMeta = assignedMetas[(curIdx >= 0 ? curIdx + 1 : 1) % assignedMetas.length];
-                                const nextPreset = evaluateTeamPresetMetrics(
-                                  { ...preset, league: nextMeta, updatedAt: Date.now() },
-                                  battleLogs,
-                                  activeSeasonBounds.startMs,
-                                  activeSeasonBounds.endMs,
-                                  false
-                                );
+                                const snapEntry = Object.entries(preset.metaPoolMetrics || {}).find(
+                                  ([k]) => k.toLowerCase() === nextMeta.toLowerCase()
+                                )?.[1];
+                                const nextPreset = snapEntry
+                                  ? {
+                                      ...preset,
+                                      league: nextMeta,
+                                      updatedAt: Date.now(),
+                                      leadAggBr: snapEntry.leadAggBr,
+                                      machineAggBr: snapEntry.machineAggBr,
+                                      safeSwapBr: snapEntry.safeSwapBr,
+                                      closerSwapBr: snapEntry.closerSwapBr,
+                                      closerBr: snapEntry.closerBr,
+                                      topMetaTargetsTotal: snapEntry.topMetaTargetsTotal,
+                                      topMetaWinsCount: snapEntry.topMetaWinsCount,
+                                      keyMetaTargetsBeaten: snapEntry.keyMetaTargetsBeaten,
+                                      keyThreats: snapEntry.keyThreats,
+                                      coreBreakers: snapEntry.coreBreakers
+                                    }
+                                  : evaluateTeamPresetMetrics(
+                                      { ...preset, league: nextMeta, updatedAt: Date.now() },
+                                      battleLogs,
+                                      activeSeasonBounds.startMs,
+                                      activeSeasonBounds.endMs,
+                                      false
+                                    );
                                 setPresets((prev) => prev.map((p) => (p.id === preset.id ? nextPreset : p)));
                               }}
                               title="Click to cycle active meta for this multi-meta team"
@@ -12018,11 +12057,7 @@ export default function App() {
                                   : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
                               }`}
                             >
-                              {preset.league} ⇄ +
-                              {assignedMetas
-                                .filter((lg) => lg.toLowerCase() !== preset.league.toLowerCase())
-                                .map(formatShortMetaBadge)
-                                .join(', ')}
+                              {assignedMetas.map(formatShortMetaBadge).join(' ⇄ ')}
                             </button>
                           ) : (
                             <span
@@ -12141,6 +12176,99 @@ export default function App() {
                           Lead BR: {leadBr} ({leadTierInfo.tier})
                         </span>
                       </div>
+
+                      {assignedMetas.length > 1 && (
+                        <div className="space-y-1.5">
+                          {assignedMetas.map((metaLg) => {
+                            const isActivePool = metaLg.toLowerCase() === preset.league.toLowerCase();
+                            const shortMeta = formatShortMetaBadge(metaLg);
+                            const snap =
+                              Object.entries(preset.metaPoolMetrics || {}).find(
+                                ([k]) => k.toLowerCase() === metaLg.toLowerCase()
+                              )?.[1] ||
+                              (isActivePool
+                                ? {
+                                    league: metaLg,
+                                    leadAggBr: leadBr,
+                                    machineAggBr: machBr,
+                                    safeSwapBr,
+                                    closerSwapBr,
+                                    closerBr: preset.closerBr ?? 500,
+                                    topMetaTargetsTotal: totalMetaDepth,
+                                    topMetaWinsCount: topWinsCount
+                                  }
+                                : null);
+                            const poolMachInfo = getMachineBrTierInfo(
+                              snap?.machineAggBr ?? 600,
+                              machineBrThresholds
+                            );
+                            return (
+                              <button
+                                key={metaLg}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isActivePool) return;
+                                  const fullSnap = Object.entries(preset.metaPoolMetrics || {}).find(
+                                    ([k]) => k.toLowerCase() === metaLg.toLowerCase()
+                                  )?.[1];
+                                  const nextPreset = fullSnap
+                                    ? {
+                                        ...preset,
+                                        league: metaLg,
+                                        updatedAt: Date.now(),
+                                        leadAggBr: fullSnap.leadAggBr,
+                                        machineAggBr: fullSnap.machineAggBr,
+                                        safeSwapBr: fullSnap.safeSwapBr,
+                                        closerSwapBr: fullSnap.closerSwapBr,
+                                        closerBr: fullSnap.closerBr,
+                                        topMetaTargetsTotal: fullSnap.topMetaTargetsTotal,
+                                        topMetaWinsCount: fullSnap.topMetaWinsCount,
+                                        keyMetaTargetsBeaten: fullSnap.keyMetaTargetsBeaten,
+                                        keyThreats: fullSnap.keyThreats,
+                                        coreBreakers: fullSnap.coreBreakers
+                                      }
+                                    : evaluateTeamPresetMetrics(
+                                        { ...preset, league: metaLg, updatedAt: Date.now() },
+                                        battleLogs,
+                                        activeSeasonBounds.startMs,
+                                        activeSeasonBounds.endMs,
+                                        false
+                                      );
+                                  setPresets((prev) => prev.map((p) => (p.id === preset.id ? nextPreset : p)));
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg border text-[10px] transition ${
+                                  isActivePool
+                                    ? 'bg-sky-950/60 border-sky-400/70 text-slate-100'
+                                    : 'bg-slate-900/70 border-slate-800 hover:border-slate-600 text-slate-300'
+                                }`}
+                                title={isActivePool ? 'Active slot/Key Wins view' : `Tap to switch detail view to ${formatLeagueDisplayLabel(metaLg)}`}
+                              >
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <span className="font-extrabold text-sky-300">
+                                    {isActivePool ? '★' : '◦'} [{shortMeta}]
+                                  </span>
+                                  {snap ? (
+                                    <span className="font-semibold">
+                                      Core: <span className={`font-black ${poolMachInfo.badgeClass.split(' ').find((c) => c.startsWith('text-')) || 'text-emerald-300'}`}>{snap.machineAggBr}</span> • Beats{' '}
+                                      <span className="text-emerald-400 font-bold">
+                                        {snap.topMetaWinsCount ?? 0}/{snap.topMetaTargetsTotal || 50}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">Computing BR...</span>
+                                  )}
+                                </div>
+                                {snap && (
+                                  <div className="text-[9.5px] font-mono text-slate-300 mt-0.5">
+                                    Lead BR {snap.leadAggBr} • Swap #2 {snap.safeSwapBr} / #3 {snap.closerSwapBr} • Closer BR {snap.closerBr}
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* 3 Team Slots (Clean Summary: Role, Pokemon Name & IVs/CP only) */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -12286,80 +12414,160 @@ export default function App() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1">
-                          League Category
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                          Assigned Leagues / Metas (Multi-Select)
                         </label>
-                        <select
-                          value={newPresetLeague}
-                          onChange={(e) => {
-                            const nextL = e.target.value as LeagueType;
-                            setNewPresetLeague(nextL);
-                            const nextCap = getLeagueCpCap(nextL);
-                            setNewPresetExtraLeagues((prev) =>
-                              prev.filter(
-                                (lg) => lg.toLowerCase() !== nextL.toLowerCase() && getLeagueCpCap(lg) === nextCap
-                              )
-                            );
+                        {(() => {
+                          const rawModeLeagues =
+                            appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues;
+                          const allSelectable = Array.from(
+                            new Set([
+                              ...rawModeLeagues.map((lg) => normalizeLeagueName(lg)),
+                              normalizeLeagueName(newPresetLeague),
+                              ...newPresetExtraLeagues.map((lg) => normalizeLeagueName(lg))
+                            ])
+                          ).filter(Boolean);
+                          const activeTier = resolveLeagueCpTier(newPresetLeague);
+                          const tierTabs: Array<{ key: 'GREAT' | 'ULTRA' | 'MASTER'; label: string }> = [
+                            { key: 'GREAT', label: 'Great (1500)' },
+                            { key: 'ULTRA', label: 'Ultra (2500)' },
+                            { key: 'MASTER', label: 'Master (10000)' }
+                          ];
+                          const tierMetas = allSelectable.filter((lg) => resolveLeagueCpTier(lg) === activeTier);
+                          const assignedSet = Array.from(
+                            new Set([
+                              normalizeLeagueName(newPresetLeague),
+                              ...newPresetExtraLeagues.map((lg) => normalizeLeagueName(lg))
+                            ])
+                          );
+                          const handleSwitchTier = (targetTier: 'GREAT' | 'ULTRA' | 'MASTER') => {
+                            if (targetTier === activeTier) return;
+                            const firstInTier =
+                              allSelectable.find((lg) => resolveLeagueCpTier(lg) === targetTier) ||
+                              (targetTier === 'ULTRA'
+                                ? 'ULTRA LEAGUE'
+                                : targetTier === 'MASTER'
+                                ? 'MASTER LEAGUE'
+                                : 'GREAT LEAGUE');
+                            setNewPresetLeague(firstInTier as LeagueType);
+                            setNewPresetExtraLeagues([]);
                             if (!editingPresetId) {
-                              applyLeagueTop3TemplateToForm(nextL);
+                              applyLeagueTop3TemplateToForm(firstInTier as LeagueType);
                             } else {
-                              // Rescale existing 3 Pokémon CPs and IVs for the newly selected league
                               const currentMembers = buildModalMembersArray();
-                              const rescaled = rescaleTeamMembersForLeague(currentMembers, nextL);
+                              const rescaled = rescaleTeamMembersForLeague(currentMembers, firstInTier as LeagueType);
                               applyOrderedMembersToModalForm(rescaled);
                               setModalAutoDetectSummary(
-                                `🔄 Rescaled CPs & default IVs for ${formatLeagueDisplayLabel(nextL)}`
+                                `🔄 Rescaled CPs & default IVs for ${formatLeagueDisplayLabel(firstInTier as LeagueType)}`
                               );
                             }
-                          }}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
-                        >
-                          {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lg) => (
-                            <option key={lg} value={lg}>
-                              {formatLeagueDisplayLabel(lg)}
-                            </option>
-                          ))}
-                        </select>
-                        {(() => {
-                          const primaryCap = getLeagueCpCap(newPresetLeague);
-                          const sameCapMetas = (appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).filter(
-                            (lg) => lg.toLowerCase() !== newPresetLeague.toLowerCase() && getLeagueCpCap(lg) === primaryCap
-                          );
-                          if (sameCapMetas.length === 0) return null;
+                          };
+                          const handlePreviewMeta = (meta: LeagueType) => {
+                            if (meta.toLowerCase() === newPresetLeague.toLowerCase()) return;
+                            const prevNorm = normalizeLeagueName(newPresetLeague);
+                            setNewPresetExtraLeagues((prev) => {
+                              const kept = prev.filter((x) => x.toLowerCase() !== meta.toLowerCase());
+                              if (!kept.some((x) => x.toLowerCase() === prevNorm.toLowerCase())) {
+                                kept.push(prevNorm as LeagueType);
+                              }
+                              return kept;
+                            });
+                            setNewPresetLeague(meta);
+                          };
+                          const handleToggleMeta = (meta: LeagueType) => {
+                            const isChecked = assignedSet.some((lg) => lg.toLowerCase() === meta.toLowerCase());
+                            if (isChecked) {
+                              if (assignedSet.length <= 1) {
+                                setModalAutoDetectSummary('⚠️ At least 1 league/meta must stay assigned.');
+                                return;
+                              }
+                              if (meta.toLowerCase() === newPresetLeague.toLowerCase()) {
+                                const nextPreview = assignedSet.find(
+                                  (lg) => lg.toLowerCase() !== meta.toLowerCase()
+                                )!;
+                                setNewPresetLeague(nextPreview as LeagueType);
+                                setNewPresetExtraLeagues((prev) =>
+                                  prev.filter(
+                                    (lg) =>
+                                      lg.toLowerCase() !== meta.toLowerCase() &&
+                                      lg.toLowerCase() !== nextPreview.toLowerCase()
+                                  )
+                                );
+                              } else {
+                                setNewPresetExtraLeagues((prev) =>
+                                  prev.filter((lg) => lg.toLowerCase() !== meta.toLowerCase())
+                                );
+                              }
+                            } else {
+                              setNewPresetExtraLeagues((prev) =>
+                                prev.some((lg) => lg.toLowerCase() === meta.toLowerCase()) ? prev : [...prev, meta]
+                              );
+                            }
+                          };
                           return (
-                            <div className="mt-2">
-                              <div className="text-[10.5px] font-bold text-slate-400 mb-1">
-                                Also Assigned To (Same CP Cap — Auto/1-Tap Meta Switch):
-                              </div>
+                            <div className="space-y-2">
                               <div className="flex flex-wrap gap-1.5">
-                                {sameCapMetas.map((meta) => {
-                                  const isChecked = newPresetExtraLeagues.some(
-                                    (lg) => lg.toLowerCase() === meta.toLowerCase()
-                                  );
-                                  const isLiveRot = activeGblRotationMetas.some(
-                                    (r) => r.toLowerCase() === meta.toLowerCase()
-                                  );
-                                  const shortTag = formatShortMetaBadge(meta);
+                                {tierTabs.map((t) => {
+                                  const active = t.key === activeTier;
                                   return (
                                     <button
-                                      key={meta}
+                                      key={t.key}
                                       type="button"
-                                      onClick={() => {
-                                        setNewPresetExtraLeagues((prev) =>
-                                          prev.some((lg) => lg.toLowerCase() === meta.toLowerCase())
-                                            ? prev.filter((lg) => lg.toLowerCase() !== meta.toLowerCase())
-                                            : [...prev, meta]
-                                        );
-                                      }}
-                                      title={formatLeagueDisplayLabel(meta)}
-                                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${
-                                        isChecked
-                                          ? 'bg-sky-400 text-slate-950 border-sky-300 shadow'
+                                      onClick={() => handleSwitchTier(t.key)}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition ${
+                                        active
+                                          ? 'bg-sky-500 text-slate-950 border-sky-300 shadow'
                                           : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-slate-500'
                                       }`}
                                     >
-                                      {isLiveRot ? (isChecked ? `✓ 🟢 ${shortTag}` : `🟢 ${shortTag}`) : isChecked ? `✓ ${shortTag}` : `+ ${shortTag}`}
+                                      {t.label}
                                     </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Tap ☑/☐ to assign 1+ metas • Tap meta name to preview BR below
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {tierMetas.map((meta) => {
+                                  const isChecked = assignedSet.some((lg) => lg.toLowerCase() === meta.toLowerCase());
+                                  const isPreview = meta.toLowerCase() === newPresetLeague.toLowerCase();
+                                  const isLiveRot = activeGblRotationMetas.some(
+                                    (r) => r.toLowerCase() === meta.toLowerCase()
+                                  );
+                                  const labelText = formatLeagueDisplayLabel(meta);
+                                  return (
+                                    <div
+                                      key={meta}
+                                      className={`inline-flex items-center rounded-lg border text-[11px] overflow-hidden transition ${
+                                        isChecked
+                                          ? isPreview
+                                            ? 'bg-sky-500/20 border-sky-400 text-sky-100'
+                                            : 'bg-slate-800/90 border-sky-500/60 text-white'
+                                          : 'bg-slate-950 border-slate-800 text-slate-400'
+                                      }`}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleMeta(meta as LeagueType)}
+                                        className={`px-2 py-1 font-black border-r border-slate-700/70 transition hover:bg-slate-700/60 ${
+                                          isChecked ? 'text-sky-300' : 'text-slate-500'
+                                        }`}
+                                        title={isChecked ? 'Unassign meta' : 'Assign meta'}
+                                      >
+                                        {isChecked ? '☑' : '☐'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handlePreviewMeta(meta as LeagueType)}
+                                        className="px-2 py-1 font-bold hover:text-white transition"
+                                        title="Click to preview team BR in this meta"
+                                      >
+                                        {isLiveRot ? '🟢 ' : ''}
+                                        {labelText}
+                                        {isPreview ? ' ★' : ''}
+                                      </button>
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -15393,7 +15601,7 @@ export default function App() {
                           )
                       ).map((p) => ({
                         ...p,
-                        updatedAt: Math.max(Number(p.updatedAt) || 0, pushStartedAtMs)
+                        updatedAt: Number(p.updatedAt) || pushStartedAtMs
                       }));
                       const delLogsToPush = tombstonesChanged ? Array.from(mergedTombstones) : [];
                       const delTeamsToPush = tombstonesChanged ? Array.from(new Set(deletedTeamIds)) : [];
@@ -16272,7 +16480,7 @@ export default function App() {
                 (entry.presetId && p.id === entry.presetId) ||
                 p.name.toLowerCase() === (entry.userTeamName || '').toLowerCase()
             );
-            const tName = (entry.userTeamName || '').trim() || matchedPreset?.name || 'My Team';
+            const tName = matchedPreset?.name || (entry.userTeamName || '').trim() || 'My Team';
             const directMons = (entry.userPokemon || []).map((m) => m.trim()).filter(Boolean);
             const presetMons = (matchedPreset?.pokemon || []).map((p) => p.name.trim()).filter(Boolean);
             const rawMons = directMons.length > 0 ? directMons : presetMons.length > 0 ? presetMons : [tName];
@@ -16645,14 +16853,16 @@ export default function App() {
                     >
                       {(() => {
                         const matchingPresets = presets.filter((p) =>
-                          matchesTwoTierLeagueFilter(p.league, logFilterCpTier, logFilterLeague, appCombatMode)
+                          getEffectiveAssignedLeagues(p).some((lg) =>
+                            matchesTwoTierLeagueFilter(lg, logFilterCpTier, logFilterLeague, appCombatMode)
+                          )
                         );
                         return (
                           <>
                             <option value="ALL TEAMS">All Teams ({matchingPresets.length})</option>
                             {matchingPresets.map((p) => (
                               <option key={p.id} value={p.id}>
-                                {p.name} ({p.league.split(' ')[0]})
+                                {p.name} ({getEffectiveAssignedLeagues(p).map(formatShortMetaBadge).join('/')})
                               </option>
                             ))}
                           </>
@@ -18833,7 +19043,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.61 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.62 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

@@ -60,7 +60,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Battle League"
+                    android:text="Assigned Leagues / Metas (Multi-Select)"
                     android:textColor="#f59e0b"
                     android:textStyle="bold"
                     android:textSize="12.5sp" />
@@ -72,36 +72,40 @@
                     android:layout_marginTop="4dp"
                     android:background="#0f172a"
                     android:paddingHorizontal="6dp"
-                    android:layout_marginBottom="6dp" />
+                    android:layout_marginBottom="6dp"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:id="@+id/layout_multi_meta_section"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
+                    android:layout_marginTop="4dp"
                     android:layout_marginBottom="8dp">
 
+                    <LinearLayout
+                        android:id="@+id/container_editor_cp_tiers"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="6dp" />
+
                     <TextView
+                        android:id="@+id/tv_editor_multi_meta_hint"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Also Assign Team to Same-CP Metas (Optional)"
+                        android:text="Tap ☑/☐ to assign 1+ metas • Tap meta name to preview BR below"
                         android:textColor="#94a3b8"
                         android:textStyle="bold"
                         android:textSize="10.5sp"
-                        android:layout_marginBottom="4dp" />
+                        android:layout_marginBottom="5dp" />
 
-                    <HorizontalScrollView
+                    <LinearLayout
+                        android:id="@+id/container_multi_meta_chips"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:scrollbars="none">
-
-                        <LinearLayout
-                            android:id="@+id/container_multi_meta_chips"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical" />
-                    </HorizontalScrollView>
+                        android:orientation="vertical" />
                 </LinearLayout>
 
                 <!-- Relocated Clone & Cross-Mode Copy Panel Inside Edit Team Card -->

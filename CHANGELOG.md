@@ -2,6 +2,15 @@
 
 ---
 
+## v7.62 (2026-11-18) — Multi-Select Assigned Leagues Editor, Per-Meta Pool BR Cards & Merged-Team Battle Log Unification
+*Multi-meta team UX & Battle Rating visibility upgrade (`v7.62`, `versionCode = 1762`) fixing editor chip state persistence, replacing single-select dropdowns with a CP-Tier bar + inline checkable multi-meta grid, displaying full BR rows for every assigned meta pool on main Team Cards, and unifying Battle Log filtering & exports across merged multi-meta presets.*
+
+- **CP-Tier Bar & Inline Multi-Select Assigned Metas Editor (`MainActivity.kt`, `dialog_create_preset.xml`, `App.tsx`)**: Replaced the single-select League dropdown with a `Great (1500)` / `Ultra (2500)` / `Master (10000)` CP-Tier switcher and wrapped 2-column checkable meta rows (`☑`/`☐` toggle to assign 1+ metas + tap label to preview BR `★` in the editor with `🟢` live GBL rotation dots). Fixed the `v7.61` initialization ordering bug that dropped extra assigned metas on edit open and kept custom CPs/moves untouched when previewing between same-CP metas (`UL` <-> `MUL`).
+- **Full Per-Meta Pool BR Rows on Main Team Cards (`MainActivity.kt`, `item_team_preset.xml`, `AppModels.kt`, `OverlayService.kt`, `pokemonDb.ts`, `teamAndMetaEngine.ts`, `App.tsx`)**: Cached `MetaPoolBrSnapshot` (`metaPoolMetrics`) across all `assignedLeagues` during evaluation and displayed a full BR row per assigned meta pool (`[MUL] Core • Beats • Lead/Swap/Closer BR`, `[UL] Core • Beats • Lead/Swap/Closer BR`) on main Team Cards; tapping any pool row switches the active slot/Key Wins/Threats breakdown instantly. Shortened multi-meta header pills to compact badges (`MUL ⇄ UL`) to prevent long team name truncation.
+- **Battle Log Multi-Meta Filter, Export Consolidation & Web Sync Timestamp Fix (`MainActivity.kt`, `App.tsx`)**: Updated Android & Web Battle Log team filters to match teams across all `assignedLeagues` and resolve logs by `presetId`, consolidated historical merged team logs under the survivor preset's name in exports/groupings, and preserved `Number(p.updatedAt) || pushStartedAtMs` in Web `/v1/sync/vault` pushes so unedited presets never out-timestamp D1 deletions.
+
+---
+
 ## v7.61 (2026-11-18) — Multi-Meta Team Assignments, One-Time Duplicate Team Merge, Live GBL Schedule Resolution & PoGO Party Name Sync
 *Multi-meta preset unification & cloud sync release (`v7.61`, `versionCode = 1761`) allowing teams used across multiple same-CP metas (e.g., Ultra League + Mega Ultra League) to share one preset & aggregate W-L card, merging existing duplicates automatically on first launch of `v7.61+`, pulling live GBL rotation schedules, and offering 1-tap Pokémon GO battle party rename prompts.*
 

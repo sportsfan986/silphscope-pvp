@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.62',
+    codename: 'Multi-Select Assigned Metas Editor, Per-Meta Pool BR Cards & Battle Log Team Unification',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Replaces single-select League dropdowns in Edit Team with a CP-Tier bar + inline checkable multi-meta grid (fixing assigned chip persistence on edit open), displays full Core/Beats/Lead/Swap/Closer BR rows for every assigned meta pool on main Team Cards with 1-tap switching, and unifies merged team names & multi-meta filters in Battle Logs.',
+    icon: '📊',
+    accentColor: '#38BDF8',
+    highlights: [
+      'CP-Tier bar (Great 1500 / Ultra 2500 / Master 10000) + wrapped multi-select checkable meta chips (☑/☐ assign + tap name to preview ★ BR) inside Android & Web Edit Team dialogs, fixing v7.61 extra-meta reset on open',
+      'Full per-pool BR rows ([MUL], [UL]) cached via MetaPoolBrSnapshot on Team Cards with 1-tap pool switching and compact MUL ⇄ UL header badges so long team names stop truncating',
+      'Battle Log Team Preset filters match across all assignedLeagues + presetId, and exports/groupings consolidate merged log entries under the survivor preset name',
+      'Preserves existing updatedAt timestamps during Web D1 sync pushes so signature backfills never override D1 deletions'
+    ]
+  },
+  {
     version: 'v7.61',
     codename: 'Multi-Meta Team Assignments, One-Time Team Merge, Live GBL Schedule & PoGO Party Name Sync',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Unifies teams shared across multiple same-CP metas (e.g., UL + MUL) with 1-tap HUD/card meta cycling, pulls live ScrapedDuck GBL rotation schedules, merges duplicate teams once on first launch of v7.61+ across Android, Web & Cloudflare D1, prompts to sync PoGO party names, and adds Overall + Per-Meta W-L team badges.',
     icon: '🔁',

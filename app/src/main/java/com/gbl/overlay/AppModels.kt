@@ -41,6 +41,20 @@ data class BuiltPokemonEntry(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+data class MetaPoolBrSnapshot(
+    val league: String = "",
+    val leadAggBr: Int = 500,
+    val machineAggBr: Int = 600,
+    val safeSwapBr: Int = 500,
+    val closerSwapBr: Int = 500,
+    val closerBr: Int = 500,
+    val topMetaTargetsTotal: Int = 50,
+    val topMetaWinsCount: Int = 0,
+    val keyMetaTargetsBeaten: List<String> = emptyList(),
+    val keyThreats: List<String> = emptyList(),
+    val coreBreakers: List<String> = emptyList()
+)
+
 data class TeamPreset(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
@@ -64,7 +78,8 @@ data class TeamPreset(
     val coreBreakers: List<String> = emptyList(),
     val altMovesetSlots: List<OverlayService.Companion.AntiMetaAltMovesetInfo> = emptyList(),
     val synergySummary: String = "",
-    val combatMode: String = "gbl"
+    val combatMode: String = "gbl",
+    val metaPoolMetrics: Map<String, MetaPoolBrSnapshot>? = null
 )
 
 data class OpponentObservedMoves(

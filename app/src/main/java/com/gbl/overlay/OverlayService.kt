@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.61"
-        const val APP_VERSION_CODE = 1761
+        const val APP_VERSION = "7.62"
+        const val APP_VERSION_CODE = 1762
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -2022,7 +2022,8 @@ class OverlayService : LifecycleService() {
             val coreBreakers: List<String> = emptyList(),
             val altMovesetSlots: List<AntiMetaAltMovesetInfo> = emptyList(),
             val synergySummary: String = "",
-            val combatMode: String = "gbl"
+            val combatMode: String = "gbl",
+            val metaPoolMetrics: Map<String, MetaPoolBrSnapshot>? = null
         )
 
         data class SyncVaultPayload(
@@ -6151,7 +6152,8 @@ class OverlayService : LifecycleService() {
         val closerBr: Int = 500,
         val sharedWeaknesses: List<String> = emptyList(),
         val combatMode: String = "gbl",
-        val assignedLeagues: List<String>? = null
+        val assignedLeagues: List<String>? = null,
+        val metaPoolMetrics: Map<String, MetaPoolBrSnapshot>? = null
     )
 
     override fun onCreate() {

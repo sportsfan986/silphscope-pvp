@@ -6239,14 +6239,21 @@ class MainActivity : AppCompatActivity() {
         spinnerLogFilterLeague.setSelection(lgIdx, false)
 
         val allPresets = loadPresets()
-        val matchingPresets = allPresets.filter {
-            OverlayService.matchesEncodedLeagueFilterStatic(it.league, selectedLogLeagueFilter, isShow6, prefs)
+        val matchingPresets = allPresets.filter { p ->
+            OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg ->
+                OverlayService.matchesEncodedLeagueFilterStatic(lg, selectedLogLeagueFilter, isShow6, prefs)
+            }
         }
         val teamLabels = listOf("All Teams") + matchingPresets.map { it.name }
-        val teamKeys = listOf("ALL") + matchingPresets.map { it.name }
+        val teamKeys = listOf("ALL") + matchingPresets.map { "ID:${it.id}" }
         spinnerLogFilterTeam.adapter = createThemedSpinnerAdapter(teamLabels)
-        val tmIdx = teamKeys.indexOf(selectedLogTeamFilter).takeIf { it >= 0 } ?: 0
-        if (tmIdx == 0) selectedLogTeamFilter = "ALL"
+        val tmIdx = teamKeys.indexOfFirst { key ->
+            key == selectedLogTeamFilter ||
+                (key.startsWith("ID:") && matchingPresets.any {
+                    "ID:${it.id}" == key && it.name.equals(selectedLogTeamFilter, ignoreCase = true)
+                })
+        }.takeIf { it >= 0 } ?: 0
+        if (tmIdx == 0) selectedLogTeamFilter = "ALL" else selectedLogTeamFilter = teamKeys[tmIdx]
         spinnerLogFilterTeam.setSelection(tmIdx, false)
 
         val (currSeason, _) = getCurrentAndPreviousSeason()
@@ -6348,12 +6355,25 @@ class MainActivity : AppCompatActivity() {
         val startOfYesterdayMs = cal.timeInMillis
         val sevenDaysAgoMs = startOfTodayMs - 6L * 86400000L
 
+        val selectedFilterPreset = if (teamFilter.startsWith("ID:")) {
+            val targetId = teamFilter.removePrefix("ID:")
+            loadPresets().find { it.id == targetId }
+        } else null
+
         return logs.filter { entry ->
             if (tier == "free" && entry.timestampMs < currSeason.startMs && isPastGracePeriod) {
                 return@filter false
             }
             val leagueOk = OverlayService.matchesEncodedLeagueFilterStatic(entry.league, leagueFilter, isShow6, prefs)
-            val teamOk = teamFilter == "ALL" || entry.userTeamName.equals(teamFilter, ignoreCase = true)
+            val teamOk = when {
+                teamFilter == "ALL" -> true
+                teamFilter.startsWith("ID:") -> {
+                    val targetId = teamFilter.removePrefix("ID:")
+                    entry.presetId == targetId ||
+                        (selectedFilterPreset != null && entry.userTeamName.equals(selectedFilterPreset.name, ignoreCase = true))
+                }
+                else -> entry.userTeamName.equals(teamFilter, ignoreCase = true)
+            }
             val timeOk = when (timeframeKey) {
                 "DAY" -> entry.timestampMs >= startOfTodayMs
                 "YESTERDAY" -> entry.timestampMs in startOfYesterdayMs until startOfTodayMs
@@ -6557,7 +6577,7 @@ class MainActivity : AppCompatActivity() {
             (entry.presetId.isNotBlank() && it.id == entry.presetId) ||
                 it.name.equals(entry.userTeamName, ignoreCase = true)
         }
-        val teamName = entry.userTeamName.ifBlank { matchedPreset?.name ?: "My Team" }
+        val teamName = matchedPreset?.name?.takeIf { it.isNotBlank() } ?: entry.userTeamName.ifBlank { "My Team" }
         val directMons = entry.userPokemon.map { it.trim() }.filter { it.isNotEmpty() }
         val presetMons = matchedPreset?.pokemon?.map { it.name.trim() }?.filter { it.isNotEmpty() }.orEmpty()
         val mons = when {
@@ -6587,7 +6607,11 @@ class MainActivity : AppCompatActivity() {
         val presets = loadPresets()
         if (filtered.isEmpty()) {
             val selectedPreset = if (teamFilter != "ALL") {
-                presets.find { it.name.equals(teamFilter, ignoreCase = true) }
+                val targetId = if (teamFilter.startsWith("ID:")) teamFilter.removePrefix("ID:") else ""
+                presets.find {
+                    (targetId.isNotEmpty() && it.id == targetId) ||
+                        it.name.equals(teamFilter, ignoreCase = true)
+                }
             } else {
                 presets.find { it.isSelected } ?: presets.firstOrNull()
             }
@@ -6656,7 +6680,11 @@ class MainActivity : AppCompatActivity() {
 
         val sb = StringBuilder()
         val leagueTitle = if (leagueFilter == "ALL") "All Leagues" else leagueFilter
-        val teamTitle = if (teamFilter == "ALL") "All Teams" else teamFilter
+        val teamTitle = when {
+            teamFilter == "ALL" -> "All Teams"
+            teamFilter.startsWith("ID:") -> presets.find { it.id == teamFilter.removePrefix("ID:") }?.name ?: "Selected Team"
+            else -> teamFilter
+        }
         sb.append("SilphScope PvP Battle Log — $leagueTitle\n")
         sb.append("Team: $teamTitle\n")
         sb.append("Range: $rangeLabel\n")
@@ -7163,6 +7191,36 @@ class MainActivity : AppCompatActivity() {
                 builtPokemonId = it.builtPokemonId
             )
         }
+        val activeNormKey = OverlayService.normalizeLeagueKeyStatic(preset.league.ifBlank { "GREAT LEAGUE" })
+        val assignedList: List<String> = OverlayService.getEffectiveAssignedLeaguesStatic(preset)
+        val poolMap: LinkedHashMap<String, MetaPoolBrSnapshot> = LinkedHashMap()
+        for (lgRaw in assignedList) {
+            val lgKey = OverlayService.normalizeLeagueKeyStatic(lgRaw)
+            val ePool = if (lgKey.equals(activeNormKey, ignoreCase = true)) {
+                eval
+            } else {
+                OverlayService.evaluateOrAutoOrderTeamStatic(
+                    slots = eval.orderedSlots,
+                    league = lgKey,
+                    seasonLogs = getCurrentSeasonLogsForLeague(lgKey, preloadedLogs),
+                    autoReorder = false,
+                    manualArchetypeOverride = eval.archetype
+                )
+            }
+            poolMap[lgKey] = MetaPoolBrSnapshot(
+                league = lgKey,
+                leadAggBr = ePool.leadAggBr,
+                machineAggBr = ePool.machineAggBr,
+                safeSwapBr = ePool.safeSwapBr,
+                closerSwapBr = ePool.closerSwapBr,
+                closerBr = ePool.closerBr,
+                topMetaTargetsTotal = ePool.topMetaTargetsTotal,
+                topMetaWinsCount = ePool.topMetaWinsCount,
+                keyMetaTargetsBeaten = ePool.keyMetaTargetsBeaten,
+                keyThreats = ePool.keyThreats,
+                coreBreakers = ePool.coreBreakers
+            )
+        }
         return preset.copy(
             pokemon = orderedPokemon,
             archetype = eval.archetype,
@@ -7179,7 +7237,8 @@ class MainActivity : AppCompatActivity() {
             keyThreats = eval.keyThreats,
             coreBreakers = eval.coreBreakers,
             altMovesetSlots = eval.altMovesetSlots,
-            synergySummary = eval.synergySummary
+            synergySummary = eval.synergySummary,
+            metaPoolMetrics = poolMap
         )
     }
 
@@ -10992,7 +11051,12 @@ class MainActivity : AppCompatActivity() {
         var hasUncomputedMetrics = false
 
         presets.forEachIndexed { index, preset ->
-            if (preset.leadAggBr <= 0 || preset.machineAggBr <= 0 || preset.safeSwapBr <= 0 || preset.synergySummary.isBlank()) {
+            val resolvedLeague = preset.league.ifBlank { "GREAT LEAGUE" }
+            val assignedMetas = OverlayService.getEffectiveAssignedLeaguesStatic(preset)
+            val missingPoolSnapshot = assignedMetas.any { lg ->
+                preset.metaPoolMetrics?.keys?.any { it.equals(lg, ignoreCase = true) } != true
+            }
+            if (preset.leadAggBr <= 0 || preset.machineAggBr <= 0 || preset.safeSwapBr <= 0 || preset.synergySummary.isBlank() || missingPoolSnapshot) {
                 hasUncomputedMetrics = true
             }
             val itemView = layoutInflater.inflate(R.layout.item_team_preset, presetsContainer, false)
@@ -11001,6 +11065,7 @@ class MainActivity : AppCompatActivity() {
             val textArchetype = itemView.findViewById<TextView>(R.id.text_preset_archetype_badge)
             val textLeague = itemView.findViewById<TextView>(R.id.text_preset_league)
             val textMetricsBadges = itemView.findViewById<TextView>(R.id.text_preset_metrics_badges)
+            val containerMetaPools = itemView.findViewById<LinearLayout>(R.id.container_preset_meta_pools)
             val textPokemon = itemView.findViewById<TextView>(R.id.text_preset_pokemon)
             val radioSelected = itemView.findViewById<RadioButton>(R.id.radio_selected)
             val btnMoveUp = itemView.findViewById<TextView>(R.id.btn_move_preset_up)
@@ -11019,31 +11084,50 @@ class MainActivity : AppCompatActivity() {
             val isDuo = preset.archetype.equals("DUO", ignoreCase = true)
             textArchetype?.text = if (preset.isArchetypeManual) "${preset.archetype}*" else preset.archetype
 
-            val resolvedLeague = preset.league.ifBlank { "GREAT LEAGUE" }
-            val assignedMetas = OverlayService.getEffectiveAssignedLeaguesStatic(preset)
-            if (assignedMetas.size > 1) {
-                val extraTags = assignedMetas
-                    .filter { !it.equals(resolvedLeague, ignoreCase = true) }
-                    .joinToString(", ") { OverlayService.formatShortMetaBadgeStatic(it) }
-                textLeague.text = "${OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)}  ⇄  +$extraTags"
-                textLeague.isClickable = true
-                textLeague.setOnClickListener {
-                    val curIdx = assignedMetas.indexOfFirst { it.equals(resolvedLeague, ignoreCase = true) }
-                    val nextMeta = assignedMetas[(if (curIdx >= 0) curIdx + 1 else 1) % assignedMetas.size]
-                    val evaluatedNext = evaluatePresetMetrics(
+            fun switchActivePool(nextMeta: String) {
+                val snap = preset.metaPoolMetrics?.entries?.firstOrNull {
+                    it.key.equals(nextMeta, ignoreCase = true)
+                }?.value
+                val switched = if (snap != null) {
+                    preset.copy(
+                        league = nextMeta,
+                        updatedAt = System.currentTimeMillis(),
+                        leadAggBr = snap.leadAggBr,
+                        machineAggBr = snap.machineAggBr,
+                        safeSwapBr = snap.safeSwapBr,
+                        closerSwapBr = snap.closerSwapBr,
+                        closerBr = snap.closerBr,
+                        topMetaTargetsTotal = snap.topMetaTargetsTotal,
+                        topMetaWinsCount = snap.topMetaWinsCount,
+                        keyMetaTargetsBeaten = snap.keyMetaTargetsBeaten,
+                        keyThreats = snap.keyThreats,
+                        coreBreakers = snap.coreBreakers
+                    )
+                } else {
+                    evaluatePresetMetrics(
                         preset.copy(league = nextMeta, updatedAt = System.currentTimeMillis()),
                         autoReorder = false,
                         preloadedLogs = allBattleLogsForCards
                     )
-                    val updatedList = loadPresets().map { if (it.id == preset.id) evaluatedNext else it }
-                    savePresets(updatedList)
-                    refreshPresetsUi()
-                    triggerTwoDeviceCloudSync(silent = true)
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Switched ${preset.name} active meta → ${OverlayService.formatShortMetaBadgeStatic(nextMeta)}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                }
+                val updatedList = loadPresets().map { if (it.id == preset.id) switched else it }
+                savePresets(updatedList)
+                refreshPresetsUi()
+                triggerTwoDeviceCloudSync(silent = true)
+                Toast.makeText(
+                    this@MainActivity,
+                    "Switched ${preset.name} active meta → ${OverlayService.formatShortMetaBadgeStatic(nextMeta)}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            if (assignedMetas.size > 1) {
+                textLeague.text = assignedMetas.joinToString(" ⇄ ") { OverlayService.formatShortMetaBadgeStatic(it) }
+                textLeague.isClickable = true
+                textLeague.setOnClickListener {
+                    val curIdx = assignedMetas.indexOfFirst { it.equals(resolvedLeague, ignoreCase = true) }
+                    val nextMeta = assignedMetas[(if (curIdx >= 0) curIdx + 1 else 1) % assignedMetas.size]
+                    switchActivePool(nextMeta)
                 }
             } else {
                 textLeague.text = OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)
@@ -11096,13 +11180,86 @@ class MainActivity : AppCompatActivity() {
                 ""
             }
 
-            val metricsHtml = wlPrefixHtml +
-                "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
-                "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta<br>" +
-                "Lead BR: <font color='$leadHex'>${preset.leadAggBr} ($leadTier)</font>  •  " +
-                "Swap BR: <font color='$swap2Hex'>#2 ${preset.safeSwapBr} ($swap2Tier)</font> / <font color='$swap3Hex'>#3 ${preset.closerSwapBr} ($swap3Tier)</font>  •  " +
-                "Closer BR: <font color='$closeHex'>${preset.closerBr} ($closeTier)</font>$sharedWeakBadge"
-            textMetricsBadges?.text = android.text.Html.fromHtml(metricsHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
+            if (assignedMetas.size > 1 && containerMetaPools != null) {
+                val topLine = (wlPrefixHtml + sharedWeakBadge.removePrefix("  •  ")).removeSuffix("<br>")
+                if (topLine.isNotBlank()) {
+                    textMetricsBadges?.visibility = android.view.View.VISIBLE
+                    textMetricsBadges?.text = android.text.Html.fromHtml(topLine, android.text.Html.FROM_HTML_MODE_LEGACY)
+                } else {
+                    textMetricsBadges?.visibility = android.view.View.GONE
+                }
+                containerMetaPools.visibility = android.view.View.VISIBLE
+                containerMetaPools.removeAllViews()
+                for (metaLg in assignedMetas) {
+                    val isActivePool = metaLg.equals(resolvedLeague, ignoreCase = true)
+                    val shortMeta = OverlayService.formatShortMetaBadgeStatic(metaLg)
+                    val cachedSnap = preset.metaPoolMetrics?.entries?.firstOrNull {
+                        it.key.equals(metaLg, ignoreCase = true)
+                    }?.value ?: if (isActivePool && preset.machineAggBr > 0) {
+                        MetaPoolBrSnapshot(
+                            league = metaLg,
+                            leadAggBr = preset.leadAggBr,
+                            machineAggBr = preset.machineAggBr,
+                            safeSwapBr = preset.safeSwapBr,
+                            closerSwapBr = preset.closerSwapBr,
+                            closerBr = preset.closerBr,
+                            topMetaTargetsTotal = targetTotal,
+                            topMetaWinsCount = preset.topMetaWinsCount,
+                            keyMetaTargetsBeaten = preset.keyMetaTargetsBeaten,
+                            keyThreats = preset.keyThreats,
+                            coreBreakers = preset.coreBreakers
+                        )
+                    } else null
+                    val poolHtml = if (cachedSnap != null) {
+                        val (plTier, plHex) = getMatchupTierCodeAndHex(cachedSnap.leadAggBr)
+                        val (pmTier, pmHex) = getMachineBrTierLabelAndHex(cachedSnap.machineAggBr)
+                        val (ps2Tier, ps2Hex) = getMatchupTierCodeAndHex(cachedSnap.safeSwapBr)
+                        val (ps3Tier, ps3Hex) = getMatchupTierCodeAndHex(cachedSnap.closerSwapBr)
+                        val (pcTier, pcHex) = getMatchupTierCodeAndHex(cachedSnap.closerBr)
+                        val pTot = cachedSnap.topMetaTargetsTotal.takeIf { it > 0 } ?: 50
+                        val marker = if (isActivePool) "★ " else "◦ "
+                        "$marker<font color='${if (isActivePool) "#38bdf8" else "#94a3b8"}'><b>[$shortMeta]</b></font>  " +
+                            "Core: <font color='$pmHex'><b>${cachedSnap.machineAggBr} ($pmTier)</b></font>  •  " +
+                            "Beats <font color='#6ee7b7'><b>${cachedSnap.topMetaWinsCount}/$pTot</b></font> Top Meta<br>" +
+                            "Lead: <font color='$plHex'>${cachedSnap.leadAggBr} ($plTier)</font>  •  " +
+                            "Swap: <font color='$ps2Hex'>#2 ${cachedSnap.safeSwapBr} ($ps2Tier)</font> / <font color='$ps3Hex'>#3 ${cachedSnap.closerSwapBr} ($ps3Tier)</font>  •  " +
+                            "Closer: <font color='$pcHex'>${cachedSnap.closerBr} ($pcTier)</font>"
+                    } else {
+                        "◦ <b>[$shortMeta]</b>  <font color='#94a3b8'>Computing BR...</font>"
+                    }
+                    val rowView = TextView(this).apply {
+                        text = android.text.Html.fromHtml(poolHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
+                        textSize = 10f
+                        setTextColor(0xFFCBD5E1.toInt())
+                        setPadding((7 * density).toInt(), (5 * density).toInt(), (7 * density).toInt(), (5 * density).toInt())
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = 7f * density
+                            setColor(if (isActivePool) 0xFF0F172A.toInt() else 0xFF0B1220.toInt())
+                            setStroke((1 * density).toInt(), if (isActivePool) 0xFF38BDF8.toInt() else 0xFF334155.toInt())
+                        }
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            bottomMargin = (4 * density).toInt()
+                        }
+                        if (!isActivePool) {
+                            setOnClickListener { switchActivePool(metaLg) }
+                        }
+                    }
+                    containerMetaPools.addView(rowView)
+                }
+            } else {
+                containerMetaPools?.visibility = android.view.View.GONE
+                textMetricsBadges?.visibility = android.view.View.VISIBLE
+                val metricsHtml = wlPrefixHtml +
+                    "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
+                    "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta<br>" +
+                    "Lead BR: <font color='$leadHex'>${preset.leadAggBr} ($leadTier)</font>  •  " +
+                    "Swap BR: <font color='$swap2Hex'>#2 ${preset.safeSwapBr} ($swap2Tier)</font> / <font color='$swap3Hex'>#3 ${preset.closerSwapBr} ($swap3Tier)</font>  •  " +
+                    "Closer BR: <font color='$closeHex'>${preset.closerBr} ($closeTier)</font>$sharedWeakBadge"
+                textMetricsBadges?.text = android.text.Html.fromHtml(metricsHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
+            }
 
             val roleLabels = when {
                 isAbb -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
@@ -14890,85 +15047,27 @@ class MainActivity : AppCompatActivity() {
         }
         spinnerLeague.adapter = createThemedSpinnerAdapter(leagues)
 
-        val layoutMultiMetaSection = dialogView.findViewById<LinearLayout>(R.id.layout_multi_meta_section)
-        val containerMultiMetaChips = dialogView.findViewById<LinearLayout>(R.id.container_multi_meta_chips)
         val allSelectableMetas: List<String> = (leagues + baseLeagues + existingPreset?.assignedLeagues.orEmpty())
             .map { OverlayService.normalizeLeagueKeyStatic(it) }
             .filter { it.isNotBlank() }
             .distinct()
-        val selectedExtraMetas = linkedSetOf<String>().apply {
-            existingPreset?.let { ep ->
-                for (lg in OverlayService.getEffectiveAssignedLeaguesStatic(ep)) {
-                    if (!lg.equals(ep.league, ignoreCase = true)) {
-                        add(lg)
-                    }
-                }
+        var activePreviewLeague = OverlayService.normalizeLeagueKeyStatic(
+            existingPreset?.league ?: leagues.firstOrNull() ?: "GREAT LEAGUE"
+        )
+        var activeCpTier = OverlayService.resolveLeagueCpTierStatic(activePreviewLeague, prefs)
+        val assignedMetasSet: LinkedHashSet<String> = LinkedHashSet<String>().apply {
+            if (existingPreset != null) {
+                addAll(OverlayService.getEffectiveAssignedLeaguesStatic(existingPreset))
+            } else {
+                add(activePreviewLeague)
             }
         }
-        fun rebuildMultiMetaChips() {
-            val container = containerMultiMetaChips ?: return
-            val primaryRaw = spinnerLeague.selectedItem?.toString()
-                ?: existingPreset?.league
-                ?: leagues.firstOrNull()
-                ?: "GREAT LEAGUE"
-            val primaryNorm = OverlayService.normalizeLeagueKeyStatic(primaryRaw)
-            val primaryCap = OverlayService.getLeagueCpCapStatic(primaryNorm, prefs)
-            selectedExtraMetas.removeAll { lg ->
-                lg.equals(primaryNorm, ignoreCase = true) ||
-                    OverlayService.getLeagueCpCapStatic(lg, prefs) != primaryCap
-            }
-            val sameCapMetas = allSelectableMetas.filter { lg ->
-                !lg.equals(primaryNorm, ignoreCase = true) &&
-                    OverlayService.getLeagueCpCapStatic(lg, prefs) == primaryCap
-            }
-            layoutMultiMetaSection?.visibility = if (sameCapMetas.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-            container.removeAllViews()
-            if (sameCapMetas.isEmpty()) return
-
-            val activeRot = OverlayService.getActiveGblRotationLeaguesStatic(prefs)
-            val density = resources.displayMetrics.density
-            for (meta in sameCapMetas) {
-                val isChecked = selectedExtraMetas.any { it.equals(meta, ignoreCase = true) }
-                val isLiveRot = activeRot.any { it.equals(meta, ignoreCase = true) }
-                val shortBadge = OverlayService.formatShortMetaBadgeStatic(meta)
-                val chip = TextView(this).apply {
-                    text = if (isLiveRot) {
-                        if (isChecked) "✓ 🟢 $shortBadge" else "🟢 $shortBadge"
-                    } else {
-                        if (isChecked) "✓ $shortBadge" else "+ $shortBadge"
-                    }
-                    textSize = 11f
-                    setTypeface(null, if (isChecked) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-                    setTextColor(if (isChecked) 0xFF0F172A.toInt() else 0xFFE2E8F0.toInt())
-                    setPadding((10 * density).toInt(), (5 * density).toInt(), (10 * density).toInt(), (5 * density).toInt())
-                    background = android.graphics.drawable.GradientDrawable().apply {
-                        cornerRadius = 16f * density
-                        setColor(if (isChecked) 0xFF38BDF8.toInt() else 0xFF1E293B.toInt())
-                        setStroke((1 * density).toInt(), if (isChecked) 0xFF7DD3FC.toInt() else 0xFF475569.toInt())
-                    }
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        marginEnd = (6 * density).toInt()
-                    }
-                    setOnClickListener {
-                        val existingMatch = selectedExtraMetas.firstOrNull { it.equals(meta, ignoreCase = true) }
-                        if (existingMatch != null) {
-                            selectedExtraMetas.remove(existingMatch)
-                        } else {
-                            selectedExtraMetas.add(meta)
-                        }
-                        rebuildMultiMetaChips()
-                    }
-                }
-                container.addView(chip)
-            }
-        }
-        rebuildMultiMetaChips()
+        val containerEditorCpTiers = dialogView.findViewById<LinearLayout>(R.id.container_editor_cp_tiers)
+        val containerMultiMetaChips = dialogView.findViewById<LinearLayout>(R.id.container_multi_meta_chips)
+        var rebuildMultiMetaUiHook: (() -> Unit)? = null
 
         val currentLeagueProvider = {
-            spinnerLeague.selectedItem?.toString() ?: leagues.first()
+            activePreviewLeague
         }
 
         // Apply active theme & optional background watermark logo to the Team Edit dialog FIRST
@@ -15547,7 +15646,7 @@ class MainActivity : AppCompatActivity() {
             editName.setText(existingPreset.name)
             val leagueIdx = leagues.indexOfFirst { existingPreset.league.equals(it, ignoreCase = true) }
                 .takeIf { it >= 0 } ?: 0
-            spinnerLeague.setSelection(leagueIdx)
+            spinnerLeague.setSelection(leagueIdx, false)
             updateLeagueTemplateHints(leagues[leagueIdx])
             applySlotsToDialogInputs(existingPreset.pokemon)
         } else {
@@ -15560,50 +15659,226 @@ class MainActivity : AppCompatActivity() {
             suppressIvChangeCallback = false
         }
 
-        var lastSelectedEditorLeague = existingPreset?.league ?: leagues.firstOrNull() ?: "GREAT LEAGUE"
-        spinnerLeague.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                val lg = leagues.getOrElse(position) { "GREAT LEAGUE" }
-                updateLeagueTemplateHints(lg)
-                if (!lg.equals(lastSelectedEditorLeague, ignoreCase = true)) {
-                    lastSelectedEditorLeague = lg
-                    suppressIvChangeCallback = true
-                    val builtRosterNow = loadBuiltPokemonRoster()
-                    listOf(
-                        listOf(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2),
-                        listOf(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2),
-                        listOf(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2)
-                    ).forEach { viewsList ->
-                        val nameEd = viewsList[0] as AutoCompleteTextView
-                        val cpEd = viewsList[1] as EditText
-                        val ivCtrl = viewsList[2] as IvTripletController
-                        val fastEd = viewsList[3] as EditText
-                        val c1Ed = viewsList[4] as EditText
-                        val c2Ed = viewsList[5] as EditText
-                        val monName = nameEd.text?.toString()?.trim().orEmpty()
-                        if (monName.isNotEmpty()) {
-                            val builtM = IvMatrixEngine.findMatchingBuiltPokemon(builtRosterNow, monName, lg)
-                            if (builtM.size == 1) {
-                                val b = builtM[0]
-                                cpEd.setText(b.cp.toString())
-                                if (b.fastMove.isNotBlank()) fastEd.setText(b.fastMove)
-                                if (b.chargedMove1.isNotBlank()) c1Ed.setText(b.chargedMove1)
-                                if (b.chargedMove2.isNotBlank()) c2Ed.setText(b.chargedMove2)
-                                ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = false)
-                            } else {
-                                ivCtrl.applySlotOrDefaults(null, lg)
-                            }
+        var lastSelectedEditorLeague = activePreviewLeague
+        fun applyPreviewLeagueSwitch(nextLgRaw: String) {
+            val nextLg = OverlayService.normalizeLeagueKeyStatic(nextLgRaw)
+            activePreviewLeague = nextLg
+            activeCpTier = OverlayService.resolveLeagueCpTierStatic(nextLg, prefs)
+            val spIdx = leagues.indexOfFirst { it.equals(nextLg, ignoreCase = true) }
+            if (spIdx >= 0) {
+                spinnerLeague.setSelection(spIdx, false)
+            }
+            updateLeagueTemplateHints(nextLg)
+            val prevCap = OverlayService.getLeagueCpCapStatic(lastSelectedEditorLeague, prefs)
+            val nextCap = OverlayService.getLeagueCpCapStatic(nextLg, prefs)
+            if (prevCap != nextCap) {
+                lastSelectedEditorLeague = nextLg
+                suppressIvChangeCallback = true
+                val builtRosterNow = loadBuiltPokemonRoster()
+                listOf(
+                    listOf(editP1, editP1Cp, ivCtrlP1, editP1Fast, editP1C1, editP1C2),
+                    listOf(editP2, editP2Cp, ivCtrlP2, editP2Fast, editP2C1, editP2C2),
+                    listOf(editP3, editP3Cp, ivCtrlP3, editP3Fast, editP3C1, editP3C2)
+                ).forEach { viewsList ->
+                    val nameEd = viewsList[0] as AutoCompleteTextView
+                    val cpEd = viewsList[1] as EditText
+                    val ivCtrl = viewsList[2] as IvTripletController
+                    val fastEd = viewsList[3] as EditText
+                    val c1Ed = viewsList[4] as EditText
+                    val c2Ed = viewsList[5] as EditText
+                    val monName = nameEd.text?.toString()?.trim().orEmpty()
+                    if (monName.isNotEmpty()) {
+                        val builtM = IvMatrixEngine.findMatchingBuiltPokemon(builtRosterNow, monName, nextLg)
+                        if (builtM.size == 1) {
+                            val b = builtM[0]
+                            cpEd.setText(b.cp.toString())
+                            if (b.fastMove.isNotBlank()) fastEd.setText(b.fastMove)
+                            if (b.chargedMove1.isNotBlank()) c1Ed.setText(b.chargedMove1)
+                            if (b.chargedMove2.isNotBlank()) c2Ed.setText(b.chargedMove2)
+                            ivCtrl.setValues(b.atkIv, b.defIv, b.staIv, b.isBestBuddy, b.id, notify = false)
                         } else {
-                            ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
+                            ivCtrl.applySlotOrDefaults(null, nextLg)
+                        }
+                    } else {
+                        ivCtrl.refreshFromSpeciesOrLeague(resetToLeagueDefault = true)
+                    }
+                }
+                suppressIvChangeCallback = false
+            } else {
+                lastSelectedEditorLeague = nextLg
+            }
+            refreshDialogTeamEvaluation(autoReorder = false)
+            rebuildMultiMetaUiHook?.invoke()
+        }
+
+        fun rebuildMultiMetaEditorUi() {
+            val density = resources.displayMetrics.density
+            val tierRow = containerEditorCpTiers
+            if (tierRow != null) {
+                tierRow.removeAllViews()
+                val tierOpts = listOf(
+                    "GREAT" to "Great (1500)",
+                    "ULTRA" to "Ultra (2500)",
+                    "MASTER" to "Master (10000)"
+                )
+                for ((tKey, tLabel) in tierOpts) {
+                    val tierHasMetas = allSelectableMetas.any {
+                        OverlayService.resolveLeagueCpTierStatic(it, prefs) == tKey
+                    }
+                    if (!tierHasMetas) continue
+                    val isActiveTier = tKey.equals(activeCpTier, ignoreCase = true)
+                    val tierBtn = TextView(this).apply {
+                        text = tLabel
+                        textSize = 11f
+                        gravity = android.view.Gravity.CENTER
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setTextColor(if (isActiveTier) 0xFF0F172A.toInt() else 0xFFCBD5E1.toInt())
+                        setPadding((6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt())
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = 8f * density
+                            setColor(if (isActiveTier) 0xFF38BDF8.toInt() else 0xFF0F172A.toInt())
+                            setStroke((1 * density).toInt(), if (isActiveTier) 0xFF7DD3FC.toInt() else 0xFF334155.toInt())
+                        }
+                        layoutParams = LinearLayout.LayoutParams(
+                            0,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            1f
+                        ).apply {
+                            marginEnd = (5 * density).toInt()
+                        }
+                        setOnClickListener {
+                            if (!isActiveTier) {
+                                val firstInTier = allSelectableMetas.firstOrNull {
+                                    OverlayService.resolveLeagueCpTierStatic(it, prefs) == tKey
+                                } ?: return@setOnClickListener
+                                assignedMetasSet.clear()
+                                assignedMetasSet.add(firstInTier)
+                                applyPreviewLeagueSwitch(firstInTier)
+                            }
                         }
                     }
-                    suppressIvChangeCallback = false
+                    tierRow.addView(tierBtn)
                 }
-                refreshDialogTeamEvaluation(autoReorder = false)
-                rebuildMultiMetaChips()
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+
+            val chipContainer = containerMultiMetaChips ?: return
+            chipContainer.removeAllViews()
+            val tierMetas = allSelectableMetas.filter {
+                OverlayService.resolveLeagueCpTierStatic(it, prefs) == activeCpTier
+            }
+            val activeRot = OverlayService.getActiveGblRotationLeaguesStatic(prefs)
+            for (rowPair in tierMetas.chunked(2)) {
+                val hRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = (5 * density).toInt()
+                    }
+                }
+                for (meta in rowPair) {
+                    val isChecked = assignedMetasSet.any { it.equals(meta, ignoreCase = true) }
+                    val isPreview = meta.equals(activePreviewLeague, ignoreCase = true)
+                    val isLiveRot = activeRot.any { it.equals(meta, ignoreCase = true) }
+                    val card = LinearLayout(this).apply {
+                        orientation = android.widget.LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = 8f * density
+                            setColor(
+                                when {
+                                    isChecked && isPreview -> 0xFF0C4A6E.toInt()
+                                    isChecked -> 0xFF1E293B.toInt()
+                                    else -> 0xFF0F172A.toInt()
+                                }
+                            )
+                            setStroke(
+                                (1 * density).toInt(),
+                                when {
+                                    isChecked && isPreview -> 0xFF38BDF8.toInt()
+                                    isChecked -> 0xFF0284C7.toInt()
+                                    else -> 0xFF334155.toInt()
+                                }
+                            )
+                        }
+                        layoutParams = LinearLayout.LayoutParams(
+                            0,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            1f
+                        ).apply {
+                            marginEnd = (5 * density).toInt()
+                        }
+                    }
+                    val cbView = TextView(this).apply {
+                        text = if (isChecked) "☑" else "☐"
+                        textSize = 14f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setTextColor(if (isChecked) 0xFF38BDF8.toInt() else 0xFF64748B.toInt())
+                        setPadding((8 * density).toInt(), (6 * density).toInt(), (7 * density).toInt(), (6 * density).toInt())
+                        setOnClickListener {
+                            if (isChecked) {
+                                if (assignedMetasSet.size <= 1) {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "At least 1 league/meta must stay assigned.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    assignedMetasSet.removeAll { it.equals(meta, ignoreCase = true) }
+                                    if (meta.equals(activePreviewLeague, ignoreCase = true)) {
+                                        applyPreviewLeagueSwitch(assignedMetasSet.first())
+                                    } else {
+                                        rebuildMultiMetaEditorUi()
+                                    }
+                                }
+                            } else {
+                                assignedMetasSet.add(meta)
+                                rebuildMultiMetaEditorUi()
+                            }
+                        }
+                    }
+                    val divider = android.view.View(this).apply {
+                        setBackgroundColor(0xFF334155.toInt())
+                        layoutParams = LinearLayout.LayoutParams((1 * density).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
+                    }
+                    val lblView = TextView(this).apply {
+                        val disp = OverlayService.formatLeagueDisplayLabelStatic(meta)
+                        text = "${if (isLiveRot) "🟢 " else ""}$disp${if (isPreview) " ★" else ""}"
+                        textSize = 10.5f
+                        maxLines = 2
+                        setTypeface(null, if (isChecked) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                        setTextColor(if (isChecked) 0xFFF8FAFC.toInt() else 0xFF94A3B8.toInt())
+                        setPadding((7 * density).toInt(), (6 * density).toInt(), (7 * density).toInt(), (6 * density).toInt())
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                        setOnClickListener {
+                            if (!isChecked) {
+                                assignedMetasSet.add(meta)
+                            }
+                            if (!meta.equals(activePreviewLeague, ignoreCase = true)) {
+                                applyPreviewLeagueSwitch(meta)
+                            } else {
+                                rebuildMultiMetaEditorUi()
+                            }
+                        }
+                    }
+                    card.addView(cbView)
+                    card.addView(divider)
+                    card.addView(lblView)
+                    hRow.addView(card)
+                }
+                if (rowPair.size == 1) {
+                    hRow.addView(android.view.View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, 1, 1f).apply {
+                            marginEnd = (5 * density).toInt()
+                        }
+                    })
+                }
+                chipContainer.addView(hRow)
+            }
         }
+        rebuildMultiMetaUiHook = { rebuildMultiMetaEditorUi() }
+        rebuildMultiMetaEditorUi()
 
         btnModeAuto?.setOnClickListener {
             dialogManualArchetypeOverride = null
@@ -15990,7 +16265,9 @@ class MainActivity : AppCompatActivity() {
             .setTitle(if (existingPreset != null) "⚔️ Edit Team & Moves" else "➕ Create Custom GBL Team")
             .setView(dialogView)
             .setPositiveButton("Save Team") { _, _ ->
-                val league = spinnerLeague.selectedItem.toString()
+                val league = activePreviewLeague.takeIf { p ->
+                    assignedMetasSet.any { it.equals(p, ignoreCase = true) }
+                } ?: assignedMetasSet.firstOrNull() ?: "GREAT LEAGUE"
                 val top3Defaults = getLeagueTop3Defaults(league)
                 val name = editName.text.toString().trim().ifEmpty { "${league.split(" ").first().lowercase().replaceFirstChar { it.uppercase() }} Team" }
 
@@ -16004,7 +16281,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val primaryCap = OverlayService.getLeagueCpCapStatic(league, prefs)
-                val assignedList: List<String> = (listOf(league) + selectedExtraMetas.filter {
+                val assignedList: List<String> = (listOf(league) + assignedMetasSet.filter {
                     !it.equals(league, ignoreCase = true) &&
                         OverlayService.getLeagueCpCapStatic(it, prefs) == primaryCap
                 }).map { OverlayService.normalizeLeagueKeyStatic(it) }.distinct()

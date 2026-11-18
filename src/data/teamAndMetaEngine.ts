@@ -1,4 +1,4 @@
-import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
+import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, type MetaPoolBrSnapshot, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
 import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr, registerCombatSimulatorMetaHooks } from "./combatSimulator";
 
 export interface BlendedSeasonMetaDistribution {
@@ -2490,9 +2490,47 @@ export function evaluateTeamPresetMetrics(
     currentSeason,
     cachedBlendedMeta
   });
+  const finalMons = reorderSlots ? res.orderedPokemon : preset.pokemon;
+  const activeLgNorm = normalizeLeagueName(preset.league || "GREAT LEAGUE");
+  const allAssignedNorms: string[] = [];
+  const seenLg = new Set<string>();
+  for (const rawLg of [activeLgNorm, ...(Array.isArray(preset.assignedLeagues) ? preset.assignedLeagues : [])]) {
+    if (!rawLg) continue;
+    const normLg = normalizeLeagueName(rawLg);
+    const low = normLg.toLowerCase();
+    if (!seenLg.has(low)) {
+      seenLg.add(low);
+      allAssignedNorms.push(normLg);
+    }
+  }
+  const metaPoolMetrics: Record<string, MetaPoolBrSnapshot> = {};
+  for (const lgNorm of allAssignedNorms) {
+    const rPool =
+      lgNorm.toLowerCase() === activeLgNorm.toLowerCase()
+        ? res
+        : evaluateOrAutoOrderTeam(finalMons, lgNorm, {
+            reorderSlots: false,
+            manualArchetypeOverride: res.archetype,
+            seasonBattleLogs,
+            currentSeason
+          });
+    metaPoolMetrics[lgNorm] = {
+      league: lgNorm,
+      leadAggBr: rPool.leadAggBr,
+      machineAggBr: rPool.machineAggBr,
+      safeSwapBr: rPool.safeSwapBr,
+      closerSwapBr: rPool.closerSwapBr,
+      closerBr: rPool.closerBr,
+      topMetaTargetsTotal: rPool.topMetaTargetsTotal,
+      topMetaWinsCount: rPool.topMetaWinsCount,
+      keyMetaTargetsBeaten: rPool.keyMetaTargetsBeaten,
+      keyThreats: rPool.keyThreats,
+      coreBreakers: rPool.coreBreakers
+    };
+  }
   return {
     ...preset,
-    pokemon: reorderSlots ? res.orderedPokemon : preset.pokemon,
+    pokemon: finalMons,
     archetype: res.archetype,
     isArchetypeManual: reorderSlots ? false : preset.isArchetypeManual,
     leadAggBr: res.leadAggBr,
@@ -2508,6 +2546,7 @@ export function evaluateTeamPresetMetrics(
     coreBreakers: res.coreBreakers,
     altMovesetSlots: res.altMovesetSlots,
     synergySummary: res.synergySummary,
+    metaPoolMetrics,
     metricsUpdatedAt: Date.now()
   };
 }
