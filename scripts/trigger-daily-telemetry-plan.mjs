@@ -25,19 +25,22 @@ const LANGUAGE_SERVER_EXE =
   "C:/Users/Chris/AppData/Local/Programs/antigravity/resources/bin/language_server.exe";
 
 const ORCHESTRATOR_MODEL = "gemini-pro-orchestrator";
-const DIGEST_FRESH_MS = 2 * 60 * 60 * 1000;
+const DIGEST_FRESH_MS = 4 * 60 * 60 * 1000;
 
 const CACHE_DIR = path.resolve(ROOT_DIR, ".aistudio", "telemetry_cache");
 const THREAD_FILE = path.join(CACHE_DIR, "daily_plan_conversation.json");
 const HISTORY_FILE = path.join(CACHE_DIR, "daily_plan_history.json");
+const TELEGRAM_HISTORY_FILE = path.join(CACHE_DIR, "daily_telegram_history.json");
 const DAILY_LOCK_FILE = path.join(CACHE_DIR, "daily_plan.lock");
 const STAGE0_LOCK_FILE = path.join(CACHE_DIR, "daily_stage0.lock");
+const TELEGRAM_LOCK_FILE = path.join(CACHE_DIR, "daily_telegram.lock");
 const RUN_LOG_FILE = path.join(CACHE_DIR, "nightly_run.log");
 const DIGEST_FILE = path.join(CACHE_DIR, "nightly_audit_digest.json");
 const AUDIT_SCRIPT = path.resolve(ROOT_DIR, "scripts", "nightly-telemetry-audit.mjs");
 
 const rawArgs = process.argv.slice(2);
 const STAGE0_ONLY = rawArgs.includes("--stage0-only");
+const TELEGRAM_ONLY = rawArgs.includes("--telegram-only");
 const LAUNCH_CHAT_ONLY = rawArgs.includes("--launch-chat-only");
 const IMMEDIATE_MODE = rawArgs.includes("--immediate");
 const NO_TELEGRAM = rawArgs.includes("--no-telegram");
@@ -124,24 +127,12 @@ function runLocalAudit(extraArgs = []) {
   return readJsonSafe(DIGEST_FILE, null);
 }
 
-function getMsUntil552AmLocal() {
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(5, 52, 0, 0);
-  const diff = target.getTime() - now.getTime();
-  // Wait only during the scheduled 4:50 AM - 5:51 AM local watch window
-  if (diff > 0 && diff <= 65 * 60 * 1000) {
-    return diff;
-  }
-  return 0;
-}
-
 function buildDailyNewChatPrompt(digest, todayDate) {
   const modelPolicy = digest?.modelRoutingPolicy || {};
   const stage2Count = modelPolicy.stage2SupporterAndFreeHighTier?.queuedTodayCount ?? 0;
   const stage2Cap = modelPolicy.stage2SupporterAndFreeHighTier?.dailyCapX ?? 3;
   const stage3Count = modelPolicy.stage3ProAndVipCriticalTier?.queuedTodayCount ?? 0;
-  const lateCount = digest?.totals?.lateArrivalsCount ?? 0;
+  const stage0Time = digest?.generatedAt || "04:00 AM Local";
   const totalBattles = digest?.totals?.totalBattles ?? 0;
   const totalDvrs = digest?.totals?.totalDvrBundles ?? 0;
   const currentRepoVersion = digest?.currentRepoVersion || "unknown";
@@ -171,26 +162,21 @@ function buildDailyNewChatPrompt(digest, todayDate) {
   return [
     `# Daily Telemetry Audit & Interactive Action Plan — ${todayDate}`,
     ``,
-    `## Executive Summary (Stage 0 Pre-Computed Locally — 0 AI Tokens)`,
+    `## Executive Summary (4:00 AM Stage 0 Pre-Computed Locally — 0 AI Tokens)`,
     `- **Date (America/Chicago)**: \`${todayDate}\``,
     `- **Latest Repo Version**: \`${currentRepoVersion}\``,
-    `- **Dataset Totals**: \`${totalBattles}\` battles • \`${totalDvrs}\` DVR bundles • Late 5:00–5:52 AM arrivals: \`${lateCount}\``,
+    `- **Dataset Totals**: \`${totalBattles}\` battles • \`${totalDvrs}\` DVR bundles • 4:00 AM Stage 0 digest generated: \`${stage0Time}\``,
     `- **Queues**: Stage 3 (Pro/VIP Critical & Manual) = \`${stage3Count}\` | Stage 2 (Supporter/Free, cap ${stage2Cap}/day) = \`${stage2Count}\``,
     `- **Open User-Flagged DVR Reports (${openManualReports.length})**:`,
     manualPreview,
     `- **Release Status**: ${unreleasedText}`,
     ``,
     `## Mandatory Orchestrator Instructions (${ORCHESTRATOR_MODEL} — Orchestrator Carbon)`,
-    `1. **Read Cached Audit Outputs Only First**: Read \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/morning_briefing.md\` and inspect targeted sections of \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/nightly_audit_digest.json\`. Stage 0 has already synced Cloudflare, run the 7-day retroactive fix verification, executed paid-tier pixel rescans, and sent the morning Telegram summary—do **NOT** re-run telemetry sync scripts or dump whole raw \`.mp4\` files.`,
+    `1. **Read Cached Audit Outputs Only First (Plan Mode Read-Only)**: Read \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/morning_briefing.md\` and inspect targeted sections of \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/nightly_audit_digest.json\`. The 4:00 AM Stage 0 task has already synced Cloudflare, run the 7-day retroactive fix verification, and executed paid-tier pixel rescans (and the delayed Telegram summary sends separately at 6:00 AM)—do **NOT** re-run telemetry sync scripts or dump whole raw \`.mp4\` files. Note: \`write_file\` is blocked while Plan Mode is on—complete all read-only diagnosis first, then call \`exit_plan_mode\` so the execution model writes the issue document and runs Q&A.`,
     `2. **Delegate All Visual Image / Contact-Sheet OCR to Flash**: If any pre-rendered contact sheets or keyframes in \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/preprocessed/<battleId>/\` need visual inspection or text confirmation, delegate via \`invoke_subagent(TypeName: "research", Model: "flash")\`. Never inspect raw images directly in the planning context.`,
     `3. **Focused Root-Cause Diagnosis**: Diagnose open Stage 3 (\`Pro\`/\`VIP\` critical & user-flagged reports) plus up to \`${stage2Cap}\` Stage 2 items, reading only targeted preprocessed \`digest.json\`, frame windows of \`_deep_trace.jsonl\`, or specific Kotlin/TS functions needed to verify each root cause.`,
-    `4. **Create Today's Action Plan Artifact**: Write the user-facing interactive artifact \`morning_telemetry_action_plan_${todayDate}.md\` (\`UserFacing: true\`, \`RequestFeedback: true\`) containing:`,
-    `   - 24h / 7d Trainer Submission Summary`,
-    `   - Version-over-Version Regression Matrix`,
-    `   - 7-Day Retroactive Fix Verification & Paid-Tier Pixel Rescans`,
-    `   - Root-Cause Diagnosis & Proposed Fix Options per Open Area`,
-    `   - Unreleased Commits Check (if any)`,
-    `5. **Interactive Q&A Before Any Edits**: Output a concise executive summary in this chat and ask the user clarifying / prioritization questions per open area (using \`ask_question\` where appropriate) **before** making any code modifications or cutting a release.`,
+    `4. **EXECUTION STEP A — Write the Full Issue Document FIRST (ALONE, Never Batched with \`ask_question\`!)**: Immediately after \`exit_plan_mode\`, your FIRST execution tool call MUST be \`write_file\` **by itself** (do NOT call \`ask_question\` in the same step!) to create \`morning_telemetry_action_plan_${todayDate}.md\` (\`UserFacing: true\`, \`RequestFeedback: false\`) in this conversation's artifact directory. Put **"## 1. Plain-English Open Issues & Decision Guide"** at the VERY TOP of the document (before the summary tables), with one clearly numbered section per open issue (\`Issue 1\`, \`Issue 2\`, ...) explaining in plain English: (a) Battle ID, app version, league & player note / anomaly; (b) what actually happened on screen vs in the HUD/telemetry; (c) exact root cause; and (d) what each proposed fix option changes. Follow Section 1 with the 24h/7d Trainer Summary, Version Regression Matrix, 7-Day Retroactive Fix Proof & Pixel Rescans, and Unreleased Commits Check.`,
+    `5. **EXECUTION STEP B — Output Visible Issue Guide + Clickable Document Link BEFORE / WITH \`ask_question\`**: ONLY AFTER \`write_file\` completes (\`Created file.\`), make a second response that **MUST include non-empty visible Markdown chat text (\`content\`)** containing: (a) a prominent clickable link \`[morning_telemetry_action_plan_${todayDate}.md](file:///...)\` at the top, and (b) a concise plain-English numbered summary of every open issue (\`Issue 1\`, \`Issue 2\`, ...) and its options right in the chat message so the user can read everything on desktop or mobile before answering. In that step's \`ask_question\` call, map questions 1-to-1 to \`Issue 1\`, \`Issue 2\`, ... and make every \`question\` string self-explanatory in plain English (1–2 sentences describing the actual symptom/issue—NEVER use bare labels like "Area E" without explaining what the issue is!). Do **NOT** edit any repo files or cut a release until the user answers. CRITICAL INTERACTIVE QUESTION RULE: Every question you ask the user anywhere in this conversation—including Step B issue decisions, follow-up clarifications, and the post-implementation vX.XX release/commit confirmation gate—MUST invoke the \`ask_question\` tool (NEVER output prose-only questions without calling \`ask_question\`), and every \`exit_plan_mode\` plan that stops for user input MUST explicitly include the \`ask_question\` tool call.`,
   ].join("\n");
 }
 
@@ -258,26 +244,56 @@ async function runStage0Pipeline(todayDate) {
   }
   try {
     const initialStartIso = new Date().toISOString();
-    logLine(`[5:00 AM STAGE 0] Running 100% local zero-token audit (${initialStartIso})...`);
+    logLine(`[4:00 AM STAGE 0] Running single-pass 100% local zero-token scan (${initialStartIso})...`);
     runLocalAudit([]);
-
-    const waitMs = IMMEDIATE_MODE ? 0 : getMsUntil552AmLocal();
-    if (waitMs > 0) {
-      logLine(
-        `[5:00-5:52 AM WATCH] Sleeping locally in Node.js for ${Math.round(
-          waitMs / 60000
-        )}m (0 AI tokens) until 5:52 AM delta check...`
-      );
-      await new Promise((r) => setTimeout(r, waitMs));
-    }
-
-    logLine(`[5:52 AM STAGE 0] Running final delta check & dispatching 6:00 AM Telegram summary...`);
-    const deltaArgs = ["--check-delta-since", initialStartIso];
-    if (!NO_TELEGRAM) deltaArgs.push("--send-telegram");
-    runLocalAudit(deltaArgs);
-    logLine(`[OK] Stage 0 local audit & Telegram dispatch completed for ${todayDate} (0 AI tokens).`);
+    logLine(`[OK] 4:00 AM local scan completed for ${todayDate} (0 AI tokens; output ready for 5:15 AM automation & 6:00 AM Telegram).`);
   } finally {
     releaseLock(STAGE0_LOCK_FILE);
+  }
+}
+
+async function runTelegramOnlyPipeline(todayDate) {
+  if (!FORCE_RUN) {
+    const tgHistory = readJsonSafe(TELEGRAM_HISTORY_FILE, []);
+    const existing = Array.isArray(tgHistory)
+      ? tgHistory.find((item) => item && item.date === todayDate && item.sent === true)
+      : null;
+    if (existing) {
+      logLine(`[SKIP] 6:00 AM Telegram summary already sent for ${todayDate}.`);
+      return;
+    }
+  }
+  const lockKey = `${todayDate}-telegram`;
+  if (!acquireLock(TELEGRAM_LOCK_FILE, lockKey, "Telegram dispatch")) {
+    return;
+  }
+  try {
+    logLine(`[6:00 AM TELEGRAM] Dispatching morning summary from 4:00 AM audit digest (${todayDate})...`);
+    const res = spawnSync(process.execPath, [AUDIT_SCRIPT, "--send-telegram-only"], {
+      cwd: ROOT_DIR,
+      encoding: "utf8",
+      windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const stderrText = String(res.stderr || "").trim();
+    if (stderrText) {
+      for (const errLine of stderrText.split(/\r?\n/)) {
+        if (errLine.trim()) logLine(`[TELEGRAM] ${errLine.trim()}`);
+      }
+    }
+    if (res.status !== 0) {
+      throw new Error(
+        `nightly-telemetry-audit.mjs --send-telegram-only exited with status=${res.status} (${res.error?.message || "unknown"})`
+      );
+    }
+    const tgHistoryRaw = readJsonSafe(TELEGRAM_HISTORY_FILE, []);
+    const tgHistory = Array.isArray(tgHistoryRaw) ? tgHistoryRaw : [];
+    const filtered = tgHistory.filter((item) => item && item.date !== todayDate);
+    filtered.push({ date: todayDate, sent: true, sentAt: new Date().toISOString() });
+    fs.writeFileSync(TELEGRAM_HISTORY_FILE, JSON.stringify(filtered.slice(-90), null, 2), "utf8");
+    logLine(`[OK] 6:00 AM Telegram summary dispatched for ${todayDate}.`);
+  } finally {
+    releaseLock(TELEGRAM_LOCK_FILE);
   }
 }
 
@@ -289,7 +305,25 @@ async function main() {
     return;
   }
 
+  if (TELEGRAM_ONLY) {
+    await runTelegramOnlyPipeline(todayDate);
+    return;
+  }
+
   const dailyTitle = `📊 [${todayDate}] Daily Telemetry Audit & Plan — SilphScope PvP`;
+
+  if (LAUNCH_CHAT_ONLY && !FORCE_RUN) {
+    const agyCfg = readJsonSafe("C:/Users/Chris/.gemini/config/config.json", null);
+    if (
+      agyCfg?.sidecars?.["silphscope-nightly-telemetry"] &&
+      agyCfg.sidecars["silphscope-nightly-telemetry"].enabled !== false
+    ) {
+      logLine(
+        "[SKIP] Native Antigravity Automation 'silphscope-nightly-telemetry' is enabled; skipping backup launcher."
+      );
+      return;
+    }
+  }
 
   if (!FORCE_RUN) {
     const history = readJsonSafe(HISTORY_FILE, []);
@@ -315,32 +349,17 @@ async function main() {
     if (LAUNCH_CHAT_ONLY) {
       digest = readFreshDigestIfRecent();
       if (digest) {
-        logLine(`[LAUNCH-ONLY] Using fresh local nightly_audit_digest.json for ${todayDate} (<2h old).`);
+        logLine(`[LAUNCH-ONLY] Using fresh local nightly_audit_digest.json for ${todayDate} (<4h old).`);
       } else {
-        logLine(`[LAUNCH-ONLY] Local audit digest missing or >2h stale; running Stage 0 audit now...`);
-        digest = runLocalAudit(NO_TELEGRAM ? [] : ["--send-telegram"]);
+        logLine(`[LAUNCH-ONLY] Local audit digest missing or >4h stale; running Stage 0 audit now (Telegram deferred to 6:00 AM)...`);
+        digest = runLocalAudit([]);
       }
     } else if (IMMEDIATE_MODE) {
       logLine(`[IMMEDIATE STAGE] Running 100% local zero-token audit (${todayDate})...`);
       digest = runLocalAudit(NO_TELEGRAM ? [] : ["--send-telegram"]);
     } else {
-      logLine(`[5:00 AM STAGE] Running 100% local zero-token audit (${initialStartIso})...`);
+      logLine(`[STAGE 0] Running single-pass 100% local zero-token audit (${initialStartIso})...`);
       digest = runLocalAudit([]);
-
-      const waitMs = getMsUntil552AmLocal();
-      if (waitMs > 0) {
-        logLine(
-          `[5:00-5:52 AM WATCH] Sleeping locally in Node.js for ${Math.round(
-            waitMs / 60000
-          )}m (0 AI tokens) until 5:52 AM delta check...`
-        );
-        await new Promise((r) => setTimeout(r, waitMs));
-      }
-
-      logLine(`[5:52 AM STAGE] Running final delta check & dispatching 6:00 AM Telegram summary...`);
-      const deltaArgs = ["--check-delta-since", initialStartIso];
-      if (!NO_TELEGRAM) deltaArgs.push("--send-telegram");
-      digest = runLocalAudit(deltaArgs) || digest;
     }
 
     const prompt = buildDailyNewChatPrompt(digest, todayDate);

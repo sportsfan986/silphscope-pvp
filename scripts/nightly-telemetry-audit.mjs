@@ -111,6 +111,7 @@ const FFMPEG_BIN = resolveFfmpegBin();
 const rawArgs = process.argv.slice(2);
 const SKIP_SYNC = rawArgs.includes("--skip-sync");
 const SEND_TELEGRAM = rawArgs.includes("--send-telegram");
+const SEND_TELEGRAM_ONLY = rawArgs.includes("--send-telegram-only");
 const deltaIdx = rawArgs.indexOf("--check-delta-since");
 const CHECK_DELTA_SINCE = deltaIdx >= 0 && rawArgs[deltaIdx + 1] ? rawArgs[deltaIdx + 1] : null;
 
@@ -830,6 +831,42 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
+  // 3c. v7.52 (2026-11-17 Release) Unreleased-Shadow Catalog (Shadow: N/A) & Corroborated Charged DHP (recVerNum <= 751)
+  if (
+    curVerNum >= 752 &&
+    recVerNum > 0 &&
+    recVerNum <= 751 &&
+    (bidStr === "log-1794925674297-366" ||
+      /shadow tinkaton|no such thing as shadow|false shadow detection/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.52",
+      verificationMethod: "v7.52 STATIC_RELEASED_SHADOW_KEYS (Shadow: N/A Lock) & CP-Aware Corroborated Charged DHP",
+      explanation:
+        "Resolved in v7.52: Hybrid compiled + OTA Shadow eligibility catalog locks unreleased species (e.g. Tinkaton) to Shadow: N/A, passes oppSlotObservedCp into Charged DHP, and blocks uncorroborated single-charge Normal -> Shadow flips.",
+    };
+  }
+
+  // 3d. v7.56 (2026-11-18 Release) Entry-OCR Shadow Fix, 3D Aura Unblock, Strict OCR-Only Mimikyu Disguise & Shield Sync (recVerNum <= 755)
+  if (
+    curVerNum >= 756 &&
+    recVerNum > 0 &&
+    recVerNum <= 755 &&
+    (bidStr === "log-1794965269299-139" ||
+      bidStr === "log-1794964625919-880" ||
+      bidStr === "log-1794954302743-794" ||
+      /typholsion was shadow|typhlosion was shadow|shadow detection in ampharos|ended battle with 0 spells|mimikyu shield was busted|before mimikyu/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.56",
+      verificationMethod: "v7.56 Entry-OCR Shadow Fix, 3D Aura Gate Unblock, Strict OCR-Only Mimikyu Disguise & Shield Sync",
+      explanation:
+        "Resolved in v7.56: fixed Go-banner anyLineHasShadow leak & Fairy Wind AURA_CLEAR block (-139), unlocked 3D Shadow Aura circle/baseline gates + defender-scoped timeline sync (-880), deduplicated BLOCKED! shield counts + refunded provisional shields on KO faints (-880), and enforced strict OCR-only Mimikyu Disguise bust on explicit 'disguise is busted!' text (-794).",
+    };
+  }
+
   // 4. Check pre-v7.04 legacy anomalies recorded on v6.x
   if (recVerNum > 0 && recVerNum < 704 && curVerNum >= 708 && !anomalyOrBundle.manuallyFlagged) {
     return {
@@ -900,7 +937,95 @@ async function pushDailyTuningAndQuestionPoolToWorker(payload) {
   return false;
 }
 
+function buildTelegramSummaryHtmlFromDigest(digest) {
+  const escTg = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  const todayCentral = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const currentVersion = String(digest?.currentRepoVersion || getCurrentRepoVersion() || "7.50").replace(/^v/i, "");
+  const trainerTable = Array.isArray(digest?.trainerSubmissionSummary) ? digest.trainerSubmissionSummary : [];
+  const manualIssuesAudit = Array.isArray(digest?.manualIssuesRetroactiveAudit)
+    ? digest.manualIssuesRetroactiveAudit
+    : [];
+  const unreleasedCommitsAudit = digest?.unreleasedCommitsAudit || {};
+  const anomalyRetroSummary = digest?.anomalyRetroactiveBreakdown || {};
+  const openActionItems = Array.isArray(digest?.openActionItems) ? digest.openActionItems : [];
+
+  const trainerLines = trainerTable
+    .map(
+      (t) =>
+        `• <b>@${escTg(t.screenName)}</b> (<code>${escTg(String(t.tier || "").toUpperCase())}</code>): ${t.battles24h}d / ${t.battles7d}w / ${t.battlesTotal} total (${t.dvrTotal} DVR, ${t.manualFlagsTotal} flagged)`
+    )
+    .join("\n");
+  const openManualFlags = manualIssuesAudit.filter(
+    (m) => m.retroactiveAudit?.status !== "RESOLVED_BY_LATEST_RELEASE"
+  );
+  const resolvedManualFlags = manualIssuesAudit.filter(
+    (m) => m.retroactiveAudit?.status === "RESOLVED_BY_LATEST_RELEASE"
+  );
+  const recentResolvedFlags = resolvedManualFlags.slice(-5);
+  const hiddenResolvedCount = Math.max(0, resolvedManualFlags.length - recentResolvedFlags.length);
+  const shownManualFlags = [...openManualFlags, ...recentResolvedFlags];
+  const manualLines =
+    shownManualFlags.length > 0
+      ? [
+          ...shownManualFlags.map((m) => {
+            const px = m.paidVideoPixelRescan?.executed
+              ? ` [Pixel Rescan: U ${m.paidVideoPixelRescan.preFixUserDetectionRate}➔${m.paidVideoPixelRescan.postFixUserDetectionRate}, O ${m.paidVideoPixelRescan.preFixOppDetectionRate}➔${m.paidVideoPixelRescan.postFixOppDetectionRate}]`
+              : "";
+            return `• <b>@${escTg(m.screenName)}</b> (<code>v${escTg(m.appVersion)}</code>): "${escTg(m.userIssueNote)}" ➔ <b>${escTg(m.retroactiveAudit.status)}</b> (${escTg(m.retroactiveAudit.resolvedInVersion || "Open")})${escTg(px)}`;
+          }),
+          ...(hiddenResolvedCount > 0
+            ? [`• <i>(+${hiddenResolvedCount} older resolved issues verified)</i>`]
+            : []),
+        ].join("\n")
+      : "• None";
+
+  const unreleasedTg = unreleasedCommitsAudit.hasUnreleasedCommits
+    ? `🚀 <b>Unreleased Commits:</b> <code>${unreleasedCommitsAudit.unreleasedCommitsCount} commit(s) ahead of ${escTg(unreleasedCommitsAudit.latestReleaseTag)}</code> ➔ Ready for <b>${escTg(unreleasedCommitsAudit.suggestedNextVersion)}</b>\n\n`
+    : "";
+
+  const resolvedTotal =
+    Number(anomalyRetroSummary.RESOLVED_BY_LATEST_RELEASE || 0) +
+    Number(anomalyRetroSummary.RESOLVED_OR_SUPERSEDED_PRE_V704 || 0);
+  const benignTotal = Number(anomalyRetroSummary.BENIGN_FALSE_POSITIVE || 0);
+
+  return (
+    `🌅 <b>SilphScope PvP — 6:00 AM Daily Telemetry Audit Ready!</b>\n` +
+    `📦 <b>Latest Release:</b> <code>v${escTg(currentVersion)}</code>\n` +
+    unreleasedTg +
+    `👥 <b>Active Trainers (${trainerTable.length}):</b>\n${trainerLines}\n\n` +
+    `🚩 <b>7-Day Flagged Issue Verification:</b>\n${manualLines}\n\n` +
+    `📊 <b>Retroactive 7-Day Anomaly Status:</b>\n` +
+    `• Verified Fixed in <code>v7.04–v${escTg(currentVersion)}</code>: <b>${resolvedTotal}</b>\n` +
+    `• Benign 1-Turn / Circle Variance: <b>${benignTotal}</b>\n` +
+    `• Open Action Items: <b>${openActionItems.length}</b>\n\n` +
+    `💬 <i>Your new Antigravity chat ("📊 [${todayCentral}] Daily Telemetry Audit &amp; Plan") on Orchestrator (Carbon) is ready to review!</i>`
+  );
+}
+
 async function main() {
+  if (SEND_TELEGRAM_ONLY) {
+    if (fs.existsSync(NIGHTLY_DIGEST_FILE)) {
+      const st = fs.statSync(NIGHTLY_DIGEST_FILE);
+      if (Date.now() - st.mtimeMs <= 6 * 60 * 60 * 1000) {
+        const cachedDigest = JSON.parse(fs.readFileSync(NIGHTLY_DIGEST_FILE, "utf8"));
+        console.error("[TELEGRAM-ONLY] Sending 6:00 AM summary from fresh 4:00 AM nightly_audit_digest.json...");
+        const ok = await sendTelegramSummary(buildTelegramSummaryHtmlFromDigest(cachedDigest));
+        if (!ok) process.exit(1);
+        return;
+      }
+    }
+    console.error("[TELEGRAM-ONLY] Cached digest missing or >6h stale; running full local audit + Telegram...");
+  }
+
   const startedAtIso = new Date().toISOString();
   const currentVersion = getCurrentRepoVersion();
 
@@ -2300,91 +2425,62 @@ async function main() {
   };
 
   // Build Daily Prioritized Post-Battle Survey Question Pool (pushed to APKs via `/v1/tuning-config`)
-  // Automatically includes verification questions for recent high-priority fixes and any open anomalies!
+  // Context-triggered v7.56 standing polls based on top audit priorities
   const candidateQuestions = [
     {
-      id: "tink_virizion_energy_v725",
-      priority: 110,
-      trigger: "charged_move_thrown",
-      prompt: "⚡ Fast Move Energy (Tinkaton/Virizion v7.25 Fix):",
-      shortLabel: "Low-Dmg Fast Energy",
-      positiveVal: "EXACT_MATCH",
-      retireAfterPositiveCount: 10,
+      id: "mimikyu_disguise_v756",
+      priority: 104,
+      trigger: "mimikyu_in_battle",
+      prompt: "👻 Mimikyu Disguise & -1 DEF:",
+      shortLabel: "Mimikyu Bust",
+      positiveVal: "EXACT",
+      retireAfterPositiveCount: 0,
       options: [
-        { val: "UNDERCOUNTED", label: "⬇️ Under" },
-        { val: "EXACT_MATCH", label: "✅ Exact" },
-        { val: "OVERCOUNTED", label: "⬆️ Over" },
+        { val: "EARLY_OR_SHIELD_BUG", label: "⏪ Early/Bug" },
+        { val: "EXACT", label: "✅ Exact" },
+        { val: "MISSED_BUST", label: "⚠️ Missed" },
       ],
     },
     {
-      id: "swap_throw_reentry_energy_v724",
-      priority: 105, // Promoted above issue 1 (shield_energy) per user instruction
-      trigger: "charged_move_thrown",
-      prompt: "🔄 Bench Swap / Closer Energy (v7.24 Fix):",
-      shortLabel: "Closer Energy",
-      positiveVal: "EXACT_MATCH",
-      retireAfterPositiveCount: 10,
-      options: [
-        { val: "UNDERCOUNTED", label: "⬇️ Under" },
-        { val: "EXACT_MATCH", label: "✅ Exact" },
-        { val: "OVERCOUNTED", label: "⬆️ Over" },
-      ],
-    },
-    {
-      id: "shield_energy",
+      id: "shadow_detect_v756",
       priority: 100,
-      trigger: "hp_promoted_shield_call",
-      prompt: "🛡️ HP Shield Call Energy:",
-      shortLabel: "Shield Energy",
+      trigger: "shadow_eligible_opp",
+      prompt: "🟣 Opp Shadow Detection:",
+      shortLabel: "Shadow Detect",
       positiveVal: "ACCURATE",
-      retireAfterPositiveCount: 0, // Core standing tuning poll
+      retireAfterPositiveCount: 0,
       options: [
-        { val: "UNDERCOUNTED", label: "⬇️ Under" },
-        { val: "ACCURATE", label: "✅ Spot-On" },
-        { val: "OVERCOUNTED", label: "⬆️ Over" },
+        { val: "MISSED_SHADOW", label: "⚠️ Missed" },
+        { val: "ACCURATE", label: "✅ Accurate" },
+        { val: "FALSE_SHADOW", label: "❌ False Shad" },
       ],
     },
     {
-      id: "mml_hp_tracking_v708",
-      priority: 95,
-      trigger: "master_league",
-      prompt: "🦖 Master League HP Bars (v7.08 Fix):",
-      shortLabel: "MML HP Fix",
-      positiveVal: "LOCKED_CLEAN",
-      retireAfterPositiveCount: 10,
-      options: [
-        { val: "MISSED_BARS", label: "⚠️ Missed" },
-        { val: "LOCKED_CLEAN", label: "✅ Locked" },
-        { val: "FLICKERED", label: "🔄 Flicker" },
-      ],
-    },
-    {
-      id: "pre_zoom_energy_v720",
-      priority: 90,
+      id: "shield_count_sync_v756",
+      priority: 100,
       trigger: "charged_move_thrown",
-      prompt: "⚡ Pre-Throw Energy Sync (v7.20 Fix):",
-      shortLabel: "Throw Energy",
-      positiveVal: "EXACT_MATCH",
-      retireAfterPositiveCount: 10,
+      prompt: "🛡️ Shield Count Sync:",
+      shortLabel: "Shield Sync",
+      positiveVal: "EXACT",
+      retireAfterPositiveCount: 0,
       options: [
-        { val: "UNDER_BY_1F", label: "⬇️ -1 Fast" },
-        { val: "EXACT_MATCH", label: "✅ Exact" },
-        { val: "OVER_BY_1F", label: "⬆️ +1 Fast" },
+        { val: "TOO_LOW", label: "⬇️ Too Low" },
+        { val: "EXACT", label: "✅ Exact" },
+        { val: "TOO_HIGH_OR_LATE", label: "⬆️ High/Late" },
       ],
     },
     {
-      id: "haptic_timing",
-      priority: 50,
-      priorityFloor: true,
-      trigger: "always",
-      prompt: "📳 Haptic Timing ({leadMs}ms):",
-      shortLabel: "Haptic Lead",
-      positiveVal: "IDEAL",
-      retireAfterPositiveCount: 0, // Core standing tuning poll
+      id: "form_bp_v756",
+      priority: 100,
+      trigger: "multi_form_or_bp",
+      prompt: "🧬 Auto Form & BP/Bulk Pills:",
+      shortLabel: "Form & BP",
+      positiveVal: "ACCURATE",
+      retireAfterPositiveCount: 0,
       options: [
-        { val: "TOO_EARLY", label: "⏪ Early" },
-        { val: "IDEAL", label: "✅ Ideal" },
-        { val: "TOO_LATE", label: "⏩ Late" },
+        { val: "WRONG_FORM_OR_BP", label: "⚠️ Wrong" },
+        { val: "ACCURATE", label: "✅ Accurate" },
+        { val: "UNSURE", label: "🤷 Unsure" },
       ],
     },
   ];
@@ -2402,13 +2498,15 @@ async function main() {
     })
     .map(({ positiveVal, retireAfterPositiveCount, priorityFloor, ...cleanQ }) => cleanQ);
 
-  // Dynamically inject high-priority verification questions for any open combat anomalies (filter out devops/release items)
+  // Dynamically inject high-priority verification questions for any open combat anomalies (filter out devops/release & manual issue enum wrappers)
   const combatActionItems = openActionItems.filter(
     (item) =>
       item.battleId &&
       String(item.battleId).startsWith("log-") &&
       item.type !== "UNRELEASED_COMMITS_ON_MAIN" &&
-      item.type !== "UNPUBLISHED_GITHUB_APK_BUILD"
+      item.type !== "UNPUBLISHED_GITHUB_APK_BUILD" &&
+      item.type !== "USER_MANUAL_ISSUE_REPORT" &&
+      item.type !== "USER_MANUAL_BUG_REPORT"
   );
   for (const openItem of combatActionItems.slice(0, 2)) {
     const cleanId = `issue_${String(openItem.type || "check").toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 18)}`;
@@ -2567,67 +2665,10 @@ async function main() {
 
   fs.writeFileSync(MORNING_BRIEFING_FILE, mdLines.join("\n"), "utf8");
 
-  // 7. Send High-Level Morning Summary to Telegram if `--send-telegram`
-  if (SEND_TELEGRAM) {
+  // 7. Send High-Level Morning Summary to Telegram if `--send-telegram` or `--send-telegram-only`
+  if (SEND_TELEGRAM || SEND_TELEGRAM_ONLY) {
     console.error("[4/4] Sending 6:00 AM high-level summary to Telegram...");
-    const escTg = (s) =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    const todayCentral = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Chicago",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
-    const trainerLines = trainerTable
-      .map(
-        (t) =>
-          `• <b>@${escTg(t.screenName)}</b> (<code>${escTg(t.tier.toUpperCase())}</code>): ${t.battles24h}d / ${t.battles7d}w / ${t.battlesTotal} total (${t.dvrTotal} DVR, ${t.manualFlagsTotal} flagged)`
-      )
-      .join("\n");
-    const openManualFlags = manualIssuesAudit.filter(
-      (m) => m.retroactiveAudit?.status !== "RESOLVED_BY_LATEST_RELEASE"
-    );
-    const resolvedManualFlags = manualIssuesAudit.filter(
-      (m) => m.retroactiveAudit?.status === "RESOLVED_BY_LATEST_RELEASE"
-    );
-    const recentResolvedFlags = resolvedManualFlags.slice(-5);
-    const hiddenResolvedCount = Math.max(0, resolvedManualFlags.length - recentResolvedFlags.length);
-    const shownManualFlags = [...openManualFlags, ...recentResolvedFlags];
-    const manualLines =
-      shownManualFlags.length > 0
-        ? [
-            ...shownManualFlags.map((m) => {
-              const px = m.paidVideoPixelRescan?.executed
-                ? ` [Pixel Rescan: U ${m.paidVideoPixelRescan.preFixUserDetectionRate}➔${m.paidVideoPixelRescan.postFixUserDetectionRate}, O ${m.paidVideoPixelRescan.preFixOppDetectionRate}➔${m.paidVideoPixelRescan.postFixOppDetectionRate}]`
-                : "";
-              return `• <b>@${escTg(m.screenName)}</b> (<code>v${escTg(m.appVersion)}</code>): "${escTg(m.userIssueNote)}" ➔ <b>${escTg(m.retroactiveAudit.status)}</b> (${escTg(m.retroactiveAudit.resolvedInVersion || "Open")})${escTg(px)}`;
-            }),
-            ...(hiddenResolvedCount > 0
-              ? [`• <i>(+${hiddenResolvedCount} older resolved issues verified)</i>`]
-              : []),
-          ].join("\n")
-        : "• None";
-
-    const unreleasedTg = unreleasedCommitsAudit.hasUnreleasedCommits
-      ? `🚀 <b>Unreleased Commits:</b> <code>${unreleasedCommitsAudit.unreleasedCommitsCount} commit(s) ahead of ${escTg(unreleasedCommitsAudit.latestReleaseTag)}</code> ➔ Ready for <b>${escTg(unreleasedCommitsAudit.suggestedNextVersion)}</b>\n\n`
-      : "";
-
-    const tgHtml =
-      `🌅 <b>SilphScope PvP — 6:00 AM Daily Telemetry Audit Ready!</b>\n` +
-      `📦 <b>Latest Release:</b> <code>v${escTg(currentVersion)}</code>\n` +
-      unreleasedTg +
-      `👥 <b>Active Trainers (${trainerTable.length}):</b>\n${trainerLines}\n\n` +
-      `🚩 <b>7-Day Flagged Issue Verification:</b>\n${manualLines}\n\n` +
-      `📊 <b>Retroactive 7-Day Anomaly Status:</b>\n` +
-      `• Verified Fixed in <code>v7.04–v${escTg(currentVersion)}</code>: <b>${anomalyRetroSummary.RESOLVED_BY_LATEST_RELEASE + anomalyRetroSummary.RESOLVED_OR_SUPERSEDED_PRE_V704}</b>\n` +
-      `• Benign 1-Turn / Circle Variance: <b>${anomalyRetroSummary.BENIGN_FALSE_POSITIVE}</b>\n` +
-      `• Open Action Items: <b>${openActionItems.length}</b>\n\n` +
-      `💬 <i>Open today's new Antigravity chat ("📊 [${todayCentral}] Daily Telemetry Audit &amp; Plan") on Orchestrator (Carbon) to review &amp; interact!</i>`;
-
-    await sendTelegramSummary(tgHtml);
+    await sendTelegramSummary(buildTelegramSummaryHtmlFromDigest(digest));
   }
 
   console.log(JSON.stringify(digest, null, 2));

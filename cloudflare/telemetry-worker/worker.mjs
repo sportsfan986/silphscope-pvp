@@ -8250,7 +8250,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.55',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.56',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -8693,9 +8693,9 @@ self.addEventListener('fetch', (e) => {
       if (!cfg) {
         cfg = {
           updatedAt: new Date().toISOString(),
-          targetVersion: '7.23',
+          targetVersion: '7.56',
           tunedSettings: {
-            proactiveEnergyLeadMs: 300,
+            proactiveEnergyLeadMs: 100,
             predictiveGuiHapticLeadMs: 300,
             hpDebounceSamples: 2,
             hpDebounceTolerancePct: 1,
@@ -8703,51 +8703,51 @@ self.addEventListener('fetch', (e) => {
           },
           questions: [
             {
-              id: 'shield_energy',
+              id: 'mimikyu_disguise_v756',
+              priority: 104,
+              trigger: 'mimikyu_in_battle',
+              prompt: '👻 Mimikyu Disguise & -1 DEF:',
+              shortLabel: 'Mimikyu Bust',
+              options: [
+                { val: 'EARLY_OR_SHIELD_BUG', label: '⏪ Early/Bug' },
+                { val: 'EXACT', label: '✅ Exact' },
+                { val: 'MISSED_BUST', label: '⚠️ Missed' },
+              ],
+            },
+            {
+              id: 'shadow_detect_v756',
               priority: 100,
-              trigger: 'hp_promoted_shield_call',
-              prompt: '🛡️ HP Shield Call Energy:',
-              shortLabel: 'Shield Energy',
+              trigger: 'shadow_eligible_opp',
+              prompt: '🟣 Opp Shadow Detection:',
+              shortLabel: 'Shadow Detect',
               options: [
-                { val: 'UNDERCOUNTED', label: '⬇️ Under' },
-                { val: 'ACCURATE', label: '✅ Spot-On' },
-                { val: 'OVERCOUNTED', label: '⬆️ Over' },
+                { val: 'MISSED_SHADOW', label: '⚠️ Missed' },
+                { val: 'ACCURATE', label: '✅ Accurate' },
+                { val: 'FALSE_SHADOW', label: '❌ False Shad' },
               ],
             },
             {
-              id: 'mml_hp_tracking_v708',
-              priority: 95,
-              trigger: 'master_league',
-              prompt: '🦖 Master League HP Bars (v7.08 Fix):',
-              shortLabel: 'MML HP Fix',
-              options: [
-                { val: 'MISSED_BARS', label: '⚠️ Missed' },
-                { val: 'LOCKED_CLEAN', label: '✅ Locked' },
-                { val: 'FLICKERED', label: '🔄 Flicker' },
-              ],
-            },
-            {
-              id: 'pre_zoom_energy_v720',
-              priority: 90,
+              id: 'shield_count_sync_v756',
+              priority: 100,
               trigger: 'charged_move_thrown',
-              prompt: '⚡ Pre-Throw Energy Sync (v7.20 Fix):',
-              shortLabel: 'Throw Energy',
+              prompt: '🛡️ Shield Count Sync:',
+              shortLabel: 'Shield Sync',
               options: [
-                { val: 'UNDER_BY_1F', label: '⬇️ -1 Fast' },
-                { val: 'EXACT_MATCH', label: '✅ Exact' },
-                { val: 'OVER_BY_1F', label: '⬆️ +1 Fast' },
+                { val: 'TOO_LOW', label: '⬇️ Too Low' },
+                { val: 'EXACT', label: '✅ Exact' },
+                { val: 'TOO_HIGH_OR_LATE', label: '⬆️ High/Late' },
               ],
             },
             {
-              id: 'haptic_timing',
-              priority: 50,
-              trigger: 'always',
-              prompt: '📳 Haptic Timing ({leadMs}ms):',
-              shortLabel: 'Haptic Lead',
+              id: 'form_bp_v756',
+              priority: 100,
+              trigger: 'multi_form_or_bp',
+              prompt: '🧬 Auto Form & BP/Bulk Pills:',
+              shortLabel: 'Form & BP',
               options: [
-                { val: 'TOO_EARLY', label: '⏪ Early' },
-                { val: 'IDEAL', label: '✅ Ideal' },
-                { val: 'TOO_LATE', label: '⏩ Late' },
+                { val: 'WRONG_FORM_OR_BP', label: '⚠️ Wrong' },
+                { val: 'ACCURATE', label: '✅ Accurate' },
+                { val: 'UNSURE', label: '🤷 Unsure' },
               ],
             },
           ],

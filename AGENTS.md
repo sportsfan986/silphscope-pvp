@@ -1,7 +1,7 @@
 # AGENTS.md — SilphScope PvP Workspace Rules
 
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.55` (`versionCode = 1755`)  
+> **Current Version**: `v7.56` (`versionCode = 1756`)  
 > **Domains**: `silphscopepvp.com` (Web/Sim) • `dvr.silphscopepvp.com` (Cloud Vault & `/watch/:shareId`) • `api.silphscopepvp.com` (Worker API) • `dl.silphscopepvp.com` (APK)
 
 ---
@@ -11,12 +11,13 @@
 1. **Stop-and-Confirm Versioning Gate (NEVER Overwrite Published Releases)**:
    - Pushing to `main` triggers `.github/workflows/android.yml`, which reads `versionName` from `app/build.gradle.kts` and uploads `silphscope-pvp-v<versionName>.apk` to that GitHub Release with `overwrite_files: true` and `gh release upload --clobber`.
    - **NEVER run `git commit` or `git push` on `main` if `VERSION` / `app/build.gradle.kts` still matches an already-published git tag/release.**
-   - Even if the user explicitly says `"commit and push"`, **STOP and ask** whether to bump to the next `vX.XX` version first (`bash scripts/bump_version.sh` + `CHANGELOG.md` + `src/data/roadmapData.ts` + `npm run release:check`) or hold changes uncommitted for the next/daily build.
+   - Even if the user explicitly says `"commit and push"`, **STOP and invoke `ask_question`** (never plain text) asking whether to bump to the next `vX.XX` version first (`bash scripts/bump_version.sh` + `CHANGELOG.md` + `src/data/roadmapData.ts` + `npm run release:check`) or hold changes uncommitted for the next/daily build.
 2. **No Debug Builds & No Local APK Packaging**:
    - **NEVER** run `./gradlew assembleDebug` or `./gradlew assembleRelease` locally unless the user explicitly asks for a local APK artifact. Verify Web locally (`npm run lint && npm run build`) and leave signed APK builds to GitHub Actions (`.github/workflows/android.yml`).
-3. **Interactive Approval & New-Chat Model Gate**:
-   - Never silently implement features, refactor, or cut releases without explicit user approval (`ask_question` or a plan artifact with `RequestFeedback: true`).
-   - Whenever starting or recommending a standalone new chat for a feature, **always ask the user which model to use in that chat first**.
+3. **Interactive `ask_question` Mandate, Approval & New-Chat Model Gate**:
+   - **ALWAYS Make Questions Interactive (`ask_question` Tool Required — Zero Prose-Only Questions)**: Whenever asking the user ANY question, decision, clarification, approval, model selection, or release/versioning gate, **you MUST invoke the `ask_question` tool in that turn** with clickable options (`(Recommended)` first). **NEVER** present questions, option lists, or `"Would you like me to...?"` prompts in plain Markdown chat text alone.
+   - **Orchestrator Handoff (`exit_plan_mode`)**: Whenever an execution turn stops for user input or a release gate, the `exit_plan_mode` plan **MUST** explicitly instruct the execution model to call `ask_question` with exact `questions` definitions so prose is never substituted for an interactive widget.
+   - Never silently implement features, refactor, or cut releases without explicit user approval (`ask_question` or a plan artifact with `RequestFeedback: true`). Whenever starting or recommending a standalone new chat for a feature, **always invoke `ask_question` to ask which model to use in that chat first**.
 4. **Rule File Size Budget**:
    - Keep `AGENTS.md` strictly under **20,000 bytes** (Antigravity truncates rule files over `24,000` bytes). Store pricing/checkout URLs in [pricing-and-checkout](.agents/skills/pricing-and-checkout/SKILL.md), telemetry/DVR runbooks in [telemetry-and-dvr-ops](.agents/skills/telemetry-and-dvr-ops/SKILL.md), and deep architecture/math specs in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 

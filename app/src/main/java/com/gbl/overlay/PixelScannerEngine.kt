@@ -2194,12 +2194,57 @@ internal fun OverlayService.resolvePostThrowCircleEnergyAndResyncRound(
  * the defender faints and their HP bar disappears before settling at 0%, including match-ending KOs).
  */
 internal fun OverlayService.syncRecentUnshieldedChargedAttackOnFaint(faintedActor: String, eventElapsedSec: Double) {
+    val expectedAttacker = if (faintedActor == "opp") "user" else "opp"
+    val lastChargeIdx = battleTimelineEvents.indexOfLast {
+        it.type == "CHARGED_ATTACK" && it.actor == expectedAttacker
+    }
+    if (lastChargeIdx >= 0) {
+        val ev = battleTimelineEvents[lastChargeIdx]
+        val dt = (eventElapsedSec - ev.t).coerceAtLeast(0.0)
+        if (dt <= 25.0 && ev.shielded == true) {
+            if (faintedActor == "user" && lastOppChargedWasProvisionalShield) {
+                if (lastOppChargedAutoDecrementedShield) {
+                    playerShieldsRemaining = (playerShieldsRemaining + 1).coerceIn(0, 2)
+                    lastPlayerShieldDecrementChargeStartMs = 0L
+                    lastPlayerShieldDecrementWallMs = 0L
+                    val spShieldIdx = battleTimelineEvents.indexOfLast {
+                        it.type.equals("SHIELD", ignoreCase = true) &&
+                            it.actor.equals("user", ignoreCase = true) &&
+                            kotlin.math.abs(it.t - ev.t) <= 1.5
+                    }
+                    if (spShieldIdx >= 0) {
+                        battleTimelineEvents.removeAt(spShieldIdx)
+                    }
+                }
+                lastOppChargedWasProvisionalShield = false
+                lastOppChargedAutoDecrementedShield = false
+            } else if (faintedActor == "opp" && lastUserChargedWasProvisionalShield) {
+                if (lastUserChargedAutoDecrementedShield) {
+                    oppShieldsRemaining = (oppShieldsRemaining + 1).coerceIn(0, 2)
+                    lastOppShieldDecrementChargeStartMs = 0L
+                    lastOppShieldDecrementWallMs = 0L
+                    val spShieldIdx = battleTimelineEvents.indexOfLast {
+                        it.type.equals("SHIELD", ignoreCase = true) &&
+                            it.actor.equals("opp", ignoreCase = true) &&
+                            kotlin.math.abs(it.t - ev.t) <= 1.5
+                    }
+                    if (spShieldIdx >= 0) {
+                        battleTimelineEvents.removeAt(spShieldIdx)
+                    }
+                }
+                lastUserChargedWasProvisionalShield = false
+                lastUserChargedAutoDecrementedShield = false
+            }
+        }
+    }
     syncRecentUnshieldedChargedAttackOnFaintInList(
         events = battleTimelineEvents,
         faintedActor = faintedActor,
         eventElapsedSec = eventElapsedSec,
         userHpList = playerSlotHpPct.toList(),
-        oppHpList = oppSlotHpPct.toList()
+        oppHpList = oppSlotHpPct.toList(),
+        userShieldsRemaining = playerShieldsRemaining,
+        oppShieldsRemaining = oppShieldsRemaining
     )
 }
 
@@ -2208,7 +2253,9 @@ internal fun OverlayService.syncRecentUnshieldedChargedAttackOnFaintInList(
     faintedActor: String,
     eventElapsedSec: Double,
     userHpList: List<Int>? = null,
-    oppHpList: List<Int>? = null
+    oppHpList: List<Int>? = null,
+    userShieldsRemaining: Int? = null,
+    oppShieldsRemaining: Int? = null
 ) {
     val expectedAttacker = if (faintedActor == "opp") "user" else "opp"
     val lastChargeIdx = events.indexOfLast {
@@ -2233,7 +2280,9 @@ internal fun OverlayService.syncRecentUnshieldedChargedAttackOnFaintInList(
             hpAfterPct = 0,
             hpDeltaPct = hpBefore,
             userSlotHpPct = userHpList ?: ev.userSlotHpPct,
-            oppSlotHpPct = oppHpList ?: ev.oppSlotHpPct
+            oppSlotHpPct = oppHpList ?: ev.oppSlotHpPct,
+            userShieldsRemaining = userShieldsRemaining ?: ev.userShieldsRemaining,
+            oppShieldsRemaining = oppShieldsRemaining ?: ev.oppShieldsRemaining
         )
     }
 }
@@ -2977,10 +3026,9 @@ private val PURPLE_OR_SHADOW_CONF_SPECIES: Set<String> = setOf(
 )
 
 private val PURPLE_VFX_FAST_MOVES: Set<String> = setOf(
-    "shadow claw", "hex", "lick", "astonish", "sucker punch", "feint attack",
-    "snarl", "bite", "payback", "poison jab", "poison sting", "acid",
-    "psycho cut", "confusion", "extrasensory", "psywave", "magical leaf",
-    "charm", "fairy wind", "infestation"
+    "shadow claw", "hex", "lick", "astonish",
+    "poison jab", "poison sting", "acid",
+    "confusion", "psywave"
 )
 
 internal data class ShadowAuraScanSample(
@@ -3071,8 +3119,11 @@ internal fun OverlayService.scanOpponent3dShadowAura(
     val fastLower = userFastMoveName.trim().lowercase()
     val recentPlayerFast = (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) in 0L..2200L)
     val cleanPostOppEntryBeforePlayerFast = lastOppSwitchTimeMs > 0L &&
-        (nowMs - lastOppSwitchTimeMs) in 180L..1400L &&
+        (nowMs - lastOppSwitchTimeMs) in 120L..1650L &&
         (confirmedPhasePlayerTurns == 0 || lastConfirmedPlayerFastMoveMs < lastOppSwitchTimeMs)
+    val cleanPostCutsceneBeforePlayerFast = lastChargedAttackLoggedMs > 0L &&
+        (nowMs - lastChargedAttackLoggedMs) in 180L..1500L &&
+        (confirmedPhasePlayerTurns == 0 || lastConfirmedPlayerFastMoveMs < lastChargedAttackLoggedMs)
     val frozenDuringShieldPrompt = isAttackIncomingPromptActive &&
         (lastConfirmedPlayerFastMoveMs <= 0L || (nowMs - lastConfirmedPlayerFastMoveMs) > 650L)
     if (fastLower in PURPLE_VFX_FAST_MOVES &&
@@ -3080,6 +3131,7 @@ internal fun OverlayService.scanOpponent3dShadowAura(
         !isPlayerInIdleFallback &&
         (phasePlayerTurns > 0 || recentPlayerFast) &&
         !cleanPostOppEntryBeforePlayerFast &&
+        !cleanPostCutsceneBeforePlayerFast &&
         !frozenDuringShieldPrompt
     ) {
         oppAuraHasPrevRgb = false

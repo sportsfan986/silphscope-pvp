@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.56',
+    codename: 'Shadow Aura & Entry-OCR Hardening, Strict OCR-Only Mimikyu Disguise, Shield Sync & Survey Refresh',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Eliminates Go-banner player Shadow leaks and Fairy Wind Aura blocks, unlocks 3D Shadow Aura sampling when 1 action circle dims, enforces strict OCR-only Mimikyu Disguise busts, fixes BLOCKED! & KO-faint shield desyncs, and refreshes the in-app post-battle 1-tap survey pool.',
+    icon: '🛡️',
+    accentColor: '#A855F7',
+    highlights: [
+      'Scoped Go-banner Shadow checks to the Go line itself (fixing opp nameplate leaks onto player switch-ins) and removed non-purple Fairy Wind / Dragon Breath / Charm from PURPLE_VFX_FAST_MOVES',
+      'Unlocked 3D HSV Shadow Aura sampling (|| circle gate, locked oppSlotBaselineHpRowY fallback, <400ms blink retention, 600ms confirm) plus defenderPokemon-scoped timeline backfill and pre-exit debuff deduplication',
+      'Enforced strict OCR-only Mimikyu Disguise busting—requiring explicit "disguise is busted!" text and removing all pixel, timeout, and !wasShielded Disguise fallbacks',
+      'Deduplicated mid/post-charge BLOCKED! shield counters, refunded provisional shields on confirmed post-charge KO faints, and synced >8.5s match-winning KO throws',
+      'Replaced stale v7.08–v7.25 post-battle feedback prompts with 4 context-triggered v7.56 checks (Mimikyu Bust, Opp Shadow, Shield Sync, Auto Form & BP/Bulk)'
+    ]
+  },
+  {
     version: 'v7.55',
     codename: '2x Retina @Featured Battle Showcases, Replay HUD v7.54 Parity & Non-Truncating Breakpoint Pills',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Promotes three clean 0-anomaly v7.53 Ultra League wins to @Featured with 2x Retina (1088x2368, 24 fps) homepage media, upgrades /watch/:shareId to full v7.54 HUD parity, removes double-dimmed HUD glass opacity, and prevents live Breakpoint micro-pills from truncating behind ellipsis.',
     icon: '🎬',
@@ -469,6 +484,51 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Shiny Origin Dialga Midnight invariant default for first load & anonymous sessions',
       'Dynamic CSS theme variables applied consistently across Marketing site & Simulator',
       'User theme preference synced across devices via Cloudflare D1 Vault Sync'
+    ]
+  },
+  {
+    id: 'auto-detect-party-screen',
+    title: 'Auto-Detect Team & League from "Choose Your Party" Screen',
+    badge: 'VISION & TEAM SYNC',
+    status: 'Planned',
+    statusColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+    category: 'HUD / Combat Engine',
+    icon: '🔍',
+    description: 'Automatically detect the active League/Cup and 3-Pokémon team from Pokémon GO\'s pre-battle "CHOOSE YOUR PARTY" screen—handling custom PvP IV nicknames (e.g., X1113MelmEFD, U1Mimikyu, ⓊMoltres, U1Tinkaton+, ⓊSwampert99) via fuzzy species matching, CP/form disambiguation, and Built Pokémon roster matching.',
+    keyGoals: [
+      'Idle-only OCR of "CHOOSE YOUR PARTY" league header, party name, and 3 slot CP + nickname labels',
+      'Fuzzy nickname-to-species parser stripping PvP IV prefixes/suffixes (U1, X1113, Ⓤ, +, 99, move codes)',
+      'CP + sprite/color disambiguation for regional/alternate forms (e.g., Galarian vs. Kanto Moltres) and Built Roster matching'
+    ]
+  },
+  {
+    id: 'theme-audit-cleanup-pruning',
+    title: 'Theme Audit, Contrast Cleanup, Pruning & Fun New Themes',
+    badge: 'DESIGN & ACCESSIBILITY',
+    status: 'Planned',
+    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+    category: 'Analytics & Team Builder',
+    icon: '🎨',
+    description: 'Audit every theme one-by-one across Android, Web Simulator, and Marketing Website to guarantee crisp text readability/contrast in all areas, prune redundant or low-usage themes, and propose fun new themes.',
+    keyGoals: [
+      'One-by-one contrast & readability audit across all modals, cards, badges, inputs, and HUD states',
+      'Prune redundant or low-contrast themes to keep the theme selector focused and polished',
+      'Propose and add fun new community-inspired themes while keeping Shiny Origin Dialga Midnight as default'
+    ]
+  },
+  {
+    id: 'web-simulator-sprite-upgrade',
+    title: 'Generate or Source Higher-Quality Sprites for Web Simulator',
+    badge: 'WEB SIMULATOR & ASSETS',
+    status: 'Planned',
+    statusColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+    category: 'Analytics & Team Builder',
+    icon: '🖼️',
+    description: 'Upgrade Pokémon sprites across the Web Simulator (battle arena, team cards, Meta & IV Lab) by sourcing crisp high-res/animated assets or generating consistent custom sprites, including accurate Shadow/form/Mega variants.',
+    keyGoals: [
+      'Evaluate high-res sprite sources (PokeAPI / HOME / Showdown / custom SVG/PNG) with fast CDN caching and fallbacks',
+      'Support accurate regional forms, Mega/Primal evolutions, and distinct Shadow visual treatments',
+      'Ensure crisp scaling and zero broken-image placeholders across light and dark themes'
     ]
   }
 ];
