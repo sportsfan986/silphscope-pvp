@@ -23,9 +23,21 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.64',
+    codename: 'Full-Height Right-Rail Team Card Controls & Zero Left Gutter',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Moves the 6-dot drag icon into the unified right-hand vertical rail alongside Radio, Edit, Delete, and ▲/▼ with weighted spacing spanning the card height, eliminating the left gutter completely.',
+    icon: '📐',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Removed left drag-handle gutter in item_team_preset.xml so team content spans edge-to-edge on the left',
+      'Ordered the right 32dp vertical rail as Radio, Edit, gap, Delete, gap, ▲, ⋮⋮, ▼ with proportional Space weights filling the full card height'
+    ]
+  },
+  {
     version: 'v7.63',
     codename: 'Compact Right-Rail Team Card Controls & Expanded Horizontal Card Width',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Consolidates the Team Card active Radio button, Edit, Delete, and ▲/▼ reorder controls into one slim 32dp vertical rail on the right while keeping a compact 16dp drag handle on the left, expanding usable horizontal card width for long team names and multi-meta BR pools.',
     icon: '📐',

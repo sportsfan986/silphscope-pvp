@@ -2,6 +2,13 @@
 
 ---
 
+## v7.64 (2026-11-18) — Full-Height Right-Rail Team Card Controls & Zero Left Gutter
+*UI layout polish release (`v7.64`, `versionCode = 1764`) removing the left drag-handle gutter completely and stacking the 6-dot drag icon between `▲`/`▼` inside a full-height elastic right action column.*
+
+- **Elastic Full-Height Right Control Column (`item_team_preset.xml`)**: Moved `drag_handle_preset` (`⋮⋮`) from the left edge into the single `32dp` right vertical rail ordered `Radio` → `Edit` → *(gap)* → `Delete` → *(gap)* → `▲` → `⋮⋮` → `▼`, using weighted `<Space>` elements (`1 / 3 / 3 / 1 / 1`) inside `match_parent` height so vertical spacing fills the height set by the card content.
+
+---
+
 ## v7.63 (2026-11-18) — Compact Right-Rail Team Card Controls & Expanded Horizontal Card Width
 *UI density polish release (`v7.63`, `versionCode = 1763`) consolidating Team Card action controls into one slim right-side vertical column so team names, multi-meta BR pools, and moveset summaries get ~108dp more horizontal width.*
 
