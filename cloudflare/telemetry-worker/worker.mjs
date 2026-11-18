@@ -2962,6 +2962,272 @@ async function upsertVaultBatchIntoD1(
   };
 }
 
+function getD1LeagueCpCap(rawLeague) {
+  const u = String(rawLeague || '').trim().toUpperCase();
+  if (!u) return 1500;
+  if (u.includes('LITTLE') || u.includes('500')) return 500;
+  if (u.includes('MASTER') || u.includes('10000')) return 10000;
+  if (u.includes('ULTRA') || u.includes('CAULDRON') || u.includes('2500')) return 2500;
+  return 1500;
+}
+
+function stripLeagueAffixForD1TeamMerge(rawName) {
+  let s = String(rawName || '').trim();
+  s = s
+    .replace(
+      /^(?:GL|UL|ML|MGL|MUL|MML|MLP|LC|Mega\s+(?:Great|Ultra|Master)(?:\s+League)?|(?:Great|Ultra|Master)(?:\s+League)(?:\s+Premier)?)\s*[-:|]?\s*/i,
+      ''
+    )
+    .trim();
+  s = s
+    .replace(/\s*\((?:GL|UL|ML|MGL|MUL|MML|MLP|LC|Mega[^)]*|Great[^)]*|Ultra[^)]*|Master[^)]*)\)$/i, '')
+    .trim();
+  s = s.replace(/\s*[-|:]\s*(?:GL|UL|ML|MGL|MUL|MML|MLP|LC)$/i, '').trim();
+  return s;
+}
+
+function buildV761D1TeamMergeKey(row, payload) {
+  const mons = Array.isArray(payload?.pokemon) ? payload.pokemon : [];
+  if (mons.length < 3) return null;
+  const leagueStr = String(payload?.league || row?.league || 'GREAT LEAGUE').trim();
+  const mode =
+    String(payload?.combatMode || row?.combat_mode || '').toLowerCase() === 'show6' ||
+    leagueStr.toUpperCase().includes('SHOW 6')
+      ? 'show6'
+      : 'gbl';
+  const cpCap = getD1LeagueCpCap(leagueStr);
+  const slotSigs = mons.slice(0, 3).map((m) => {
+    const n = String(m?.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const f = String(m?.fastMove || '').trim().toLowerCase();
+    const c1 = String(m?.chargedMove1 || '').trim().toLowerCase();
+    const c2 = String(m?.chargedMove2 || '').trim().toLowerCase();
+    return `${n}|${f}|${c1}|${c2}`;
+  });
+  return `${mode}|${cpCap}|${slotSigs.join('||')}`;
+}
+
+async function maybeRunV761MultiMetaMergeInD1(db, screenName) {
+  if (!db) return { didMerge: false, mergeServerMs: 0 };
+  const cleanUser = sanitizeScreenName(screenName);
+  if (!cleanUser) return { didMerge: false, mergeServerMs: 0 };
+
+  const existingState = await db
+    .prepare(
+      `SELECT display_screen_name, settings_json, settings_updated_at, migrated_from_github,
+              migrated_at_ms, server_updated_ms, total_active_logs
+       FROM user_vault_state WHERE screen_name = ?1`
+    )
+    .bind(cleanUser)
+    .first();
+
+  let settingsObj = {};
+  if (existingState?.settings_json) {
+    try {
+      settingsObj = sanitizeVaultSettingsForD1(JSON.parse(existingState.settings_json));
+    } catch (_) {
+      settingsObj = {};
+    }
+  }
+  if (settingsObj._v761_multi_meta_merged === '1') {
+    return { didMerge: false, mergeServerMs: 0 };
+  }
+
+  const teamsRes = await db
+    .prepare(
+      `SELECT team_id, name, league, combat_mode, updated_at, server_updated_ms, payload_json
+       FROM team_presets
+       WHERE screen_name = ?1 AND deleted = 0
+       ORDER BY sort_order ASC, updated_at DESC
+       LIMIT 500`
+    )
+    .bind(cleanUser)
+    .all();
+  const activeTeams = teamsRes?.results || [];
+  if (activeTeams.length === 0) {
+    return { didMerge: false, mergeServerMs: 0 };
+  }
+
+  const groups = new Map();
+  for (const row of activeTeams) {
+    let payload = null;
+    try {
+      payload = row.payload_json ? JSON.parse(row.payload_json) : null;
+    } catch (_) {
+      payload = null;
+    }
+    if (!payload || typeof payload !== 'object') continue;
+    const key = buildV761D1TeamMergeKey(row, payload);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ row, payload });
+  }
+
+  const dupGroups = Array.from(groups.values()).filter((g) => g.length >= 2);
+  if (dupGroups.length === 0) {
+    if (existingState) {
+      settingsObj._v761_multi_meta_merged = '1';
+      await db
+        .prepare('UPDATE user_vault_state SET settings_json = ?1 WHERE screen_name = ?2')
+        .bind(JSON.stringify(settingsObj), cleanUser)
+        .run();
+    }
+    return { didMerge: false, mergeServerMs: 0 };
+  }
+
+  const logsRes = await db
+    .prepare(
+      `SELECT log_id, updated_at, payload_json
+       FROM battle_logs
+       WHERE screen_name = ?1 AND deleted = 0
+       LIMIT 5000`
+    )
+    .bind(cleanUser)
+    .all();
+  const activeLogs = logsRes?.results || [];
+  const logCountsByPreset = new Map();
+  const parsedLogs = [];
+  for (const lRow of activeLogs) {
+    let lPayload = null;
+    try {
+      lPayload = lRow.payload_json ? JSON.parse(lRow.payload_json) : null;
+    } catch (_) {
+      lPayload = null;
+    }
+    const pid = String(lPayload?.presetId || '').trim();
+    if (pid) {
+      logCountsByPreset.set(pid, (logCountsByPreset.get(pid) || 0) + 1);
+    }
+    parsedLogs.push({ lRow, lPayload, pid });
+  }
+
+  const prevSrvMs = Number(existingState?.server_updated_ms) || 0;
+  const mergeMs = Math.max(Date.now() + 2, prevSrvMs + 2);
+  const statements = [];
+  const redirectMap = new Map();
+
+  for (const group of dupGroups) {
+    const scored = [...group].sort((a, b) => {
+      const aSel = a.payload.isSelected ? 1 : 0;
+      const bSel = b.payload.isSelected ? 1 : 0;
+      if (bSel !== aSel) return bSel - aSel;
+      const aLogs = logCountsByPreset.get(a.row.team_id) || 0;
+      const bLogs = logCountsByPreset.get(b.row.team_id) || 0;
+      if (bLogs !== aLogs) return bLogs - aLogs;
+      return (Number(b.row.updated_at) || 0) - (Number(a.row.updated_at) || 0);
+    });
+    const survivor = scored[0];
+    const survivorId = survivor.row.team_id;
+    const survivorLeague = String(survivor.payload.league || survivor.row.league || 'GREAT LEAGUE').trim();
+
+    const combinedAssigned = [];
+    const seenAssigned = new Set();
+    const addMeta = (lg) => {
+      const s = String(lg || '').trim();
+      if (!s) return;
+      const low = s.toLowerCase();
+      if (seenAssigned.has(low)) return;
+      seenAssigned.add(low);
+      combinedAssigned.push(s);
+    };
+    addMeta(survivorLeague);
+    if (Array.isArray(survivor.payload.assignedLeagues)) {
+      survivor.payload.assignedLeagues.forEach(addMeta);
+    }
+    for (const item of scored) {
+      addMeta(item.payload.league || item.row.league);
+      if (Array.isArray(item.payload.assignedLeagues)) {
+        item.payload.assignedLeagues.forEach(addMeta);
+      }
+    }
+
+    const strippedStems = new Map();
+    for (const item of scored) {
+      const st = stripLeagueAffixForD1TeamMerge(item.payload.name || item.row.name);
+      if (st.length >= 2) {
+        const lk = st.toLowerCase();
+        if (!strippedStems.has(lk)) strippedStems.set(lk, { label: st, count: 0 });
+        strippedStems.get(lk).count++;
+      }
+    }
+    let cleanName = String(survivor.payload.name || survivor.row.name || 'Team').trim();
+    const bestStem = Array.from(strippedStems.values()).sort((a, b) => b.count - a.count)[0];
+    if (bestStem && bestStem.count >= 2) {
+      cleanName = bestStem.label.slice(0, 120);
+    }
+
+    const updatedSurvivorPayload = {
+      ...survivor.payload,
+      name: cleanName,
+      league: survivorLeague,
+      assignedLeagues: combinedAssigned,
+      updatedAt: mergeMs,
+    };
+    statements.push(
+      db
+        .prepare(
+          `UPDATE team_presets
+           SET name = ?1, updated_at = ?2, server_updated_ms = ?2, payload_json = ?3
+           WHERE screen_name = ?4 AND team_id = ?5`
+        )
+        .bind(cleanName.slice(0, 120), mergeMs, JSON.stringify(updatedSurvivorPayload), cleanUser, survivorId)
+    );
+
+    for (let i = 1; i < scored.length; i++) {
+      const dupId = scored[i].row.team_id;
+      if (!dupId || dupId === survivorId) continue;
+      redirectMap.set(dupId, survivorId);
+      statements.push(
+        db
+          .prepare(
+            `UPDATE team_presets
+             SET deleted = 1, updated_at = ?1, server_updated_ms = ?1
+             WHERE screen_name = ?2 AND team_id = ?3`
+          )
+          .bind(mergeMs, cleanUser, dupId)
+      );
+    }
+  }
+
+  for (const { lRow, lPayload, pid } of parsedLogs) {
+    if (!pid || !redirectMap.has(pid) || !lPayload) continue;
+    const newPresetId = redirectMap.get(pid);
+    const updatedLogPayload = {
+      ...lPayload,
+      presetId: newPresetId,
+      updatedAt: mergeMs,
+    };
+    statements.push(
+      db
+        .prepare(
+          `UPDATE battle_logs
+           SET updated_at = ?1, server_updated_ms = ?1, payload_json = ?2
+           WHERE screen_name = ?3 AND log_id = ?4`
+        )
+        .bind(mergeMs, JSON.stringify(updatedLogPayload), cleanUser, lRow.log_id)
+    );
+  }
+
+  const CHUNK_SIZE = 60;
+  for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+    await db.batch(statements.slice(i, i + CHUNK_SIZE));
+  }
+
+  settingsObj._v761_multi_meta_merged = '1';
+  const remainingTeams = Math.max(0, activeTeams.length - redirectMap.size);
+  await db
+    .prepare(
+      `UPDATE user_vault_state
+       SET settings_json = ?1,
+           server_updated_ms = ?2,
+           total_active_teams = ?3
+       WHERE screen_name = ?4`
+    )
+    .bind(JSON.stringify(settingsObj), mergeMs, remainingTeams, cleanUser)
+    .run();
+
+  return { didMerge: true, mergeServerMs: mergeMs };
+}
+
 async function pullVaultDeltasFromD1(
   db,
   screenName,
@@ -8250,7 +8516,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.60',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.61',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -10996,10 +11262,20 @@ self.addEventListener('fetch', (e) => {
           });
         }
 
+        const mergeRes = await maybeRunV761MultiMetaMergeInD1(env.SYNC_DB, resolvedName);
+
+        const effectiveSinceMs =
+          mergeRes.didMerge && sinceServerMs > 0
+            ? Math.min(sinceServerMs, Math.max(0, mergeRes.mergeServerMs - 1))
+            : sinceServerMs;
+        const effectivePrevServerMs = mergeRes.didMerge
+          ? mergeRes.mergeServerMs
+          : writeStats.prevServerUpdatedMs || 0;
+
         const pulled = await pullVaultDeltasFromD1(env.SYNC_DB, resolvedName, {
-          sinceServerMs,
+          sinceServerMs: effectiveSinceMs,
           isPaidOrAlumni: syncAuth.isPaidOrAlumni,
-          prevServerUpdatedMs: writeStats.prevServerUpdatedMs || 0,
+          prevServerUpdatedMs: effectivePrevServerMs,
           writeServerUpdatedMs: writeStats.wroteAnything ? writeStats.serverUpdatedMs || 0 : 0,
           pushedLogIds: writeStats.pushedLogIds || [],
           pushedTeamIds: writeStats.pushedTeamIds || [],
@@ -11030,7 +11306,11 @@ self.addEventListener('fetch', (e) => {
             everPaid: Boolean(licInfo.everPaid),
             signature: licInfo.signature || '',
             license: licInfo,
-            serverSyncMs: Math.max(pulled.serverSyncMs || 0, writeStats.serverUpdatedMs || 0),
+            serverSyncMs: Math.max(
+              pulled.serverSyncMs || 0,
+              writeStats.serverUpdatedMs || 0,
+              mergeRes.mergeServerMs || 0
+            ),
             shortCircuited: Boolean(pulled.shortCircuited && !writeStats.wroteAnything),
             totalActiveLogs: pulled.totalActiveLogs,
             totalActiveTeams: pulled.totalActiveTeams,

@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.60"
-        const val APP_VERSION_CODE = 1760
+        const val APP_VERSION = "7.61"
+        const val APP_VERSION_CODE = 1761
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -236,6 +236,31 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_GBL_PROMPT_ACKED_AT_FIVE = "gbl_prompt_acked_at_five_v745"
         const val PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS = "gbl_last_elo_confirmed_ms_v745"
         const val PREFS_KEY_AUTO_TEAM_SCAN_ENABLED = "gbl_auto_team_scan_enabled_v760"
+        const val PREFS_KEY_V761_MULTI_META_MIGRATED = "gbl_v761_multi_meta_migrated_v1"
+        const val PREFS_KEY_GBL_ROTATION_SCHEDULE_JSON = "gbl_rotation_schedule_v761"
+        const val PREFS_KEY_GBL_ROTATION_FETCHED_MS = "gbl_rotation_fetched_ms_v761"
+        const val PREFS_KEY_PENDING_PARTY_RENAME_JSON = "gbl_pending_party_rename_v761"
+        const val PREFS_KEY_MUTED_PARTY_RENAMES_JSON = "gbl_muted_party_renames_v761"
+        const val SCRAPED_DUCK_EVENTS_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.json"
+        const val GBL_ROTATION_TTL_MS = 6L * 60L * 60L * 1000L
+
+        data class GblScheduleWindow(
+            val eventId: String = "",
+            val rawName: String = "",
+            val startMs: Long = 0L,
+            val endMs: Long = 0L,
+            val leagues: List<String> = emptyList()
+        )
+
+        data class PendingPartyRenamePrompt(
+            val presetId: String = "",
+            val currentName: String = "",
+            val pogoPartyName: String = "",
+            val league: String = "",
+            val combatMode: String = "gbl",
+            val detectedAtMs: Long = 0L
+        )
+
         val PARTY_CARD_INHERENT_PURPLE_SPECIES: Set<String> = setOf(
             "gengar", "haunter", "gastly", "sableye", "drifblim", "drifloon",
             "mismagius", "misdreavus", "muk", "grimer", "weezing", "koffing",
@@ -245,6 +270,420 @@ class OverlayService : LifecycleService() {
             "corviknight", "spiritomb", "chandelure", "lampent", "litwick",
             "ceruledge", "rattata"
         )
+
+        fun getEffectiveAssignedLeaguesStatic(preset: TeamPreset): List<String> {
+            return (listOf(preset.league) + preset.assignedLeagues.orEmpty())
+                .map { normalizeLeagueKeyStatic(it) }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun getEffectiveAssignedLeaguesStatic(preset: com.gbl.overlay.TeamPreset): List<String> {
+            return (listOf(preset.league) + preset.assignedLeagues.orEmpty())
+                .map { normalizeLeagueKeyStatic(it) }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun formatShortMetaBadgeStatic(league: String): String {
+            val norm = normalizeLeagueKeyStatic(league).uppercase()
+            return when {
+                norm == "GREAT LEAGUE" -> "GL"
+                norm == "ULTRA LEAGUE" -> "UL"
+                norm == "MASTER LEAGUE" -> "ML"
+                norm == "MEGA GREAT LEAGUE" -> "MGL"
+                norm == "MEGA ULTRA LEAGUE" -> "MUL"
+                norm == "MEGA MASTER LEAGUE" -> "MML"
+                norm == "MASTER LEAGUE PREMIER" -> "MLP"
+                norm == "LITTLE CUP" -> "LC"
+                norm.startsWith("BATTLE FRONTIER") || norm.startsWith("BF (") -> {
+                    val inner = norm.substringAfter("(", "").substringBefore(")").trim()
+                    if (inner.isNotEmpty()) "BF-$inner" else "BF"
+                }
+                else -> formatLeagueDisplayLabelStatic(league)
+                    .replace(Regex("\\s+(?:League|Cup)$", RegexOption.IGNORE_CASE), "")
+                    .trim()
+                    .take(12)
+            }
+        }
+
+        private fun parseIsoInstantMillisStatic(raw: String?): Long? {
+            val s = raw?.trim().orEmpty()
+            if (s.isEmpty()) return null
+            return try {
+                java.time.Instant.parse(s).toEpochMilli()
+            } catch (_: Exception) {
+                try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                    sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    sdf.parse(s.take(19))?.time
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
+        private fun parseGblRotationSegmentToLeaguesStatic(
+            rawSegment: String,
+            catalog: List<LimitedMetaFormat>
+        ): List<String> {
+            val clean = rawSegment.trim().replace(Regex("\\s+"), " ")
+            if (clean.isEmpty()) return emptyList()
+            val low = clean.lowercase()
+            if (low == "great league") return listOf("GREAT LEAGUE")
+            if (low == "ultra league") return listOf("ULTRA LEAGUE")
+            if (low == "master league") return listOf("MASTER LEAGUE")
+            if (low.contains("ultra league") && low.contains("mega edition")) return listOf("MEGA ULTRA LEAGUE")
+            if (low.contains("master league") && low.contains("mega edition")) return listOf("MEGA MASTER LEAGUE")
+            if (low.contains("great league") && low.contains("mega edition")) return listOf("MEGA GREAT LEAGUE")
+            if (low.contains("mega ultra")) return listOf("MEGA ULTRA LEAGUE")
+            if (low.contains("mega master")) return listOf("MEGA MASTER LEAGUE")
+            if (low.contains("mega great")) return listOf("MEGA GREAT LEAGUE")
+            if (low.contains("master league premier")) return listOf("MASTER LEAGUE PREMIER")
+            if (low == "little cup") return listOf("Little Cup")
+
+            val strippedLow = low
+                .replace(Regex("^20\\d\\d\\s+go\\s+"), "")
+                .replace(Regex("\\s*:\\s*(?:great|ultra|master)\\s+league\\s+edition$"), "")
+                .trim()
+            val isMegaEdition = low.contains("mega")
+            val matches = catalog.filter { cat ->
+                val tLow = cat.title.lowercase()
+                val kLow = cat.leagueKey.lowercase()
+                val cLow = cat.cup.lowercase()
+                val catHasMega = tLow.contains("mega") || cLow.contains("mega")
+                if (isMegaEdition != catHasMega && (tLow.contains("catch") || tLow.contains("halloween") || tLow.contains("color"))) {
+                    false
+                } else {
+                    (tLow.length >= 4 && (low.contains(tLow) || tLow.contains(strippedLow))) ||
+                        (kLow.length >= 4 && (low.contains(kLow) || kLow.contains(strippedLow))) ||
+                        (cLow.length >= 4 && strippedLow.contains(cLow))
+                }
+            }
+            if (matches.isNotEmpty()) {
+                return matches.map { normalizeLeagueKeyStatic(it.leagueKey) }.distinct()
+            }
+            return emptyList()
+        }
+
+        fun parseGblRotationScheduleJsonStatic(
+            eventsJson: String,
+            prefs: SharedPreferences? = null
+        ): List<GblScheduleWindow> {
+            return try {
+                val arr = JsonParser.parseString(eventsJson).asJsonArray
+                val catalog = if (prefs != null) {
+                    getLimitedMetaCatalogStatic(prefs)
+                } else {
+                    (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).distinctBy { it.leagueKey.uppercase() }
+                }
+                val windows = mutableListOf<GblScheduleWindow>()
+                for (el in arr) {
+                    val obj = el.asJsonObject
+                    val eType = obj.get("eventType")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                    if (!eType.equals("go-battle-league", ignoreCase = true)) continue
+                    val startMs = parseIsoInstantMillisStatic(obj.get("start")?.takeIf { !it.isJsonNull }?.asString) ?: continue
+                    val endMs = parseIsoInstantMillisStatic(obj.get("end")?.takeIf { !it.isJsonNull }?.asString) ?: continue
+                    val rawName = obj.get("name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                    val eventId = obj.get("eventID")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                    val prefix = rawName.substringBefore("|").trim()
+                    val segments = prefix.split(Regex(",\\s*(?:and\\s+)?|\\s+and\\s+", RegexOption.IGNORE_CASE))
+                    val leagues = segments
+                        .flatMap { seg -> parseGblRotationSegmentToLeaguesStatic(seg, catalog) }
+                        .distinct()
+                    if (leagues.isNotEmpty()) {
+                        windows.add(
+                            GblScheduleWindow(
+                                eventId = eventId,
+                                rawName = rawName,
+                                startMs = startMs,
+                                endMs = endMs,
+                                leagues = leagues
+                            )
+                        )
+                    }
+                }
+                windows.sortedBy { it.startMs }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun getActiveGblRotationLeaguesStatic(
+            prefs: SharedPreferences?,
+            nowMs: Long = System.currentTimeMillis()
+        ): List<String> {
+            if (prefs == null) return emptyList()
+            val raw = prefs.getString(PREFS_KEY_GBL_ROTATION_SCHEDULE_JSON, null) ?: return emptyList()
+            return try {
+                val type = object : TypeToken<List<GblScheduleWindow>>() {}.type
+                val windows: List<GblScheduleWindow> = (Gson().fromJson<List<GblScheduleWindow>>(raw, type) ?: emptyList())
+                    .sortedBy { it.startMs }
+                val active = LinkedHashSet<String>()
+                for (idx in windows.indices) {
+                    val w = windows[idx]
+                    val nextStart = windows.getOrNull(idx + 1)?.startMs
+                    val inExtendedEnd = nextStart != null && nowMs < nextStart && nowMs <= (w.endMs + 36L * 3600_000L)
+                    if (nowMs >= w.startMs && (nowMs <= w.endMs || inExtendedEnd)) {
+                        active.addAll(w.leagues)
+                    }
+                }
+                active.toList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun refreshGblRotationScheduleAsync(prefs: SharedPreferences, force: Boolean = false) {
+            val nowMs = System.currentTimeMillis()
+            val lastMs = prefs.getLong(PREFS_KEY_GBL_ROTATION_FETCHED_MS, 0L)
+            val hasCache = !prefs.getString(PREFS_KEY_GBL_ROTATION_SCHEDULE_JSON, null).isNullOrBlank()
+            if (!force && hasCache && (nowMs - lastMs) in 0L..GBL_ROTATION_TTL_MS) return
+            Thread {
+                try {
+                    val client = OkHttpClient()
+                    val req = Request.Builder().url(SCRAPED_DUCK_EVENTS_URL).build()
+                    client.newCall(req).execute().use { resp ->
+                        val body = resp.body?.string()
+                        if (resp.isSuccessful && !body.isNullOrBlank()) {
+                            val windows = parseGblRotationScheduleJsonStatic(body, prefs)
+                            if (windows.isNotEmpty()) {
+                                prefs.edit()
+                                    .putString(PREFS_KEY_GBL_ROTATION_SCHEDULE_JSON, Gson().toJson(windows))
+                                    .putLong(PREFS_KEY_GBL_ROTATION_FETCHED_MS, System.currentTimeMillis())
+                                    .apply()
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }.start()
+        }
+
+        fun resolveActiveMetaForPresetStatic(
+            preset: TeamPreset,
+            explicitOcrLeagueKey: String?,
+            prefs: SharedPreferences?
+        ): String {
+            val assigned = getEffectiveAssignedLeaguesStatic(preset)
+            if (assigned.size <= 1) return preset.league
+            if (!explicitOcrLeagueKey.isNullOrBlank()) {
+                val normExp = normalizeLeagueKeyStatic(explicitOcrLeagueKey)
+                val isGenericOpen = normExp == "GREAT LEAGUE" || normExp == "ULTRA LEAGUE" || normExp == "MASTER LEAGUE"
+                if (!isGenericOpen) {
+                    assigned.firstOrNull { it.equals(normExp, ignoreCase = true) }?.let { return it }
+                }
+            }
+            val activeRot = getActiveGblRotationLeaguesStatic(prefs)
+            val inRot = assigned.filter { lg -> activeRot.any { r -> r.equals(lg, ignoreCase = true) } }
+            if (inRot.size == 1) return inRot[0]
+            if (!explicitOcrLeagueKey.isNullOrBlank()) {
+                val normExp = normalizeLeagueKeyStatic(explicitOcrLeagueKey)
+                val expMatch = assigned.firstOrNull { it.equals(normExp, ignoreCase = true) }
+                val curNorm = normalizeLeagueKeyStatic(preset.league)
+                val curIsInRot = inRot.any { it.equals(curNorm, ignoreCase = true) }
+                if (expMatch != null && !curIsInRot) return expMatch
+            }
+            return preset.league
+        }
+
+        private fun stripLeagueAffixFromTeamNameStatic(rawName: String): String {
+            var s = rawName.trim()
+            s = s.replace(
+                Regex("^(?:GL|UL|ML|MGL|MUL|MML|MLP|LC|Mega\\s+(?:Great|Ultra|Master)(?:\\s+League)?|(?:Great|Ultra|Master)(?:\\s+League)(?:\\s+Premier)?)\\s*[-:|]?\\s*", RegexOption.IGNORE_CASE),
+                ""
+            ).trim()
+            s = s.replace(
+                Regex("\\s*\\((?:GL|UL|ML|MGL|MUL|MML|MLP|LC|Mega[^)]*|Great[^)]*|Ultra[^)]*|Master[^)]*)\\)$", RegexOption.IGNORE_CASE),
+                ""
+            ).trim()
+            s = s.replace(
+                Regex("\\s*[-|:]\\s*(?:GL|UL|ML|MGL|MUL|MML|MLP|LC)$", RegexOption.IGNORE_CASE),
+                ""
+            ).trim()
+            return s
+        }
+
+        private fun buildV761TeamMergeKeyStatic(
+            preset: TeamPreset,
+            mode: String,
+            prefs: SharedPreferences
+        ): String? {
+            if (preset.pokemon.size < 3) return null
+            val cpCap = getLeagueCpCapStatic(preset.league, prefs)
+            val slotSigs = preset.pokemon.take(3).map { s ->
+                val normName = s.name.trim().lowercase().replace(Regex("\\s+"), " ")
+                val f = s.fastMove.trim().lowercase()
+                val c1 = s.chargedMove1.trim().lowercase()
+                val c2 = s.chargedMove2.trim().lowercase()
+                "$normName|$f|$c1|$c2"
+            }
+            return "$mode|$cpCap|${slotSigs.joinToString("||")}"
+        }
+
+        /**
+         * One-time idempotent migration on first launch of v7.61+:
+         * merges duplicate TeamPresets sharing combatMode + CP cap + exact 3-slot species/form/Shadow/movesets
+         * into a single multi-meta TeamPreset, re-points BattleLogEntry.presetId while preserving entry.league,
+         * and tombstones merged duplicate preset IDs for Cloudflare D1 Vault Sync.
+         */
+        fun runV761MultiMetaTeamMergeMigrationStatic(prefs: SharedPreferences, gson: Gson): Boolean {
+            if (prefs.getBoolean(PREFS_KEY_V761_MULTI_META_MIGRATED, false)) return false
+            val nowMs = System.currentTimeMillis()
+            val presetType = object : TypeToken<List<TeamPreset>>() {}.type
+            val logType = object : TypeToken<List<BattleLogEntry>>() {}.type
+            val strType = object : TypeToken<List<String>>() {}.type
+            var anyMutated = false
+
+            data class BucketCfg(
+                val presetKey: String,
+                val logKey: String,
+                val delTeamKey: String,
+                val selKey: String,
+                val mode: String
+            )
+            val buckets = listOf(
+                BucketCfg(PREFS_KEY_PERSISTENT_TEAMS, PREFS_KEY_BATTLE_LOGS, PREFS_KEY_DELETED_TEAM_IDS, "gbl_selected_preset_id", "gbl"),
+                BucketCfg(PREFS_KEY_SHOW6_PRESETS_OF_3, PREFS_KEY_SHOW6_BATTLE_LOGS, PREFS_KEY_SHOW6_DELETED_TEAM_IDS, PREFS_KEY_SHOW6_SELECTED_PRESET_ID, "show6")
+            )
+
+            val editor = prefs.edit()
+            for (cfg in buckets) {
+                val rawTeams = prefs.getString(cfg.presetKey, null)
+                if (rawTeams.isNullOrBlank()) continue
+                val presets: List<TeamPreset> = (try { gson.fromJson<List<TeamPreset>>(rawTeams, presetType) } catch (_: Exception) { null }).orEmpty()
+                if (presets.size < 2) continue
+
+                val rawLogs = prefs.getString(cfg.logKey, null)
+                val logs: MutableList<BattleLogEntry> = if (!rawLogs.isNullOrBlank()) {
+                    (try { gson.fromJson<List<BattleLogEntry>>(rawLogs, logType) } catch (_: Exception) { null }).orEmpty().toMutableList()
+                } else mutableListOf()
+                val logCountsByPreset = HashMap<String, Int>()
+                for (l in logs) {
+                    if (l.presetId.isNotBlank()) {
+                        logCountsByPreset[l.presetId] = (logCountsByPreset[l.presetId] ?: 0) + 1
+                    }
+                }
+                val selectedId = prefs.getString(cfg.selKey, null).orEmpty()
+
+                val groups = LinkedHashMap<String, MutableList<TeamPreset>>()
+                val ungrouped = mutableListOf<TeamPreset>()
+                for (p in presets) {
+                    val key = buildV761TeamMergeKeyStatic(p, cfg.mode, prefs)
+                    if (key == null) {
+                        ungrouped.add(p)
+                    } else {
+                        groups.getOrPut(key) { mutableListOf() }.add(p)
+                    }
+                }
+
+                val hasAnyMerge = groups.values.any { it.size >= 2 }
+                if (!hasAnyMerge) continue
+                anyMutated = true
+
+                val redirectMap = HashMap<String, String>()
+                val mergedPresetList = mutableListOf<TeamPreset>()
+                mergedPresetList.addAll(ungrouped)
+                for (group in groups.values) {
+                    if (group.size == 1) {
+                        mergedPresetList.add(group[0])
+                        continue
+                    }
+                    val survivor = group.maxWithOrNull { a, b ->
+                        val aSel = if (a.id == selectedId || a.isSelected) 1 else 0
+                        val bSel = if (b.id == selectedId || b.isSelected) 1 else 0
+                        if (aSel != bSel) return@maxWithOrNull aSel.compareTo(bSel)
+                        val aLogs = logCountsByPreset[a.id] ?: 0
+                        val bLogs = logCountsByPreset[b.id] ?: 0
+                        if (aLogs != bLogs) return@maxWithOrNull aLogs.compareTo(bLogs)
+                        a.updatedAt.compareTo(b.updatedAt)
+                    } ?: group[0]
+
+                    val mergedAssigned = group.flatMap { getEffectiveAssignedLeaguesStatic(it) }.distinct()
+                    val cleanName = if (group.all { it.name.trim().equals(survivor.name.trim(), ignoreCase = true) }) {
+                        survivor.name
+                    } else {
+                        val strippedStems = group.map { stripLeagueAffixFromTeamNameStatic(it.name) }
+                        val firstStem = strippedStems.firstOrNull().orEmpty()
+                        if (firstStem.isNotEmpty() && strippedStems.all { it.equals(firstStem, ignoreCase = true) }) {
+                            firstStem
+                        } else {
+                            survivor.name
+                        }
+                    }
+                    val updatedSurvivor = survivor.copy(
+                        name = cleanName,
+                        assignedLeagues = mergedAssigned,
+                        isSelected = group.any { it.isSelected || it.id == selectedId },
+                        updatedAt = maxOf(nowMs, group.maxOf { it.updatedAt })
+                    )
+                    mergedPresetList.add(updatedSurvivor)
+                    for (dup in group) {
+                        if (dup.id != survivor.id) {
+                            redirectMap[dup.id] = survivor.id
+                        }
+                    }
+                }
+
+                if (redirectMap.isNotEmpty()) {
+                    editor.putString(cfg.presetKey, gson.toJson(mergedPresetList))
+                    if (redirectMap.containsKey(selectedId)) {
+                        editor.putString(cfg.selKey, redirectMap[selectedId])
+                    }
+                    val rawDel = prefs.getString(cfg.delTeamKey, null)
+                    val delList = (if (!rawDel.isNullOrBlank()) {
+                        try { gson.fromJson<List<String>>(rawDel, strType) } catch (_: Exception) { null }
+                    } else null).orEmpty().toMutableSet()
+                    delList.addAll(redirectMap.keys)
+                    editor.putString(cfg.delTeamKey, gson.toJson(delList.toList()))
+
+                    var logsMutated = false
+                    for (i in logs.indices) {
+                        val entry = logs[i]
+                        val newPid = redirectMap[entry.presetId]
+                        if (newPid != null) {
+                            logs[i] = entry.copy(presetId = newPid, updatedAt = maxOf(entry.updatedAt, nowMs))
+                            logsMutated = true
+                        }
+                    }
+                    if (logsMutated) {
+                        editor.putString(cfg.logKey, gson.toJson(logs))
+                    }
+                }
+            }
+            editor.putBoolean(PREFS_KEY_V761_MULTI_META_MIGRATED, true).apply()
+            return anyMutated
+        }
+
+        fun recordPendingPogoPartyRenameIfNeededStatic(
+            prefs: SharedPreferences?,
+            gson: Gson,
+            preset: TeamPreset,
+            pogoPartyName: String,
+            activeLeague: String
+        ) {
+            if (prefs == null) return
+            val cleanPogo = pogoPartyName.trim()
+            if (cleanPogo.isEmpty()) return
+            if (preset.name.trim().equals(cleanPogo, ignoreCase = true)) return
+            val mutedKey = "${preset.id}|${cleanPogo.lowercase()}"
+            val rawMuted = prefs.getString(PREFS_KEY_MUTED_PARTY_RENAMES_JSON, null)
+            val mutedList: List<String> = if (!rawMuted.isNullOrBlank()) {
+                (try {
+                    val t = object : TypeToken<List<String>>() {}.type
+                    gson.fromJson<List<String>>(rawMuted, t)
+                } catch (_: Exception) { null }).orEmpty()
+            } else emptyList()
+            if (mutedList.contains(mutedKey)) return
+            val prompt = PendingPartyRenamePrompt(
+                presetId = preset.id,
+                currentName = preset.name,
+                pogoPartyName = cleanPogo,
+                league = activeLeague,
+                combatMode = preset.combatMode.ifBlank { "gbl" },
+                detectedAtMs = System.currentTimeMillis()
+            )
+            prefs.edit().putString(PREFS_KEY_PENDING_PARTY_RENAME_JSON, gson.toJson(prompt)).apply()
+        }
         const val PREFS_KEY_CROWD_ELO_META_CACHE_JSON = "gbl_crowd_elo_meta_cache_v741"
         const val PREFS_KEY_LAST_APP_UPDATE_CHECK_MS = "gbl_last_app_update_check_ms_v741"
         const val PREFS_KEY_DISMISSED_APP_UPDATE_VERSION = "gbl_dismissed_app_update_version_v741"
@@ -1555,13 +1994,16 @@ class OverlayService : LifecycleService() {
             val chargedMove1: String,
             val chargedMove2: String,
             val ivs: String? = null,
-            val plusMoveLevel: Int? = 4
+            val plusMoveLevel: Int? = 4,
+            val isBestBuddy: Boolean? = null,
+            val builtPokemonId: String? = null
         )
 
         data class SyncTeamPresetRecord(
             val id: String = java.util.UUID.randomUUID().toString(),
             val name: String,
             val league: String,
+            val assignedLeagues: List<String>? = null,
             val pokemon: List<SyncTeamSlot>,
             val isSelected: Boolean = false,
             val updatedAt: Long = System.currentTimeMillis(),
@@ -1572,7 +2014,15 @@ class OverlayService : LifecycleService() {
             val safeSwapBr: Int = 500,
             val closerSwapBr: Int = 500,
             val closerBr: Int = 500,
-            val sharedWeaknesses: List<String> = emptyList()
+            val sharedWeaknesses: List<String> = emptyList(),
+            val topMetaTargetsTotal: Int = 25,
+            val topMetaWinsCount: Int = 0,
+            val keyMetaTargetsBeaten: List<String> = emptyList(),
+            val keyThreats: List<String> = emptyList(),
+            val coreBreakers: List<String> = emptyList(),
+            val altMovesetSlots: List<AntiMetaAltMovesetInfo> = emptyList(),
+            val synergySummary: String = "",
+            val combatMode: String = "gbl"
         )
 
         data class SyncVaultPayload(
@@ -5700,7 +6150,8 @@ class OverlayService : LifecycleService() {
         val closerSwapBr: Int = 500,
         val closerBr: Int = 500,
         val sharedWeaknesses: List<String> = emptyList(),
-        val combatMode: String = "gbl"
+        val combatMode: String = "gbl",
+        val assignedLeagues: List<String>? = null
     )
 
     override fun onCreate() {
@@ -5712,6 +6163,7 @@ class OverlayService : LifecycleService() {
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
         runV602ScannerDefaultsMigrationStatic(prefs)
         runV702OverlayTransparencyMigrationStatic(prefs)
+        runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
         oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
@@ -6426,6 +6878,7 @@ class OverlayService : LifecycleService() {
                 if (didDownloadAny || prefs.getLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, 0L) == 0L) {
                     prefs.edit().putLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, System.currentTimeMillis()).apply()
                 }
+                refreshGblRotationScheduleAsync(prefs)
                 withContext(Dispatchers.Main) {
                     recalculateAndPushBattleData()
                 }
@@ -8388,9 +8841,66 @@ class OverlayService : LifecycleService() {
         return explicitLeague to finalCap
     }
 
+    internal fun updateSavedPresetActiveLeague(presetId: String, nextLeague: String): TeamPreset? {
+        if (!isPrefsInitialized) return null
+        val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val key = if (isShow6) PREFS_KEY_SHOW6_PRESETS_OF_3 else PREFS_KEY_PERSISTENT_TEAMS
+        val raw = prefs.getString(key, null) ?: return null
+        return try {
+            val type = object : TypeToken<List<TeamPreset>>() {}.type
+            val list: MutableList<TeamPreset> = (gson.fromJson<List<TeamPreset>>(raw, type) ?: return null).toMutableList()
+            val idx = list.indexOfFirst { it.id == presetId }
+            if (idx < 0) return null
+            val existing = list[idx]
+            val mergedAssigned = (getEffectiveAssignedLeaguesStatic(existing) + normalizeLeagueKeyStatic(nextLeague)).distinct()
+            val updated = existing.copy(
+                league = nextLeague,
+                assignedLeagues = mergedAssigned,
+                updatedAt = System.currentTimeMillis()
+            )
+            list[idx] = updated
+            prefs.edit().putString(key, gson.toJson(list)).apply()
+            updated
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    internal fun cycleActivePresetMetaFromOverlay() {
+        val cur = currentPreset ?: return
+        val assigned = getEffectiveAssignedLeaguesStatic(cur)
+        if (assigned.size <= 1) return
+        val curNorm = normalizeLeagueKeyStatic(cur.league)
+        val curIdx = assigned.indexOfFirst { it.equals(curNorm, ignoreCase = true) }.coerceAtLeast(0)
+        val nextIdx = (curIdx + 1) % assigned.size
+        val nextLeague = assigned[nextIdx]
+        val updated = updateSavedPresetActiveLeague(cur.id, nextLeague) ?: cur.copy(
+            league = nextLeague,
+            assignedLeagues = assigned,
+            updatedAt = System.currentTimeMillis()
+        )
+        currentPreset = updated
+        activePartyPreview = null
+        pendingPartySettleObs = null
+        lifecycleScope.launch(Dispatchers.Default) {
+            try {
+                OverlayService.precomputeActiveTeamTop200MatrixStatic(updated)
+                recalculateAndPushBattleData()
+            } catch (_: Exception) {}
+        }
+        recalculateAndPushBattleData()
+        showBattleToast("🏆 Active Meta: ${formatLeagueDisplayLabelStatic(nextLeague)} (${nextIdx + 1}/${assigned.size})")
+    }
+
     internal fun commitMatchedPartyPreset(preview: MatchedPartyPreviewState, source: String) {
         val presets = loadPresets()
-        val chosen = presets.find { it.id == preview.presetId } ?: return
+        var chosen = presets.find { it.id == preview.presetId } ?: return
+        if (preview.league.isNotBlank() &&
+            !normalizeLeagueKeyStatic(chosen.league).equals(normalizeLeagueKeyStatic(preview.league), ignoreCase = true) &&
+            getEffectiveAssignedLeaguesStatic(chosen).any { it.equals(normalizeLeagueKeyStatic(preview.league), ignoreCase = true) }
+        ) {
+            chosen = updateSavedPresetActiveLeague(chosen.id, preview.league) ?: chosen.copy(league = preview.league)
+        }
         val leadName = preview.leadPokemonName.takeIf { l ->
             chosen.pokemon.any { it.name.equals(l, ignoreCase = true) }
         } ?: chosen.pokemon.firstOrNull()?.name
@@ -8402,13 +8912,17 @@ class OverlayService : LifecycleService() {
             val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
             val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
             prefs.edit().putString(selKey, chosen.id).apply()
+            if (preview.cardPartyName.isNotBlank()) {
+                recordPendingPogoPartyRenameIfNeededStatic(prefs, gson, chosen, preview.cardPartyName, chosen.league)
+            }
         }
         activePartyPreview = null
         pendingPartySettleObs = null
         alreadyActivePartyUntilMs = 0L
         unmatchedPartyUntilMs = 0L
         dismissedPartySignature = ""
-        lastLockedPartyBannerText = "✅ Team Locked: ${chosen.name}"
+        val metaSuffix = if (getEffectiveAssignedLeaguesStatic(chosen).size > 1) " [${formatShortMetaBadgeStatic(chosen.league)}]" else ""
+        lastLockedPartyBannerText = "✅ Team Locked: ${chosen.name}$metaSuffix"
         lastLockedPartyBannerUntilMs = System.currentTimeMillis() + 6500L
         schedulePartyBannerExpiryPush(6600L)
         lifecycleScope.launch(Dispatchers.Default) {
@@ -8420,7 +8934,7 @@ class OverlayService : LifecycleService() {
         recalculateAndPushBattleData()
         OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
         val leadHint = if (!leadName.isNullOrBlank()) " (★ $leadName)" else ""
-        showBattleToast("🔍 Team Locked ($source): ${chosen.name}$leadHint")
+        showBattleToast("🔍 Team Locked ($source): ${chosen.name}$metaSuffix$leadHint")
     }
 
     internal fun commitPendingPartyScanIfEligible(source: String) {
@@ -8656,8 +9170,10 @@ class OverlayService : LifecycleService() {
 
         // Strict Saved-Preset-Only Matching (`loadPresets()` — never auto-create new presets)
         val prefsOrNull = if (isPrefsInitialized) prefs else null
-        val savedPresets = loadPresets().filter {
-            it.pokemon.size >= 3 && getLeagueCpCapStatic(it.league, prefsOrNull) == effectiveCpCap
+        val savedPresets = loadPresets().filter { p ->
+            p.pokemon.size >= 3 && getEffectiveAssignedLeaguesStatic(p).any { lg ->
+                getLeagueCpCapStatic(lg, prefsOrNull) == effectiveCpCap
+            }
         }
         val perms: List<IntArray> = listOf(
             intArrayOf(0, 1, 2), intArrayOf(0, 2, 1),
@@ -8666,6 +9182,7 @@ class OverlayService : LifecycleService() {
         )
         var bestPreset: TeamPreset? = null
         var bestPerm: IntArray? = null
+        var bestResolvedLeague = targetLeague
         var bestScore = Int.MIN_VALUE
 
         val normCardName = customPartyName.lowercase().replace(Regex("[^a-z0-9]"), "")
@@ -8674,6 +9191,9 @@ class OverlayService : LifecycleService() {
             val normPresetTitle = preset.name.lowercase().replace(Regex("[^a-z0-9]"), "")
             val fuzzyTitleMatch = normCardName.length >= 3 && normPresetTitle.isNotEmpty() &&
                 (normPresetTitle == normCardName || normPresetTitle.contains(normCardName) || normCardName.contains(normPresetTitle))
+
+            val assignedForPreset = getEffectiveAssignedLeaguesStatic(preset)
+            val resolvedPresetLeague = resolveActiveMetaForPresetStatic(preset, explicitLeagueKey, prefsOrNull)
 
             for (perm in perms) {
                 var directMatches = 0
@@ -8703,7 +9223,7 @@ class OverlayService : LifecycleService() {
                 if (exactTitleMatch) score += 500 else if (fuzzyTitleMatch) score += 300
                 if (perm[0] == 0 && perm[1] == 1 && perm[2] == 2) score += 160
                 if (perm[0] == 0) score += 80
-                if (explicitLeagueKey != null && normalizeLeagueKeyStatic(preset.league).equals(explicitLeagueKey, ignoreCase = true)) {
+                if (explicitLeagueKey != null && assignedForPreset.any { it.equals(normalizeLeagueKeyStatic(explicitLeagueKey), ignoreCase = true) }) {
                     score += 120
                 }
                 if (preset.id == currentPreset?.id) score += 40
@@ -8716,7 +9236,7 @@ class OverlayService : LifecycleService() {
                     val pStrip = pSlot.name.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
                     val (resolvedFormDisp, resolvedIsShad) = resolvePartySlotFormAndShadow(
                         baseSpecies = pBase,
-                        targetLeague = preset.league,
+                        targetLeague = resolvedPresetLeague,
                         effectiveCpCap = effectiveCpCap,
                         observedCp = slotCps[col],
                         visual = slotVisuals.getOrNull(col),
@@ -8732,6 +9252,7 @@ class OverlayService : LifecycleService() {
                     bestScore = score
                     bestPreset = preset
                     bestPerm = perm
+                    bestResolvedLeague = resolvedPresetLeague
                 }
             }
         }
@@ -8741,7 +9262,7 @@ class OverlayService : LifecycleService() {
         } else {
             slotDisplayNames.firstOrNull { it.isNotBlank() }.orEmpty()
         }
-        val signature = "$effectiveCpCap|${customPartyName.lowercase()}|${bestPreset?.id ?: slotDisplayNames.joinToString("/")}|$resolvedLeadName"
+        val signature = "$effectiveCpCap|${bestResolvedLeague.lowercase()}|${customPartyName.lowercase()}|${bestPreset?.id ?: slotDisplayNames.joinToString("/")}|$resolvedLeadName"
         val prevObs = pendingPartySettleObs
         val nextCount = if (prevObs != null && prevObs.signature == signature && (obsDoneMs - prevObs.observedAtMs) in 0L..6000L) {
             (prevObs.count + 1).coerceAtMost(10)
@@ -8753,26 +9274,36 @@ class OverlayService : LifecycleService() {
 
         forcePartyScanUntilMs = 0L
         if (bestPreset != null && bestPerm != null) {
+            if (customPartyName.isNotBlank() && prefsOrNull != null) {
+                recordPendingPogoPartyRenameIfNeededStatic(prefsOrNull, gson, bestPreset, customPartyName, bestResolvedLeague)
+            }
             val orderedNames = listOf(
                 bestPreset.pokemon[bestPerm[0]].name,
                 bestPreset.pokemon[bestPerm[1]].name,
                 bestPreset.pokemon[bestPerm[2]].name
             )
             val isAlreadyActiveLead = bestPreset.id == currentPreset?.id &&
-                activeUserPokemonName.equals(resolvedLeadName, ignoreCase = true)
+                activeUserPokemonName.equals(resolvedLeadName, ignoreCase = true) &&
+                normalizeLeagueKeyStatic(currentPreset?.league.orEmpty()).equals(normalizeLeagueKeyStatic(bestResolvedLeague), ignoreCase = true)
             if (isAlreadyActiveLead) {
                 activePartyPreview = null
-                alreadyActivePartyName = bestPreset.name
+                val multiMetaTag = if (getEffectiveAssignedLeaguesStatic(bestPreset).size > 1) " [${formatShortMetaBadgeStatic(bestResolvedLeague)}]" else ""
+                alreadyActivePartyName = "${bestPreset.name}$multiMetaTag"
                 alreadyActivePartyUntilMs = obsDoneMs + 5000L
                 unmatchedPartyUntilMs = 0L
                 schedulePartyBannerExpiryPush(5100L)
                 recalculateAndPushBattleData()
             } else if (dismissedPartySignature != signature) {
+                val multiMetaLabel = if (getEffectiveAssignedLeaguesStatic(bestPreset).size > 1) {
+                    "${bestPreset.name} [${formatShortMetaBadgeStatic(bestResolvedLeague)}]"
+                } else {
+                    bestPreset.name
+                }
                 activePartyPreview = MatchedPartyPreviewState(
                     signature = signature,
                     presetId = bestPreset.id,
-                    presetName = bestPreset.name,
-                    league = bestPreset.league,
+                    presetName = multiMetaLabel,
+                    league = bestResolvedLeague,
                     leadPokemonName = resolvedLeadName,
                     orderedDisplayNames = orderedNames,
                     cardPartyName = customPartyName,
@@ -22506,6 +23037,7 @@ class OverlayService : LifecycleService() {
                     stateMap
                 },
                 "aiAdviceHudPosition" to aiAdviceHudPosition,
+                "assignedLeagues" to (currentPreset?.let { getEffectiveAssignedLeaguesStatic(it) } ?: emptyList<String>()),
                 "overlayHudMode" to overlayHudMode,
                 "compactHudShowMatrix" to compactHudShowMatrix,
                 "compactHudConfig" to buildCompactHudConfigMap(),
@@ -25355,6 +25887,13 @@ class OverlayService : LifecycleService() {
                 lastLockedPartyBannerUntilMs = 0L
                 lastLockedPartyBannerText = ""
                 recalculateAndPushBattleData()
+            }
+        }
+
+        @JavascriptInterface
+        fun cycleActivePresetMeta() {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.cycleActivePresetMetaFromOverlay()
             }
         }
     }

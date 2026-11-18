@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.61',
+    codename: 'Multi-Meta Team Assignments, One-Time Team Merge, Live GBL Schedule & PoGO Party Name Sync',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Unifies teams shared across multiple same-CP metas (e.g., UL + MUL) with 1-tap HUD/card meta cycling, pulls live ScrapedDuck GBL rotation schedules, merges duplicate teams once on first launch of v7.61+ across Android, Web & Cloudflare D1, prompts to sync PoGO party names, and adds Overall + Per-Meta W-L team badges.',
+    icon: '🔁',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Added assignedLeagues multi-meta chips in Android & Web Edit Team modals plus 1-tap ⇄ meta switching on Team Cards and the Idle HUD .idle-league-pill',
+      'Fetches live ScrapedDuck GBL rotation schedules (6h TTL + 36h window bridge) so "CHOOSE YOUR PARTY" OCR auto-resolves UL vs. MUL when Pokémon GO omits the cup badge',
+      'Runs an idempotent one-time v7.61+ merge across Android prefs, Web localStorage, and all active D1 Vault accounts — consolidating duplicate teams, re-pointing battle log presetIds while preserving per-battle league, and tombstoning merged duplicates',
+      'Adds non-intrusive onResume PoGO Battle Party rename prompt (Rename / Not Now / Don\'t Ask Again) and Overall + Per-Meta W-L breakdown badges on Team Cards'
+    ]
+  },
+  {
     version: 'v7.60',
     codename: 'Auto-Detect Team & League from "Choose Your Party" + Idle HUD Auto Team Scan Toggle',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Adds a persistent 🔍 Auto team-scan toggle right beside your 3 Pokémon on the idle HUD, parsing League/CP caps, PvP IV nicknames, 3-tier regional/Shadow sprites, and matching saved TeamPresets with swipe preview & automatic lock on Matchmaking or battle start.',
     icon: '🔍',

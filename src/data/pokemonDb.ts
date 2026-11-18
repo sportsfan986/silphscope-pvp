@@ -1095,6 +1095,7 @@ export interface TeamPreset {
   id: string;
   name: string;
   league: LeagueType;
+  assignedLeagues?: LeagueType[];
   combatMode?: "gbl" | "show6";
   pokemon: TeamMember[];
   isSelected?: boolean;

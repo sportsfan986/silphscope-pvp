@@ -72,7 +72,37 @@
                     android:layout_marginTop="4dp"
                     android:background="#0f172a"
                     android:paddingHorizontal="6dp"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:id="@+id/layout_multi_meta_section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Also Assign Team to Same-CP Metas (Optional)"
+                        android:textColor="#94a3b8"
+                        android:textStyle="bold"
+                        android:textSize="10.5sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/container_multi_meta_chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical" />
+                    </HorizontalScrollView>
+                </LinearLayout>
 
                 <!-- Relocated Clone & Cross-Mode Copy Panel Inside Edit Team Card -->
                 <LinearLayout

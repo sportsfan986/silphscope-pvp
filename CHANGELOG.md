@@ -2,6 +2,16 @@
 
 ---
 
+## v7.61 (2026-11-18) — Multi-Meta Team Assignments, One-Time Duplicate Team Merge, Live GBL Schedule Resolution & PoGO Party Name Sync
+*Multi-meta preset unification & cloud sync release (`v7.61`, `versionCode = 1761`) allowing teams used across multiple same-CP metas (e.g., Ultra League + Mega Ultra League) to share one preset & aggregate W-L card, merging existing duplicates automatically on first launch of `v7.61+`, pulling live GBL rotation schedules, and offering 1-tap Pokémon GO battle party rename prompts.*
+
+- **Multi-Meta Team Assignments & 1-Tap Meta Switching (`OverlayService.kt`, `MainActivity.kt`, `overlay.html`, `src/App.tsx`, `pokemonDb.ts`)**: Added `assignedLeagues` on `TeamPreset` and multi-select meta toggle chips inside Android & Web Edit Team modals (filtered to matching CP caps with live `🟢` GBL rotation indicators). Multi-meta presets match across all assigned formats during `"CHOOSE YOUR PARTY"` OCR, display under every assigned Tier 1/2 tab, and support 1-tap `⇄` meta cycling on both Team Cards and the Idle HUD `.idle-league-pill` (`AndroidBridge.cycleActivePresetMeta()`).
+- **Live GBL Schedule Feed for Rotation Disambiguation (`OverlayService.kt`, `src/App.tsx`)**: Fetches & caches (`6h` TTL with `36h` transition window guard) the live GBL event rotation from ScrapedDuck (`bigfoott/ScrapedDuck/data/events.json`) to resolve ambiguous party headers (e.g., switching `UL` vs. `MUL` automatically based on the active GBL rotation).
+- **One-Time `v7.61+` Duplicate Team Merge Migration & Cloud Vault Sync (`OverlayService.kt`, `worker.mjs`, `src/App.tsx`, `GitHubCloudSync.kt`)**: Runs an idempotent first-launch/sync merge across Android local prefs, Web localStorage, and all active Cloudflare D1 `/v1/sync/vault` accounts — consolidating duplicate teams sharing `combatMode + CP cap + exact 3-slot species/Shadow/movesets`, stripping redundant league prefixes/suffixes, re-pointing `BattleLogEntry.presetId` (while preserving each battle's historical `league`), and tombstoning merged IDs cleanly via `deletedTeamIds`.
+- **PoGO Battle Party Name Sync Prompt & Overall / Per-Meta Team W-L Badges (`MainActivity.kt`, `OverlayService.kt`, `src/App.tsx`)**: Prompts once on next `MainActivity.onResume()` (`Rename` / `Not Now` / `Don't Ask Again`) whenever a matched PoGO battle party title (`!= "New Party"`) differs from SilphScope's team name, and displays **Overall W-L (`W-L (pct%)`) + Per-Meta W-L breakdown badges** (`UL 12-8 • MUL 9-6`) directly on Android and Web Team Cards.
+
+---
+
 ## v7.60 (2026-11-18) — Auto-Detect Team & League from "Choose Your Party" Screen + Idle HUD `🔍 Auto` Team Scan Toggle
 *Idle pre-battle workflow & HUD enhancement (`v7.60`, `versionCode = 1760`) introducing automatic League/Cup and 3-Pokémon preset detection from Pokémon GO's `"CHOOSE YOUR PARTY"` screen, paired with a persistent `🔍 Auto` toggle pill directly beside your 3 Pokémon on the idle HUD.*
 

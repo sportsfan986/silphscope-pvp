@@ -239,6 +239,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textTrainerScreenNameStatus: TextView
     private var activeScreenNamePromptDialog: AlertDialog? = null
     private var activeVaultPasswordPromptDialog: AlertDialog? = null
+    private var activePartyRenameDialog: AlertDialog? = null
     private var debouncedCloudSyncJob: kotlinx.coroutines.Job? = null
     private var lastResumeCloudSyncMs: Long = 0L
     private var currentActivePage: String = "teams"
@@ -552,6 +553,7 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
         // v6.02: Run one-time optimal scanner defaults migration (HP=ON, Energy=ON, 2 samples, ±2% tol, 200ms lead, +1t offset, strict alt fast, 8% chip tol, 4.0s swap rollback)
         OverlayService.runV602ScannerDefaultsMigrationStatic(prefs)
+        val didV761Merge = OverlayService.runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
         val prevInstalledVerCode = prefs.getInt(PREFS_KEY_INSTALLED_VERSION_CODE, 0)
         if (prevInstalledVerCode < 1602) {
             prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1602).apply()
@@ -581,6 +583,9 @@ class MainActivity : AppCompatActivity() {
         OverlayService.runV510AiTelemetryMigrationAndWipeStatic(prefs)
         ensureRequiredScreenNameOrPrompt()
         skipInitialResumeRedundantUiRebuild = true
+        if (didV761Merge) {
+            triggerTwoDeviceCloudSync(silent = true)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -599,6 +604,8 @@ class MainActivity : AppCompatActivity() {
             skipInitialResumeRedundantUiRebuild = false
             ensureRequiredScreenNameOrPrompt()
             syncOverlayRunningUiState()
+            OverlayService.refreshGblRotationScheduleAsync(prefs)
+            checkAndPromptPendingPogoPartyRename()
             if (!isColdLaunchResume) {
                 refreshPresetsAndBattleLogsIfVisible()
             }
@@ -4571,6 +4578,132 @@ class MainActivity : AppCompatActivity() {
         if (System.currentTimeMillis() < snoozedUntil) return
 
         showSetOrChangeVaultPasswordDialog(isChangingExisting = false, isAutoPrompt = true)
+    }
+
+    private fun checkAndPromptPendingPogoPartyRename() {
+        if (!::prefs.isInitialized || isFinishing || isDestroyed) return
+        if (activePartyRenameDialog?.isShowing == true) return
+        if (activeScreenNamePromptDialog?.isShowing == true || activeVaultPasswordPromptDialog?.isShowing == true) return
+
+        val raw = prefs.getString(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON, null)?.trim().orEmpty()
+        if (raw.isEmpty()) return
+
+        val pending = try {
+            gson.fromJson(raw, OverlayService.Companion.PendingPartyRenamePrompt::class.java)
+        } catch (_: Exception) {
+            prefs.edit().remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON).apply()
+            return
+        } ?: run {
+            prefs.edit().remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON).apply()
+            return
+        }
+
+        val pogoName = pending.pogoPartyName.trim()
+        if (pending.presetId.isBlank() || pogoName.isBlank()) {
+            prefs.edit().remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON).apply()
+            return
+        }
+
+        val muteKey = "${pending.presetId}|${pogoName.lowercase()}"
+        val mutedList: MutableList<String> = try {
+            val rawMuted = prefs.getString(OverlayService.PREFS_KEY_MUTED_PARTY_RENAMES_JSON, null)
+            if (rawMuted.isNullOrBlank()) mutableListOf()
+            else {
+                val type = object : com.google.gson.reflect.TypeToken<MutableList<String>>() {}.type
+                gson.fromJson<MutableList<String>>(rawMuted, type) ?: mutableListOf()
+            }
+        } catch (_: Exception) {
+            mutableListOf()
+        }
+        if (mutedList.any { it.equals(muteKey, ignoreCase = true) }) {
+            prefs.edit().remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON).apply()
+            return
+        }
+
+        val isPendingShow6 = pending.combatMode.equals("show6", ignoreCase = true)
+        val targetPrefsKey = if (isPendingShow6) {
+            OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3
+        } else {
+            OverlayService.PREFS_KEY_PERSISTENT_TEAMS
+        }
+        val listType = object : com.google.gson.reflect.TypeToken<List<TeamPreset>>() {}.type
+        val existingList: List<TeamPreset> = try {
+            val json = prefs.getString(targetPrefsKey, null)
+            if (json.isNullOrBlank()) emptyList() else (gson.fromJson<List<TeamPreset>>(json, listType) ?: emptyList())
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val targetPreset = existingList.firstOrNull { it.id == pending.presetId }
+        if (targetPreset == null || targetPreset.name.trim().equals(pogoName, ignoreCase = true)) {
+            prefs.edit().remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON).apply()
+            return
+        }
+
+        val shortMeta = OverlayService.formatShortMetaBadgeStatic(pending.league)
+        val dlg = AlertDialog.Builder(this)
+            .setTitle("📝 Match Pokémon GO Party Name?")
+            .setMessage(
+                "Pokémon GO Battle Party \"$pogoName\" ($shortMeta) matched your SilphScope team \"${targetPreset.name}\".\n\n" +
+                    "Rename \"${targetPreset.name}\" to \"$pogoName\" in SilphScope?"
+            )
+            .setPositiveButton("✅ Rename") { _, _ ->
+                val latestList: List<TeamPreset> = try {
+                    val json = prefs.getString(targetPrefsKey, null)
+                    if (json.isNullOrBlank()) emptyList() else (gson.fromJson<List<TeamPreset>>(json, listType) ?: emptyList())
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                var renamedPreset: TeamPreset? = null
+                val nowMs = System.currentTimeMillis()
+                val updated = latestList.map { p ->
+                    if (p.id == pending.presetId) {
+                        p.copy(name = pogoName, updatedAt = nowMs).also { renamedPreset = it }
+                    } else {
+                        p
+                    }
+                }
+                prefs.edit()
+                    .putString(targetPrefsKey, gson.toJson(updated))
+                    .remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON)
+                    .apply()
+                if (isPendingShow6 == isShow6CombatMode() && ::presetsContainer.isInitialized) {
+                    refreshPresetsUi()
+                }
+                val rp = renamedPreset
+                if (rp != null && isOverlayRunning && isPendingShow6 == isShow6CombatMode()) {
+                    if (rp.id == getSelectedPreset()?.id) {
+                        startService(
+                            Intent(this, OverlayService::class.java).apply {
+                                action = OverlayService.ACTION_UPDATE_PRESET
+                                putExtra(OverlayService.EXTRA_PRESET_JSON, gson.toJson(rp))
+                            }
+                        )
+                    }
+                }
+                Toast.makeText(this, "Renamed team to \"$pogoName\"", Toast.LENGTH_SHORT).show()
+                triggerTwoDeviceCloudSync(silent = true)
+            }
+            .setNeutralButton("Don't Ask Again") { _, _ ->
+                if (mutedList.none { it.equals(muteKey, ignoreCase = true) }) {
+                    mutedList.add(muteKey)
+                }
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_MUTED_PARTY_RENAMES_JSON, gson.toJson(mutedList.takeLast(150)))
+                    .remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON)
+                    .apply()
+            }
+            .setNegativeButton("Not Now") { _, _ ->
+                prefs.edit().remove(OverlayService.PREFS_KEY_PENDING_PARTY_RENAME_JSON).apply()
+            }
+            .create()
+
+        dlg.setOnDismissListener {
+            if (activePartyRenameDialog === dlg) {
+                activePartyRenameDialog = null
+            }
+        }
+        activePartyRenameDialog = dlg
+        dlg.show()
     }
 
     private fun triggerTwoDeviceCloudSync(
@@ -10701,9 +10834,9 @@ class MainActivity : AppCompatActivity() {
 
         val cpTierTabs = listOf(
             "ALL" to "All (${allPresets.size})",
-            "GREAT" to "Great (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
-            "ULTRA" to "Ultra (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
-            "MASTER" to "Master (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
+            "GREAT" to "Great (${allPresets.count { p -> OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg -> OverlayService.resolveLeagueCpTierStatic(lg) == "GREAT" } }})",
+            "ULTRA" to "Ultra (${allPresets.count { p -> OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg -> OverlayService.resolveLeagueCpTierStatic(lg) == "ULTRA" } }})",
+            "MASTER" to "Master (${allPresets.count { p -> OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg -> OverlayService.resolveLeagueCpTierStatic(lg) == "MASTER" } }})"
         )
         if (cpTierTabs.none { it.first.equals(selectedPresetsCpTierFilter, ignoreCase = true) }) {
             selectedPresetsCpTierFilter = "ALL"
@@ -10768,8 +10901,17 @@ class MainActivity : AppCompatActivity() {
                 "ULTRA" -> "Ultra"
                 else -> "Master"
             }
-            val tierPresets = allPresets.filter { OverlayService.resolveLeagueCpTierStatic(it.league) == tierKey }
-            val tierOldCount = tierPresets.count { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
+            val tierPresets = allPresets.filter { p ->
+                OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg ->
+                    OverlayService.resolveLeagueCpTierStatic(lg) == tierKey
+                }
+            }
+            val tierOldCount = tierPresets.count { p ->
+                OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg ->
+                    OverlayService.resolveLeagueCpTierStatic(lg) == tierKey &&
+                        OverlayService.isOldCupForModeStatic(lg, isShow6, prefs)
+                }
+            }
             val tierActiveCups = sortCupsWithinTier(
                 enabledModeLeagues.filter { OverlayService.resolveLeagueCpTierStatic(it) == tierKey }
             )
@@ -10779,7 +10921,11 @@ class MainActivity : AppCompatActivity() {
             val tier2Tabs = buildList<Pair<String, String>> {
                 add(defaultTierFilter to "All $tierDisplayName (${tierPresets.size})")
                 for (cup in tierActiveCups) {
-                    val c = tierPresets.count { it.league.equals(cup, ignoreCase = true) }
+                    val c = tierPresets.count { p ->
+                        OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg ->
+                            lg.equals(cup, ignoreCase = true)
+                        }
+                    }
                     add(cup to "${formatTier2CupChipLabel(cup)} ($c)")
                 }
                 if (tierOldCount > 0) {
@@ -10836,9 +10982,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val presets = allPresets.filter {
-            OverlayService.matchesEncodedLeagueFilterStatic(it.league, selectedPresetsLeagueFilter, isShow6, prefs)
+        val presets = allPresets.filter { p ->
+            OverlayService.getEffectiveAssignedLeaguesStatic(p).any { lg ->
+                OverlayService.matchesEncodedLeagueFilterStatic(lg, selectedPresetsLeagueFilter, isShow6, prefs)
+            }
         }
+        val allBattleLogsForCards = loadBattleLogs()
 
         var hasUncomputedMetrics = false
 
@@ -10871,7 +11020,36 @@ class MainActivity : AppCompatActivity() {
             textArchetype?.text = if (preset.isArchetypeManual) "${preset.archetype}*" else preset.archetype
 
             val resolvedLeague = preset.league.ifBlank { "GREAT LEAGUE" }
-            textLeague.text = OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)
+            val assignedMetas = OverlayService.getEffectiveAssignedLeaguesStatic(preset)
+            if (assignedMetas.size > 1) {
+                val extraTags = assignedMetas
+                    .filter { !it.equals(resolvedLeague, ignoreCase = true) }
+                    .joinToString(", ") { OverlayService.formatShortMetaBadgeStatic(it) }
+                textLeague.text = "${OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)}  ⇄  +$extraTags"
+                textLeague.isClickable = true
+                textLeague.setOnClickListener {
+                    val curIdx = assignedMetas.indexOfFirst { it.equals(resolvedLeague, ignoreCase = true) }
+                    val nextMeta = assignedMetas[(if (curIdx >= 0) curIdx + 1 else 1) % assignedMetas.size]
+                    val evaluatedNext = evaluatePresetMetrics(
+                        preset.copy(league = nextMeta, updatedAt = System.currentTimeMillis()),
+                        autoReorder = false,
+                        preloadedLogs = allBattleLogsForCards
+                    )
+                    val updatedList = loadPresets().map { if (it.id == preset.id) evaluatedNext else it }
+                    savePresets(updatedList)
+                    refreshPresetsUi()
+                    triggerTwoDeviceCloudSync(silent = true)
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Switched ${preset.name} active meta → ${OverlayService.formatShortMetaBadgeStatic(nextMeta)}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } else {
+                textLeague.text = OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)
+                textLeague.setOnClickListener(null)
+                textLeague.isClickable = false
+            }
 
             val (leadTier, leadHex) = getMatchupTierCodeAndHex(preset.leadAggBr)
             val (machTier, machHex) = getMachineBrTierLabelAndHex(preset.machineAggBr)
@@ -10893,7 +11071,33 @@ class MainActivity : AppCompatActivity() {
                 ""
             }
 
-            val metricsHtml = "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
+            val pLogs = allBattleLogsForCards.filter { it.presetId == preset.id }
+            val wlPrefixHtml = if (pLogs.isNotEmpty()) {
+                val wCount = pLogs.count { it.result.equals("WIN", ignoreCase = true) }
+                val lCount = pLogs.count { it.result.equals("LOSS", ignoreCase = true) }
+                val tCount = (pLogs.size - wCount - lCount).coerceAtLeast(0)
+                val pct = ((wCount * 100.0) / pLogs.size).toInt()
+                val recStr = if (tCount > 0) "$wCount-$lCount-$tCount" else "$wCount-$lCount"
+                val byBadge = linkedMapOf<String, IntArray>()
+                for (entry in pLogs) {
+                    val b = OverlayService.formatShortMetaBadgeStatic(entry.league)
+                    val arr = byBadge.getOrPut(b) { intArrayOf(0, 0) }
+                    if (entry.result.equals("WIN", ignoreCase = true)) arr[0]++ else if (entry.result.equals("LOSS", ignoreCase = true)) arr[1]++
+                }
+                val orderedMetaBadges = (assignedMetas.map { OverlayService.formatShortMetaBadgeStatic(it) } + byBadge.keys).distinct()
+                val perMetaStr = orderedMetaBadges.mapNotNull { b ->
+                    val arr = byBadge[b] ?: return@mapNotNull null
+                    "$b ${arr[0]}-${arr[1]}"
+                }.joinToString(" • ")
+                "Record: <font color='#38bdf8'><b>$recStr ($pct%)</b></font>" +
+                    (if (perMetaStr.isNotBlank()) "  •  <font color='#cbd5e1'>$perMetaStr</font>" else "") +
+                    "<br>"
+            } else {
+                ""
+            }
+
+            val metricsHtml = wlPrefixHtml +
+                "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
                 "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta<br>" +
                 "Lead BR: <font color='$leadHex'>${preset.leadAggBr} ($leadTier)</font>  •  " +
                 "Swap BR: <font color='$swap2Hex'>#2 ${preset.safeSwapBr} ($swap2Tier)</font> / <font color='$swap3Hex'>#3 ${preset.closerSwapBr} ($swap3Tier)</font>  •  " +
@@ -14686,6 +14890,83 @@ class MainActivity : AppCompatActivity() {
         }
         spinnerLeague.adapter = createThemedSpinnerAdapter(leagues)
 
+        val layoutMultiMetaSection = dialogView.findViewById<LinearLayout>(R.id.layout_multi_meta_section)
+        val containerMultiMetaChips = dialogView.findViewById<LinearLayout>(R.id.container_multi_meta_chips)
+        val allSelectableMetas: List<String> = (leagues + baseLeagues + existingPreset?.assignedLeagues.orEmpty())
+            .map { OverlayService.normalizeLeagueKeyStatic(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val selectedExtraMetas = linkedSetOf<String>().apply {
+            existingPreset?.let { ep ->
+                for (lg in OverlayService.getEffectiveAssignedLeaguesStatic(ep)) {
+                    if (!lg.equals(ep.league, ignoreCase = true)) {
+                        add(lg)
+                    }
+                }
+            }
+        }
+        fun rebuildMultiMetaChips() {
+            val container = containerMultiMetaChips ?: return
+            val primaryRaw = spinnerLeague.selectedItem?.toString()
+                ?: existingPreset?.league
+                ?: leagues.firstOrNull()
+                ?: "GREAT LEAGUE"
+            val primaryNorm = OverlayService.normalizeLeagueKeyStatic(primaryRaw)
+            val primaryCap = OverlayService.getLeagueCpCapStatic(primaryNorm, prefs)
+            selectedExtraMetas.removeAll { lg ->
+                lg.equals(primaryNorm, ignoreCase = true) ||
+                    OverlayService.getLeagueCpCapStatic(lg, prefs) != primaryCap
+            }
+            val sameCapMetas = allSelectableMetas.filter { lg ->
+                !lg.equals(primaryNorm, ignoreCase = true) &&
+                    OverlayService.getLeagueCpCapStatic(lg, prefs) == primaryCap
+            }
+            layoutMultiMetaSection?.visibility = if (sameCapMetas.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+            container.removeAllViews()
+            if (sameCapMetas.isEmpty()) return
+
+            val activeRot = OverlayService.getActiveGblRotationLeaguesStatic(prefs)
+            val density = resources.displayMetrics.density
+            for (meta in sameCapMetas) {
+                val isChecked = selectedExtraMetas.any { it.equals(meta, ignoreCase = true) }
+                val isLiveRot = activeRot.any { it.equals(meta, ignoreCase = true) }
+                val shortBadge = OverlayService.formatShortMetaBadgeStatic(meta)
+                val chip = TextView(this).apply {
+                    text = if (isLiveRot) {
+                        if (isChecked) "✓ 🟢 $shortBadge" else "🟢 $shortBadge"
+                    } else {
+                        if (isChecked) "✓ $shortBadge" else "+ $shortBadge"
+                    }
+                    textSize = 11f
+                    setTypeface(null, if (isChecked) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                    setTextColor(if (isChecked) 0xFF0F172A.toInt() else 0xFFE2E8F0.toInt())
+                    setPadding((10 * density).toInt(), (5 * density).toInt(), (10 * density).toInt(), (5 * density).toInt())
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        cornerRadius = 16f * density
+                        setColor(if (isChecked) 0xFF38BDF8.toInt() else 0xFF1E293B.toInt())
+                        setStroke((1 * density).toInt(), if (isChecked) 0xFF7DD3FC.toInt() else 0xFF475569.toInt())
+                    }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        marginEnd = (6 * density).toInt()
+                    }
+                    setOnClickListener {
+                        val existingMatch = selectedExtraMetas.firstOrNull { it.equals(meta, ignoreCase = true) }
+                        if (existingMatch != null) {
+                            selectedExtraMetas.remove(existingMatch)
+                        } else {
+                            selectedExtraMetas.add(meta)
+                        }
+                        rebuildMultiMetaChips()
+                    }
+                }
+                container.addView(chip)
+            }
+        }
+        rebuildMultiMetaChips()
+
         val currentLeagueProvider = {
             spinnerLeague.selectedItem?.toString() ?: leagues.first()
         }
@@ -15319,6 +15600,7 @@ class MainActivity : AppCompatActivity() {
                     suppressIvChangeCallback = false
                 }
                 refreshDialogTeamEvaluation(autoReorder = false)
+                rebuildMultiMetaChips()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
@@ -15721,10 +16003,17 @@ class MainActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
 
+                val primaryCap = OverlayService.getLeagueCpCapStatic(league, prefs)
+                val assignedList: List<String> = (listOf(league) + selectedExtraMetas.filter {
+                    !it.equals(league, ignoreCase = true) &&
+                        OverlayService.getLeagueCpCapStatic(it, prefs) == primaryCap
+                }).map { OverlayService.normalizeLeagueKeyStatic(it) }.distinct()
+
                 val rawPreset = TeamPreset(
                     id = existingPreset?.id ?: UUID.randomUUID().toString(),
                     name = name,
                     league = league,
+                    assignedLeagues = assignedList,
                     pokemon = listOf(p1, p2, p3),
                     isSelected = existingPreset?.isSelected ?: false,
                     updatedAt = System.currentTimeMillis(),

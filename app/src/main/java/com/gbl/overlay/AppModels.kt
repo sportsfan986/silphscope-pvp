@@ -44,7 +44,8 @@ data class BuiltPokemonEntry(
 data class TeamPreset(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
-    val league: String = "GREAT LEAGUE", // "MASTER LEAGUE", "ULTRA LEAGUE", "GREAT LEAGUE"
+    val league: String = "GREAT LEAGUE", // Active meta ("MASTER LEAGUE", "ULTRA LEAGUE", "GREAT LEAGUE", etc.)
+    val assignedLeagues: List<String>? = null, // v7.61: Multi-meta assignment (e.g., ["ULTRA LEAGUE", "MEGA ULTRA LEAGUE"])
     val pokemon: List<PokemonSlot> = emptyList(),
     val isSelected: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),

@@ -2163,6 +2163,70 @@ export default function App() {
     return presets.find((p) => p.id === selectedPresetId) || presets[0] || INITIAL_PRESETS[0];
   }, [presets, selectedPresetId]);
 
+  const getEffectiveAssignedLeagues = (preset: TeamPreset): LeagueType[] => {
+    const raw = [preset.league, ...(Array.isArray(preset.assignedLeagues) ? preset.assignedLeagues : [])];
+    const out: LeagueType[] = [];
+    const seen = new Set<string>();
+    for (const lg of raw) {
+      if (!lg) continue;
+      const norm = normalizeLeagueName(lg);
+      const low = norm.toLowerCase();
+      if (!seen.has(low)) {
+        seen.add(low);
+        out.push(norm);
+      }
+    }
+    return out.length > 0 ? out : [normalizeLeagueName(preset.league)];
+  };
+
+  const formatShortMetaBadge = (league: string): string => {
+    const u = normalizeLeagueName(league).trim().toUpperCase();
+    if (u === 'GREAT LEAGUE') return 'GL';
+    if (u === 'ULTRA LEAGUE') return 'UL';
+    if (u === 'MASTER LEAGUE') return 'ML';
+    if (u === 'MEGA GREAT LEAGUE') return 'MGL';
+    if (u === 'MEGA ULTRA LEAGUE') return 'MUL';
+    if (u === 'MEGA MASTER LEAGUE') return 'MML';
+    if (u === 'MASTER LEAGUE PREMIER') return 'MLP';
+    if (u === 'LITTLE CUP') return 'LC';
+    if (u.startsWith('BATTLE FRONTIER') || u.startsWith('BF (')) {
+      const inner = u.includes('(') ? u.split('(')[1].split(')')[0].trim() : '';
+      return inner ? `BF-${inner}` : 'BF';
+    }
+    return formatLeagueDisplayLabel(league)
+      .replace(/\s+(?:League|Cup)$/i, '')
+      .trim()
+      .slice(0, 12);
+  };
+
+  const stripLeagueAffixFromTeamNameWeb = (rawName: string): string => {
+    let s = String(rawName || '').trim();
+    s = s
+      .replace(
+        /^(?:GL|UL|ML|MGL|MUL|MML|MLP|LC|Mega\s+(?:Great|Ultra|Master)(?:\s+League)?|(?:Great|Ultra|Master)(?:\s+League)(?:\s+Premier)?)\s*[-:|]?\s*/i,
+        ''
+      )
+      .trim();
+    s = s
+      .replace(/\s*\((?:GL|UL|ML|MGL|MUL|MML|MLP|LC|Mega[^)]*|Great[^)]*|Ultra[^)]*|Master[^)]*)\)$/i, '')
+      .trim();
+    s = s.replace(/\s*[-|:]\s*(?:GL|UL|ML|MGL|MUL|MML|MLP|LC)$/i, '').trim();
+    return s;
+  };
+
+  const [activeGblRotationMetas, setActiveGblRotationMetas] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem('gbl_scrapedduck_rotation_v1');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.metas) && Date.now() - Number(parsed.fetchedMs || 0) < 6 * 3600 * 1000) {
+          return parsed.metas;
+        }
+      }
+    } catch {}
+    return [];
+  });
+
   // ============================================================================
   // PVPOKE LIMITED METAS CATALOG, PINNED METAS PER MODE, & MY TEAMS 2-TIER FILTER TABS
   // ============================================================================
@@ -2238,6 +2302,258 @@ export default function App() {
       }
       return changed ? next : prev;
     });
+  }, []);
+
+  // v7.61: Fetch & cache live ScrapedDuck GBL rotation schedule (6h TTL + 36h bridge guard)
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('gbl_scrapedduck_rotation_v1');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.metas) && Date.now() - Number(parsed.fetchedMs || 0) < 6 * 3600 * 1000) {
+          setActiveGblRotationMetas(parsed.metas);
+          return;
+        }
+      }
+    } catch {}
+    let cancelled = false;
+    fetch('https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((arr) => {
+        if (cancelled || !Array.isArray(arr)) return;
+        const parseUtcMs = (raw?: string): number => {
+          const s = String(raw || '').trim();
+          if (!s) return 0;
+          const iso = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s) ? s : `${s}Z`;
+          const ms = Date.parse(iso);
+          return Number.isFinite(ms) ? ms : 0;
+        };
+        const windows = arr
+          .filter((ev: any) => ev && String(ev.eventType || '').toLowerCase() === 'go-battle-league')
+          .map((ev: any) => ({
+            name: String(ev.name || ''),
+            startMs: parseUtcMs(ev.start),
+            endMs: parseUtcMs(ev.end),
+            extraText: String(ev?.extraData?.gbl?.activeRotation || ev?.heading || '')
+          }))
+          .filter((w: any) => w.startMs > 0 && w.endMs > 0)
+          .sort((a: any, b: any) => a.startMs - b.startMs);
+        const nowMs = Date.now();
+        const resolved: string[] = [];
+        const pushLeague = (lg: string) => {
+          if (lg && !resolved.some((x) => x.toLowerCase() === lg.toLowerCase())) resolved.push(lg);
+        };
+        const mapSeg = (seg: string) => {
+          const clean = seg.trim().replace(/\s+/g, ' ');
+          if (!clean) return;
+          const low = clean.toLowerCase();
+          if (low.includes('great league')) {
+            pushLeague(low.includes('mega') ? 'MEGA GREAT LEAGUE' : 'GREAT LEAGUE');
+          } else if (low.includes('ultra league')) {
+            pushLeague(low.includes('mega') ? 'MEGA ULTRA LEAGUE' : 'ULTRA LEAGUE');
+          } else if (low.includes('master league')) {
+            if (low.includes('mega')) pushLeague('MEGA MASTER LEAGUE');
+            else if (low.includes('premier')) pushLeague('MASTER LEAGUE PREMIER');
+            else pushLeague('MASTER LEAGUE');
+          } else if (low.includes('little cup') || low.includes('little jungle') || low.includes('little catch')) {
+            pushLeague('LITTLE CUP');
+          }
+          const stripped = clean.replace(/^\d{4}\s+go\s+/i, '').trim().toLowerCase();
+          for (const meta of limitedMetaCatalog) {
+            const dn = (meta.title || meta.label || meta.cup || '').toLowerCase();
+            if (dn && (low.includes(dn) || dn.includes(low) || (stripped.length >= 5 && dn.includes(stripped)))) {
+              pushLeague(meta.label);
+            }
+          }
+        };
+        windows.forEach((w: any, idx: number) => {
+          const nextStart = idx + 1 < windows.length ? windows[idx + 1].startMs : 0;
+          const isActive =
+            w.startMs <= nowMs &&
+            (nowMs <= w.endMs || (nextStart > 0 && nowMs < nextStart && nowMs <= w.endMs + 36 * 3600 * 1000));
+          if (!isActive) return;
+          const titleBody = w.name.includes('|') ? w.name.split('|').slice(1).join(' ').trim() : w.name;
+          const segSrc = `${titleBody}, ${w.extraText}`;
+          segSrc
+            .replace(/,\s*and\s+/gi, ',')
+            .replace(/\s+and\s+/gi, ',')
+            .split(/[,&/]/)
+            .forEach(mapSeg);
+        });
+        if (!cancelled && resolved.length > 0) {
+          setActiveGblRotationMetas(resolved);
+          try {
+            localStorage.setItem(
+              'gbl_scrapedduck_rotation_v1',
+              JSON.stringify({ fetchedMs: Date.now(), metas: resolved })
+            );
+          } catch {}
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // v7.61+: One-time idempotent client migration merging duplicate multi-meta teams (preserving BattleLog leagues & syncing deleted IDs)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('gbl_v761_multi_meta_migrated_v1') === '1') return;
+    } catch {
+      return;
+    }
+    const nowMs = Date.now();
+    const collectedDupIds: string[] = [];
+
+    const mergeBucket = (
+      bucketPresets: TeamPreset[],
+      bucketLogs: WebBattleLogEntry[],
+      bucketSelectedId: string,
+      mode: 'gbl' | 'show6'
+    ) => {
+      if (bucketPresets.length < 2) {
+        return { changed: false, nextPresets: bucketPresets, nextLogs: bucketLogs, nextSelectedId: bucketSelectedId };
+      }
+      const logCounts = new Map<string, number>();
+      bucketLogs.forEach((l) => {
+        if (l.presetId) logCounts.set(l.presetId, (logCounts.get(l.presetId) || 0) + 1);
+      });
+      const groups = new Map<string, TeamPreset[]>();
+      const ungrouped: TeamPreset[] = [];
+      for (const p of bucketPresets) {
+        if (!p.pokemon || p.pokemon.length < 3) {
+          ungrouped.push(p);
+          continue;
+        }
+        const cpCap = getLeagueCpCap(p.league);
+        const slotSig = p.pokemon
+          .slice(0, 3)
+          .map((m) =>
+            [
+              (m.name || '').trim().toLowerCase().replace(/\s+/g, ' '),
+              (m.fastMove || '').trim().toLowerCase(),
+              (m.chargedMove1 || '').trim().toLowerCase(),
+              (m.chargedMove2 || '').trim().toLowerCase()
+            ].join('|')
+          )
+          .join('||');
+        const key = `${mode}|${cpCap}|${slotSig}`;
+        const list = groups.get(key) || [];
+        list.push(p);
+        groups.set(key, list);
+      }
+
+      const hasAnyDup = Array.from(groups.values()).some((g) => g.length >= 2);
+      if (!hasAnyDup) {
+        return { changed: false, nextPresets: bucketPresets, nextLogs: bucketLogs, nextSelectedId: bucketSelectedId };
+      }
+
+      const redirectMap = new Map<string, string>();
+      const nextPresets: TeamPreset[] = [...ungrouped];
+      for (const group of groups.values()) {
+        if (group.length === 1) {
+          nextPresets.push(group[0]);
+          continue;
+        }
+        const scored = [...group].sort((a, b) => {
+          const aSel = a.id === bucketSelectedId || a.isSelected ? 1 : 0;
+          const bSel = b.id === bucketSelectedId || b.isSelected ? 1 : 0;
+          if (bSel !== aSel) return bSel - aSel;
+          const aLogs = logCounts.get(a.id) || 0;
+          const bLogs = logCounts.get(b.id) || 0;
+          if (bLogs !== aLogs) return bLogs - aLogs;
+          return (b.updatedAt || 0) - (a.updatedAt || 0);
+        });
+        const survivor = scored[0];
+        const combinedAssigned: LeagueType[] = [];
+        const seen = new Set<string>();
+        const pushMeta = (lg?: LeagueType) => {
+          if (!lg) return;
+          const n = normalizeLeagueName(lg);
+          const low = n.toLowerCase();
+          if (!seen.has(low)) {
+            seen.add(low);
+            combinedAssigned.push(n);
+          }
+        };
+        pushMeta(survivor.league);
+        scored.forEach((item) => getEffectiveAssignedLeagues(item).forEach(pushMeta));
+
+        const stems = new Map<string, { label: string; count: number }>();
+        scored.forEach((item) => {
+          const st = stripLeagueAffixFromTeamNameWeb(item.name);
+          if (st.length >= 2) {
+            const lk = st.toLowerCase();
+            const cur = stems.get(lk) || { label: st, count: 0 };
+            cur.count += 1;
+            stems.set(lk, cur);
+          }
+        });
+        const bestStem = Array.from(stems.values()).sort((a, b) => b.count - a.count)[0];
+        const cleanName = bestStem && bestStem.count >= 2 ? bestStem.label : survivor.name;
+
+        nextPresets.push({
+          ...survivor,
+          name: cleanName,
+          assignedLeagues: combinedAssigned,
+          updatedAt: nowMs
+        });
+        for (let i = 1; i < scored.length; i++) {
+          const dupId = scored[i].id;
+          if (dupId && dupId !== survivor.id) {
+            redirectMap.set(dupId, survivor.id);
+            collectedDupIds.push(dupId);
+          }
+        }
+      }
+
+      const nextLogs = bucketLogs.map((l) => {
+        const targetId = l.presetId ? redirectMap.get(l.presetId) : undefined;
+        if (!targetId) return l;
+        return { ...l, presetId: targetId, updatedAt: nowMs };
+      });
+      const nextSelectedId = redirectMap.get(bucketSelectedId) || bucketSelectedId;
+      return { changed: true, nextPresets, nextLogs, nextSelectedId };
+    };
+
+    const gblRes = mergeBucket(gblPresets, gblBattleLogs, gblSelectedPresetId, 'gbl');
+    if (gblRes.changed) {
+      setGblPresets(gblRes.nextPresets);
+      setGblBattleLogs(gblRes.nextLogs);
+      setGblSelectedPresetId(gblRes.nextSelectedId);
+      try {
+        localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(gblRes.nextPresets));
+        localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(gblRes.nextLogs));
+        localStorage.setItem('gbl_selected_preset_id', gblRes.nextSelectedId);
+      } catch {}
+    }
+
+    const s6Res = mergeBucket(show6Presets3, show6BattleLogs, show6SelectedPreset3Id, 'show6');
+    if (s6Res.changed) {
+      setShow6Presets3(s6Res.nextPresets);
+      setShow6BattleLogs(s6Res.nextLogs);
+      setShow6SelectedPreset3Id(s6Res.nextSelectedId);
+      try {
+        localStorage.setItem('gbl_show6_presets_of_3_v1', JSON.stringify(s6Res.nextPresets));
+        localStorage.setItem('gbl_show6_battle_logs_v1', JSON.stringify(s6Res.nextLogs));
+        localStorage.setItem('gbl_show6_selected_preset3_id', s6Res.nextSelectedId);
+      } catch {}
+    }
+
+    if (collectedDupIds.length > 0) {
+      setDeletedTeamIds((prev) => {
+        const next = Array.from(new Set([...prev, ...collectedDupIds]));
+        try {
+          localStorage.setItem('gbl_deleted_team_ids_v1', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+
+    try {
+      localStorage.setItem('gbl_v761_multi_meta_migrated_v1', '1');
+    } catch {}
   }, []);
 
   const handleTogglePinnedGblMeta = async (metaId: string) => {
@@ -3383,6 +3699,7 @@ export default function App() {
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [newPresetName, setNewPresetName] = useState('');
   const [newPresetLeague, setNewPresetLeague] = useState<LeagueType>('GREAT LEAGUE');
+  const [newPresetExtraLeagues, setNewPresetExtraLeagues] = useState<LeagueType[]>([]);
   const [manualArchetypeOverride, setManualArchetypeOverride] = useState<TeamArchetype | undefined>(undefined);
   const [modalAutoDetectSummary, setModalAutoDetectSummary] = useState<string | null>(null);
   const [p1Name, setP1Name] = useState('Clodsire');
@@ -5249,6 +5566,7 @@ export default function App() {
     setEditingPresetId(null);
     setNewPresetName('');
     setNewPresetLeague(defaultLeague);
+    setNewPresetExtraLeagues([]);
     setManualArchetypeOverride(undefined);
     setModalAutoDetectSummary(null);
     setModalRoleRecommendations(null);
@@ -5261,6 +5579,9 @@ export default function App() {
     setEditingPresetId(preset.id);
     setNewPresetName(preset.name);
     setNewPresetLeague(preset.league);
+    setNewPresetExtraLeagues(
+      getEffectiveAssignedLeagues(preset).filter((lg) => lg.toLowerCase() !== preset.league.toLowerCase())
+    );
     setManualArchetypeOverride(preset.isArchetypeManual ? preset.archetype : undefined);
     setModalAutoDetectSummary(null);
     setModalRoleRecommendations(null);
@@ -5644,14 +5965,26 @@ export default function App() {
       return;
     }
 
+    const primaryCap = getLeagueCpCap(newPresetLeague);
+    const finalAssignedLeagues = Array.from(
+      new Set([
+        normalizeLeagueName(newPresetLeague),
+        ...newPresetExtraLeagues
+          .map((lg) => normalizeLeagueName(lg))
+          .filter((lg) => lg.toLowerCase() !== newPresetLeague.toLowerCase() && getLeagueCpCap(lg) === primaryCap)
+      ])
+    );
+
     const basePreset: TeamPreset = {
       id: targetId,
       name: newPresetName.trim() || `${newPresetLeague} Custom`,
       league: newPresetLeague,
+      assignedLeagues: finalAssignedLeagues,
       pokemon: members,
       archetype: manualArchetypeOverride,
       isArchetypeManual: !!manualArchetypeOverride,
-      combatMode: appCombatMode
+      combatMode: appCombatMode,
+      updatedAt: Date.now()
     };
 
     const savedPreset = evaluateTeamPresetMetrics(
@@ -6375,7 +6708,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.60 • Android Native Overlay
+                  v7.61 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -11379,24 +11712,32 @@ export default function App() {
                 {
                   key: 'GREAT',
                   label: 'Great',
-                  count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'GREAT').length
+                  count: presets.filter((p) =>
+                    getEffectiveAssignedLeagues(p).some((lg) => resolveLeagueCpTier(lg) === 'GREAT')
+                  ).length
                 },
                 {
                   key: 'ULTRA',
                   label: 'Ultra',
-                  count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'ULTRA').length
+                  count: presets.filter((p) =>
+                    getEffectiveAssignedLeagues(p).some((lg) => resolveLeagueCpTier(lg) === 'ULTRA')
+                  ).length
                 },
                 {
                   key: 'MASTER',
                   label: 'Master',
-                  count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'MASTER').length
+                  count: presets.filter((p) =>
+                    getEffectiveAssignedLeagues(p).some((lg) => resolveLeagueCpTier(lg) === 'MASTER')
+                  ).length
                 }
               ];
 
               const tierPresets =
                 activeTeamsCpTierFilter === 'ALL'
                   ? presets
-                  : presets.filter((p) => resolveLeagueCpTier(p.league) === activeTeamsCpTierFilter);
+                  : presets.filter((p) =>
+                      getEffectiveAssignedLeagues(p).some((lg) => resolveLeagueCpTier(lg) === activeTeamsCpTierFilter)
+                    );
               const tierActiveCups =
                 activeTeamsCpTierFilter === 'ALL'
                   ? []
@@ -11404,7 +11745,11 @@ export default function App() {
               const tierOldCupsCount =
                 activeTeamsCpTierFilter === 'ALL'
                   ? 0
-                  : tierPresets.filter((p) => isOldCupForMode(p.league, appCombatMode)).length;
+                  : tierPresets.filter((p) =>
+                      getEffectiveAssignedLeagues(p).some(
+                        (lg) => resolveLeagueCpTier(lg) === activeTeamsCpTierFilter && isOldCupForMode(lg, appCombatMode)
+                      )
+                    ).length;
               const tierName =
                 activeTeamsCpTierFilter === 'GREAT'
                   ? 'Great'
@@ -11478,7 +11823,9 @@ export default function App() {
                         </span>
                       </button>
                       {tierActiveCups.map((lg) => {
-                        const count = tierPresets.filter((p) => p.league.toLowerCase() === lg.toLowerCase()).length;
+                        const count = tierPresets.filter((p) =>
+                          getEffectiveAssignedLeagues(p).some((x) => x.toLowerCase() === lg.toLowerCase())
+                        ).length;
                         const isSelected = activeTeamsLeagueFilter.toLowerCase() === lg.toLowerCase();
                         return (
                           <button
@@ -11532,11 +11879,13 @@ export default function App() {
               {presets
                 .map((preset, presetIdx) => ({ preset, presetIdx }))
                 .filter(({ preset }) =>
-                  matchesTwoTierLeagueFilter(
-                    preset.league,
-                    activeTeamsCpTierFilter,
-                    activeTeamsLeagueFilter,
-                    appCombatMode
+                  getEffectiveAssignedLeagues(preset).some((lg) =>
+                    matchesTwoTierLeagueFilter(
+                      lg,
+                      activeTeamsCpTierFilter,
+                      activeTeamsLeagueFilter,
+                      appCombatMode
+                    )
                   )
                 )
                 .map(({ preset, presetIdx }) => {
@@ -11544,6 +11893,35 @@ export default function App() {
                 const isDragged = draggedPresetIndex === presetIdx;
                 const isDragOver = dragOverPresetIndex === presetIdx && draggedPresetIndex !== presetIdx;
                 const arch: TeamArchetype = preset.archetype || 'ABC';
+                const assignedMetas = getEffectiveAssignedLeagues(preset);
+                const pLogs = battleLogs.filter((b) => b.presetId === preset.id);
+                const wlSummary = (() => {
+                  if (pLogs.length === 0) return null;
+                  const wins = pLogs.filter((b) => String(b.result || '').toUpperCase() === 'WIN').length;
+                  const losses = pLogs.filter((b) => String(b.result || '').toUpperCase() === 'LOSS').length;
+                  const ties = Math.max(0, pLogs.length - wins - losses);
+                  const pct = Math.round((wins * 100) / pLogs.length);
+                  const rec = ties > 0 ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`;
+                  const byBadge = new Map<string, [number, number]>();
+                  pLogs.forEach((b) => {
+                    const badge = formatShortMetaBadge(b.league);
+                    const arr = byBadge.get(badge) || [0, 0];
+                    const resU = String(b.result || '').toUpperCase();
+                    if (resU === 'WIN') arr[0] += 1;
+                    else if (resU === 'LOSS') arr[1] += 1;
+                    byBadge.set(badge, arr);
+                  });
+                  const orderedKeys = Array.from(
+                    new Set([...assignedMetas.map(formatShortMetaBadge), ...byBadge.keys()])
+                  );
+                  const perMeta = orderedKeys
+                    .filter((k) => byBadge.has(k))
+                    .map((k) => {
+                      const arr = byBadge.get(k)!;
+                      return `${k} ${arr[0]}-${arr[1]}`;
+                    });
+                  return { rec, pct, perMeta };
+                })();
                 const leadBr = preset.leadAggBr ?? 500;
                 const machBr = preset.machineAggBr ?? 580;
                 const safeSwapBr = preset.safeSwapBr ?? 500;
@@ -11611,17 +11989,56 @@ export default function App() {
                           >
                             <GripVertical className="w-4 h-4" />
                           </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
-                            preset.league === 'MEGA MASTER LEAGUE'
-                              ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30'
-                              : preset.league === 'MASTER LEAGUE'
-                              ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
-                              : preset.league === 'ULTRA LEAGUE'
-                              ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                              : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
-                          }`}>
-                            {preset.league}
-                          </span>
+                          {assignedMetas.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const curIdx = assignedMetas.findIndex(
+                                  (lg) => lg.toLowerCase() === preset.league.toLowerCase()
+                                );
+                                const nextMeta = assignedMetas[(curIdx >= 0 ? curIdx + 1 : 1) % assignedMetas.length];
+                                const nextPreset = evaluateTeamPresetMetrics(
+                                  { ...preset, league: nextMeta, updatedAt: Date.now() },
+                                  battleLogs,
+                                  activeSeasonBounds.startMs,
+                                  activeSeasonBounds.endMs,
+                                  false
+                                );
+                                setPresets((prev) => prev.map((p) => (p.id === preset.id ? nextPreset : p)));
+                              }}
+                              title="Click to cycle active meta for this multi-meta team"
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase transition hover:brightness-125 ${
+                                preset.league === 'MEGA MASTER LEAGUE'
+                                  ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30'
+                                  : preset.league === 'MASTER LEAGUE'
+                                  ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                                  : preset.league === 'ULTRA LEAGUE'
+                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                                  : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
+                              }`}
+                            >
+                              {preset.league} ⇄ +
+                              {assignedMetas
+                                .filter((lg) => lg.toLowerCase() !== preset.league.toLowerCase())
+                                .map(formatShortMetaBadge)
+                                .join(', ')}
+                            </button>
+                          ) : (
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                                preset.league === 'MEGA MASTER LEAGUE'
+                                  ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30'
+                                  : preset.league === 'MASTER LEAGUE'
+                                  ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                                  : preset.league === 'ULTRA LEAGUE'
+                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                                  : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
+                              }`}
+                            >
+                              {preset.league}
+                            </span>
+                          )}
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
                               arch === 'ABB'
@@ -11639,6 +12056,12 @@ export default function App() {
                           <span className="text-[10px] text-emerald-400 font-semibold">
                             Beats {topWinsCount}/{totalMetaDepth} Top Meta
                           </span>
+                          {wlSummary && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-sky-500/15 text-sky-300 border-sky-400/30">
+                              🏆 {wlSummary.rec} ({wlSummary.pct}%)
+                              {wlSummary.perMeta.length > 0 ? ` • ${wlSummary.perMeta.join(' • ')}` : ''}
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
@@ -11871,6 +12294,12 @@ export default function App() {
                           onChange={(e) => {
                             const nextL = e.target.value as LeagueType;
                             setNewPresetLeague(nextL);
+                            const nextCap = getLeagueCpCap(nextL);
+                            setNewPresetExtraLeagues((prev) =>
+                              prev.filter(
+                                (lg) => lg.toLowerCase() !== nextL.toLowerCase() && getLeagueCpCap(lg) === nextCap
+                              )
+                            );
                             if (!editingPresetId) {
                               applyLeagueTop3TemplateToForm(nextL);
                             } else {
@@ -11891,6 +12320,52 @@ export default function App() {
                             </option>
                           ))}
                         </select>
+                        {(() => {
+                          const primaryCap = getLeagueCpCap(newPresetLeague);
+                          const sameCapMetas = (appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).filter(
+                            (lg) => lg.toLowerCase() !== newPresetLeague.toLowerCase() && getLeagueCpCap(lg) === primaryCap
+                          );
+                          if (sameCapMetas.length === 0) return null;
+                          return (
+                            <div className="mt-2">
+                              <div className="text-[10.5px] font-bold text-slate-400 mb-1">
+                                Also Assigned To (Same CP Cap — Auto/1-Tap Meta Switch):
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {sameCapMetas.map((meta) => {
+                                  const isChecked = newPresetExtraLeagues.some(
+                                    (lg) => lg.toLowerCase() === meta.toLowerCase()
+                                  );
+                                  const isLiveRot = activeGblRotationMetas.some(
+                                    (r) => r.toLowerCase() === meta.toLowerCase()
+                                  );
+                                  const shortTag = formatShortMetaBadge(meta);
+                                  return (
+                                    <button
+                                      key={meta}
+                                      type="button"
+                                      onClick={() => {
+                                        setNewPresetExtraLeagues((prev) =>
+                                          prev.some((lg) => lg.toLowerCase() === meta.toLowerCase())
+                                            ? prev.filter((lg) => lg.toLowerCase() !== meta.toLowerCase())
+                                            : [...prev, meta]
+                                        );
+                                      }}
+                                      title={formatLeagueDisplayLabel(meta)}
+                                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${
+                                        isChecked
+                                          ? 'bg-sky-400 text-slate-950 border-sky-300 shadow'
+                                          : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-slate-500'
+                                      }`}
+                                    >
+                                      {isLiveRot ? (isChecked ? `✓ 🟢 ${shortTag}` : `🟢 ${shortTag}`) : isChecked ? `✓ ${shortTag}` : `+ ${shortTag}`}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -14827,14 +15302,18 @@ export default function App() {
                           : 0;
                       const tombSig = [
                         Array.from(mergedTombstones).sort().join(','),
-                        Array.from(new Set(deletedBuiltPokemonIds)).sort().join(',')
+                        Array.from(new Set(deletedBuiltPokemonIds)).sort().join(','),
+                        Array.from(new Set(deletedTeamIds)).sort().join(',')
                       ].join('|');
                       const prevTombSig = isSameCursorUser
                         ? localStorage.getItem('gbl_d1_last_pushed_tombstones_sig_v1') || ''
                         : '';
                       const tombstonesChanged =
                         !alreadyMigrated ||
-                        (tombSig !== prevTombSig && (mergedTombstones.size > 0 || deletedBuiltPokemonIds.length > 0));
+                        (tombSig !== prevTombSig &&
+                          (mergedTombstones.size > 0 ||
+                            deletedBuiltPokemonIds.length > 0 ||
+                            deletedTeamIds.length > 0));
 
                       const pushStartedAtMs = Date.now();
                       const teamSigKey = `gbl_d1_last_pushed_teams_sig_v1_${appCombatMode}`;
@@ -14851,6 +15330,7 @@ export default function App() {
                           id: p.id,
                           name: p.name,
                           league: p.league,
+                          assignedLeagues: getEffectiveAssignedLeagues(p),
                           archetype: p.archetype || '',
                           pokemon: (p.pokemon || []).map((m) => ({
                             name: m.name,
@@ -14916,6 +15396,7 @@ export default function App() {
                         updatedAt: Math.max(Number(p.updatedAt) || 0, pushStartedAtMs)
                       }));
                       const delLogsToPush = tombstonesChanged ? Array.from(mergedTombstones) : [];
+                      const delTeamsToPush = tombstonesChanged ? Array.from(new Set(deletedTeamIds)) : [];
 
                       const headers: Record<string, string> = {
                         'Content-Type': 'application/json',
@@ -14960,6 +15441,7 @@ export default function App() {
                           teamPresets: teamsToPush,
                           builtPokemon: builtToPush,
                           deletedLogIds: delLogsToPush,
+                          deletedTeamIds: delTeamsToPush,
                           deletedBuiltPokemonIds: delBuiltToPush
                         })
                       });
@@ -15010,7 +15492,7 @@ export default function App() {
                         !alreadyMigrated || remoteUpsertedBuilt.length > 0 || remoteDeletedBuilt.length > 0;
 
                       remoteDeletedLogs.forEach((id: string) => mergedTombstones.add(id));
-                      const deletedTeamSet = new Set<string>(remoteDeletedTeams);
+                      const deletedTeamSet = new Set<string>([...deletedTeamIds, ...remoteDeletedTeams]);
                       remoteDeletedBuilt.forEach((id: string) => {
                         if (id) mergedBuiltDelSet.add(id);
                       });
@@ -15081,9 +15563,13 @@ export default function App() {
                       }
 
                       const tombArr = Array.from(mergedTombstones);
+                      const teamTombArr = Array.from(deletedTeamSet);
                       const builtTombArr = Array.from(mergedBuiltDelSet);
                       if (logsMutated || tombstonesChanged) {
                         setDeletedLogIds(tombArr);
+                      }
+                      if (teamsMutated || tombstonesChanged) {
+                        setDeletedTeamIds(teamTombArr);
                       }
                       if (builtMutated || tombstonesChanged) {
                         setDeletedBuiltPokemonIds(builtTombArr);
@@ -15094,6 +15580,9 @@ export default function App() {
                       try {
                         if (logsMutated || tombstonesChanged) {
                           localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
+                        }
+                        if (teamsMutated || tombstonesChanged) {
+                          localStorage.setItem('gbl_deleted_team_ids_v1', JSON.stringify(teamTombArr));
                         }
                         if (builtMutated || tombstonesChanged) {
                           localStorage.setItem('gbl_deleted_built_pokemon_ids_v1', JSON.stringify(builtTombArr));
@@ -15108,7 +15597,11 @@ export default function App() {
                         localStorage.setItem('gbl_d1_last_pushed_ms_v1', String(pushStartedAtMs));
                         localStorage.setItem(
                           'gbl_d1_last_pushed_tombstones_sig_v1',
-                          [tombArr.slice().sort().join(','), builtTombArr.slice().sort().join(',')].join('|')
+                          [
+                            tombArr.slice().sort().join(','),
+                            builtTombArr.slice().sort().join(','),
+                            teamTombArr.slice().sort().join(',')
+                          ].join('|')
                         );
                         localStorage.removeItem('gbl_sync_github_token');
                         localStorage.removeItem('gbl_sync_github_gist_id');
@@ -18340,7 +18833,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.60 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.61 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

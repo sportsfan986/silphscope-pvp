@@ -3187,6 +3187,13 @@
             }
         }
 
+        function cycleActivePresetMetaHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.cycleActivePresetMeta) {
+                window.AndroidOverlay.cycleActivePresetMeta();
+            }
+        }
+
         function deleteLastBattleDvrPrompt(explicitBattleId) {
             const bId = explicitBattleId !== undefined
                 ? explicitBattleId
@@ -4159,9 +4166,16 @@
                             partyPreviewHtml = `<div class="idle-party-preview-row preview-locked"><span style="color:#6ee7b7;">${escapeHtml(pConfirmTxt || ("✅ Team Locked: " + pPresetName))}</span><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss">✕</button></div>`;
                         }
                     }
+                    const assignedMetasArr = (!isReplay && Array.isArray(battleData.assignedLeagues)) ? battleData.assignedLeagues : [];
+                    const hasMultiMeta = assignedMetasArr.length > 1;
+                    const leaguePillClickAttr = hasMultiMeta ? ` onclick="cycleActivePresetMetaHud(event)" style="cursor:pointer;"` : "";
+                    const leaguePillSwitchGlyph = hasMultiMeta ? ` ⇄` : "";
+                    const leaguePillTitle = hasMultiMeta
+                        ? `Active Meta: ${escapeHtml(activeLeagueStr)} (Tap to switch: ${escapeHtml(assignedMetasArr.join(' / '))})`
+                        : `Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}`;
                     const idleBannerChanged = setHtmlIfChanged(idleTeamBannerEl, `
                         <div class="idle-team-line1">
-                            <span class="idle-league-pill" title="Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}">🏆 ${escapeHtml(activeLeagueStr)} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
+                            <span class="idle-league-pill"${leaguePillClickAttr} title="${leaguePillTitle}">🏆 ${escapeHtml(activeLeagueStr)}${leaguePillSwitchGlyph} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
                             <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
                                 ${eloChipHtml}
                                 ${compactLogPillHtml}
