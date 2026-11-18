@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.53"
-        const val APP_VERSION_CODE = 1753
+        const val APP_VERSION = "7.54"
+        const val APP_VERSION_CODE = 1754
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -8293,7 +8293,7 @@ class OverlayService : LifecycleService() {
             else -> "$sanitizedFmt (±0)"
         }
         lastEloLockBannerText = "✅ ELO Locked: $deltaSummary"
-        lastEloLockBannerUntilMs = nowMs + 4000L
+        lastEloLockBannerUntilMs = nowMs + 12000L
         recalculateAndPushBattleData()
 
         val activeLg = currentPreset?.league ?: "GREAT LEAGUE"
@@ -18733,7 +18733,7 @@ class OverlayService : LifecycleService() {
                 abortOneBattleDvrAsync(disarm = true)
             }
         }
-        if (stoppedBattleDiscardDvr || (!leadConfirmedByGoBanner && battleTimelineEvents.isEmpty())) {
+        if (stopBattleDurSec < 10.0 || (!leadConfirmedByGoBanner && battleTimelineEvents.isEmpty())) {
             detectedOpponents.clear()
             lastClearedOpponentsSnapshot = emptyList()
             lastClearedTimelineEventsSnapshot = emptyList()
@@ -21300,7 +21300,7 @@ class OverlayService : LifecycleService() {
                 "oppSlotAtkStage" to oppSlotAtkStage.toList(),
                 "oppSlotDefStage" to oppSlotDefStage.toList(),
                 "oppSlotDisguiseBusted" to oppSlotDisguiseBusted.toList(),
-                "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 45000L) mapOf(
+                "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 120000L) mapOf(
                     "battleId" to lastLoggedBattleId,
                     "result" to lastLoggedBattleResult,
                     "leadMatchup" to lastLoggedBattleLead,
@@ -23329,7 +23329,7 @@ class OverlayService : LifecycleService() {
             "oppSlotAtkStage" to oppSlotAtkStage.toList(),
             "oppSlotDefStage" to oppSlotDefStage.toList(),
             "oppSlotDisguiseBusted" to oppSlotDisguiseBusted.toList(),
-            "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 45000L) mapOf(
+            "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 120000L) mapOf(
                 "battleId" to lastLoggedBattleId,
                 "result" to lastLoggedBattleResult,
                 "leadMatchup" to lastLoggedBattleLead,

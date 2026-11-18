@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.54',
+    codename: 'Persistent Idle & Post-Set "📊 Battle Log" Controls, 120s Post-Battle Bar & Non-DVR Stop Guard',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Restores 1-tap "Stop Overlay & Open Battle Log" access across idle between-battle toolbars, Compact hidden-toolbar headers, and GBL end-of-set / ELO Locked banners while extending the post-battle auto-logged window to 120s and protecting non-DVR Stop snapshots.',
+    icon: '📊',
+    accentColor: '#10B981',
+    highlights: [
+      'Idle Toolbar & Horizon Belt swap inactive Form: Base for a persistent 📊 Battle Log button whenever !isBattleActive (restoring Form: automatically on battle start and hidden in /watch replays)',
+      'Added 📊 Battle Log / 📊 Log buttons inside the 5/5 Set Complete and ✅ ELO Locked banners (extended from 4s to 12s) plus a Compact HUD hidden-toolbar 📊 LOG header pill',
+      'Extended the post-battle #auto-logged-banner timeout from 45s to 120s so set-reward encounters do not prematurely dismiss post-battle exit and editing controls',
+      'Fixed stopCurrentBattle() so non-DVR battles >= 10s retain detected opponent snapshots for manual logging instead of tripping stoppedBattleDiscardDvr'
+    ]
+  },
+  {
     version: 'v7.53',
     codename: 'Automatic Multi-Form Disambiguation & Raw HP-Pulse Turn-Cadence Engine',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Automatically resolves multi-form Pokémon (e.g., Giratina, Landorus, Zacian, Urshifu, Alolan/Galarian variants) using observed nameplate CP caps, BANNER_OCR signature/EPT moves, and joint stats/cadence, powered by an assumption-free 380ms-debounced raw HP-pulse turn-cadence ring buffer.',
     icon: '🔄',

@@ -2,6 +2,15 @@
 
 ---
 
+## v7.54 (2026-11-17) — Persistent Idle & Post-Set "📊 Battle Log" Controls, 120s Post-Battle Bar & Non-DVR Stop Guard
+*Usability & overlay navigation polish release (`v7.54`, `versionCode = 1754`) restoring always-accessible 1-tap exit from the floating overlay straight into SilphScope's Battle Log.*
+
+- **Idle Toolbar & Horizon Belt `📊 Battle Log` Button (`overlay.html`, `overlay-asset.mjs`)**: Swaps the inactive `Form: Base` slot in `.toolbar-left-group` with a dedicated `📊 Battle Log` button (`#btn-idle-battle-log`, calling `stopOverlayAndGoToBattleLog()`) whenever `!isBattleActive && !isReplay`, plus `#btn-horizon-battle-log` on the Horizon Belt layout while automatically restoring `#btn-cycle-form` during live battles and keeping `#btn-minimize-sword` single-tap/2.0s hold behavior unchanged.
+- **ELO Set Banners & Compact Hidden-Toolbar Fallback (`overlay.html`, `OverlayService.kt`)**: Adds `📊 Battle Log` / `📊 Log` actions directly inside the `✅ ELO Locked` confirmation banner (extended from `4s` -> `12s`) and `5/5 Set Complete` prompt, plus a compact `📊 LOG` badge inside `#sky-idle-team-banner` when `toolbarMode === "hidden"`.
+- **120s Post-Battle Auto-Logged Bar & Non-DVR `stopCurrentBattle()` Guard (`OverlayService.kt`)**: Extends the `#auto-logged-banner` display window from `45s` to `120s` so GBL set-reward encounters don't hide the post-battle controls prematurely, and updates `stopCurrentBattle()` to clear opponents only on `< 10s` or unconfirmed empty sessions (`stopBattleDurSec < 10.0 || (!leadConfirmedByGoBanner && battleTimelineEvents.isEmpty())`) instead of clearing legitimate non-DVR battles.
+
+---
+
 ## v7.53 (2026-11-17) — Automatic Multi-Form Disambiguation & Raw HP-Pulse Turn-Cadence Engine
 *Feature & accuracy milestone (`v7.53`, `versionCode = 1753`) completing automatic mid-battle multi-form disambiguation (`OBS_CP`, `BANNER_OCR` signature moves & EPT, joint stats/cadence) paired with an assumption-free raw HP-pulse turn-cadence engine for rapid Non-Standard Fast Move and Shadow confirmation.*
 

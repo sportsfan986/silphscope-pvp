@@ -660,6 +660,12 @@
             transform: none;
         }
 
+        .hud-btn.btn-battle-log {
+            background: rgba(16, 185, 129, 0.28);
+            border-color: rgba(52, 211, 153, 0.72);
+            color: #d1fae5;
+        }
+
         /* 3v3 Matchup Matrix (Full Opponent Names) */
         .matrix-container {
             background: rgba(var(--panel-bg-rgb), var(--subpanel-bg-alpha));
@@ -1584,6 +1590,18 @@
             background: rgba(3, 105, 161, 0.45);
             color: #7dd3fc;
         }
+        .idle-battle-log-badge {
+            padding: 0.5px 4px;
+            border-radius: 3px;
+            font-size: 6.8px;
+            font-weight: 900;
+            letter-spacing: 0.2px;
+            cursor: pointer;
+            border: 1px solid rgba(52, 211, 153, 0.65);
+            background: rgba(6, 78, 59, 0.68);
+            color: #6ee7b7;
+            flex-shrink: 0;
+        }
         .idle-team-line2 {
             display: flex;
             align-items: center;
@@ -1694,6 +1712,9 @@
                 </button>
                 <button id="btn-cycle-form" class="hud-btn btn-form disabled" onclick="cycleForm()" disabled title="Cycle regional or alternate form">
                     <span class="btn-row-top">Form:</span><span class="btn-row-sub">Base</span>
+                </button>
+                <button id="btn-idle-battle-log" type="button" class="hud-btn btn-battle-log hidden" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open SilphScope Battle Log">
+                    <span class="btn-row-top">📊 Battle</span><span class="btn-row-sub">Log</span>
                 </button>
                 <button id="btn-dvr-rec-one" class="hud-btn btn-dvr hidden" onclick="toggleArmOneBattleDvr()" title="Arm 1-Battle Full-Screen MP4 Video + Deep Frame Log (Auto-uploads & disarms after 1 battle)">
                     <span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>
@@ -1879,6 +1900,7 @@
             </div>
             <div style="display: flex; gap: 3px; align-items: center; margin-left: auto;">
                 <button id="btn-horizon-start-battle" class="hud-btn btn-battle" onclick="handleBattleButtonClick()" style="padding:1px 4px; font-size:8.5px;">⚔️ Start Battle</button>
+                <button id="btn-horizon-battle-log" type="button" class="hud-btn btn-battle-log hidden" onclick="stopOverlayAndGoToBattleLog()" style="padding:1px 4px; font-size:8.5px;" title="Stop overlay and open Battle Log">📊 Log</button>
             </div>
         </div>
         <div class="horizon-grid" style="font-size: 9px; color: #fdba74; margin-top:2px;">
@@ -3449,9 +3471,18 @@
                     }
                 }
 
-                // Update Form Cycle Button (2-row stacked + verified ✓ / locked 🔒 provenance)
+                // Update Form Cycle Button (2-row stacked + verified ✓ / locked 🔒 provenance) vs. Idle Battle Log Button
+                const isLiveBattleNow = !!battleData.isBattleActive;
+                const showIdleBattleLogBtn = !isReplay && !isLiveBattleNow;
                 const formBtn = document.getElementById("btn-cycle-form");
+                const idleLogBtn = document.getElementById("btn-idle-battle-log");
+                const horizLogBtn = document.getElementById("btn-horizon-battle-log");
                 if (formBtn) {
+                    if (showIdleBattleLogBtn) {
+                        formBtn.classList.add("hidden");
+                    } else {
+                        formBtn.classList.remove("hidden");
+                    }
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
                     const isFormLocked = !!battleData.oppFormLocked;
@@ -3470,6 +3501,12 @@
                         formBtn.classList.add("disabled");
                         formBtn.title = "Cycle regional or alternate form";
                     }
+                }
+                if (idleLogBtn) {
+                    idleLogBtn.classList.toggle("hidden", !showIdleBattleLogBtn);
+                }
+                if (horizLogBtn) {
+                    horizLogBtn.classList.toggle("hidden", !showIdleBattleLogBtn);
                 }
 
                 updateLeadMatchupButtonUi();
@@ -3992,6 +4029,11 @@
                 if (idleTeamBannerEl) {
                     idleTeamBannerEl.classList.remove("hidden");
                     const isCompactNow = isReplay ? (window.replayHudMode === "compact") : (window.liveHudMode === "compact");
+                    const cfgIdle = window.compactHudConfig || {};
+                    const showCompactFallbackLogBtn = !isReplay && isCompactNow && cfgIdle.toolbarMode === "hidden";
+                    const compactLogPillHtml = showCompactFallbackLogBtn
+                        ? `<button type="button" class="idle-battle-log-badge" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">📊 LOG</button>`
+                        : "";
                     const hudBadgeText = isCompactNow ? "📐 COMPACT HUD" : "📐 FULL HUD";
                     const hudBadgeTitle = isCompactNow
                         ? "Compact HUD Active (Tap to switch to Full HUD)"
@@ -4017,6 +4059,7 @@
                             <span class="idle-league-pill" title="Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}">🏆 ${escapeHtml(activeLeagueStr)} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
                             <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
                                 ${eloChipHtml}
+                                ${compactLogPillHtml}
                                 ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
                             </div>
                         </div>
@@ -4050,9 +4093,10 @@
                         eloBannerEl.style.borderColor = "rgba(52, 211, 153, 0.78)";
                         eloBannerEl.style.background = "rgba(6, 78, 59, 0.42)";
                         const confHtml = `
-                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; flex-wrap:wrap;">
                                 <span style="font-size:8px; font-weight:900; color:#6ee7b7;">${escapeHtml(confirmTextVal)}</span>
                                 <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
+                                    <button type="button" class="menu-btn menu-btn-win" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">📊 Battle Log</button>
                                     <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Adjust ELO manually with touch keypad">✏️ Keypad</button>
                                     <button type="button" class="menu-btn menu-btn-close" onclick="dismissEloConfirmHud(event)" title="Dismiss">✕</button>
                                 </div>
@@ -4076,6 +4120,7 @@
                                     <button type="button" class="menu-btn menu-btn-elo-scan" onclick="startGuidedEloScanHud(event)" title="Arm 250ms OCR and scroll down to CURRENT SEASON">📷 Scan ELO</button>
                                     ${sameBtnHtml}
                                     <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Enter ELO with touch keypad or mark Unranked < R20">✏️ Keypad</button>
+                                    <button type="button" class="menu-btn menu-btn-win" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">📊 Log</button>
                                     <button type="button" class="menu-btn menu-btn-close" onclick="snoozeEloPromptHud(event)" title="Snooze prompt for this set">✕ Snooze</button>
                                 </div>
                             </div>
