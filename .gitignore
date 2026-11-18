@@ -9,6 +9,8 @@ coverage/
 .aistudio/
 public/assets/aistudio/
 *.mp4
+!public/screenshots/featured_*.mp4
+!docs/screenshots/featured_*.mp4
 .gradle/
 local.properties
 keystore.properties

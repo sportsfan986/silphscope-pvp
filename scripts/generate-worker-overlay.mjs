@@ -118,8 +118,65 @@ if (ktFallbackPoolMatch) {
   }
 }
 
-// 4. Parse POKEMON_META_DATABASE from PokemonDatabase.kt
+// 4. Parse STATIC_RELEASED_SHADOW_KEYS & POKEMON_META_DATABASE from PokemonDatabase.kt
+const staticShadowSet = new Set();
+const staticShadowMatch = ktSrc.match(/val STATIC_RELEASED_SHADOW_KEYS:\s*Set<String>\s*=\s*setOf\(([\s\S]*?)\n\s*\)/);
+if (staticShadowMatch) {
+  const skRe = /"([^"]+)"/g;
+  let sm;
+  while ((sm = skRe.exec(staticShadowMatch[1])) !== null) {
+    staticShadowSet.add(sm[1].trim().toLowerCase());
+  }
+}
+
+function computeShadowEligible(name, speciesId, formLabel) {
+  const idLower = String(speciesId || "").toLowerCase().replace(/_shadow$/, "").trim();
+  const nameLower = String(name || "").toLowerCase();
+  if (idLower === "mewtwo_armored" || nameLower.includes("armored")) return false;
+  if (
+    idLower.includes("_mega") ||
+    idLower.includes("_primal") ||
+    nameLower.startsWith("mega ") ||
+    nameLower.startsWith("primal ")
+  ) {
+    return false;
+  }
+  const blockedPrefixes = [
+    "zacian",
+    "zamazenta",
+    "zygarde",
+    "necrozma",
+    "keldeo",
+    "urshifu",
+    "morpeko",
+    "mimikyu",
+    "aegislash",
+    "cramorant"
+  ];
+  if (idLower === "mew" || blockedPrefixes.some((p) => idLower.startsWith(p))) {
+    return false;
+  }
+  const idHyphen = idLower.replace(/-/g, "_");
+  const cleanForm = String(formLabel || "").trim().toLowerCase();
+  const formQualId =
+    cleanForm && cleanForm !== "base" && cleanForm !== "shadow"
+      ? `${idHyphen}_${cleanForm.replace(/[^a-z0-9]+/g, "_")}`
+      : null;
+  const cleanName = nameLower
+    .replace(/^shadow\s+/, "")
+    .replace(/\s*\(shadow\)$/, "")
+    .trim();
+  return Boolean(
+    (idLower && staticShadowSet.has(idLower)) ||
+      (idHyphen && staticShadowSet.has(idHyphen)) ||
+      (formQualId && staticShadowSet.has(formQualId)) ||
+      (cleanName && staticShadowSet.has(cleanName))
+  );
+}
+
 const speciesMap = {};
+const formsByBase = new Map();
+const parsedEntries = [];
 const pokeLineRegex = /PokemonMeta\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*listOf\(([^)]*)\)\s*,\s*(\d+)\s*,\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*atk\s*=\s*([\d.]+)\s*,\s*def\s*=\s*([\d.]+)\s*,\s*hp\s*=\s*(\d+)([^)]*)\)/g;
 while ((m = pokeLineRegex.exec(ktSrc)) !== null) {
   const name = m[1].trim();
@@ -172,11 +229,22 @@ while ((m = pokeLineRegex.exec(ktSrc)) !== null) {
     }
   }
 
+  const baseKey = baseSpecies.toLowerCase();
+  if (formLabel && formLabel.toLowerCase() !== "shadow") {
+    if (!formsByBase.has(baseKey)) formsByBase.set(baseKey, []);
+    const arr = formsByBase.get(baseKey);
+    if (!arr.some((f) => f.toLowerCase() === formLabel.toLowerCase())) {
+      arr.push(formLabel);
+    }
+  }
+
   const entry = {
     name,
     speciesId,
     baseSpecies,
     formLabel,
+    shadowEligible: computeShadowEligible(name, speciesId, formLabel),
+    forms: [formLabel || "Base"],
     types: types.length ? types : ["normal"],
     defaultCp,
     fastMove,
@@ -189,10 +257,18 @@ while ((m = pokeLineRegex.exec(ktSrc)) !== null) {
     def,
     hp
   };
+  parsedEntries.push(entry);
   speciesMap[name.toLowerCase()] = entry;
   speciesMap[speciesId.toLowerCase()] = entry;
-  if (!speciesMap[baseSpecies.toLowerCase()]) {
-    speciesMap[baseSpecies.toLowerCase()] = entry;
+  if (!speciesMap[baseKey]) {
+    speciesMap[baseKey] = entry;
+  }
+}
+
+for (const entry of parsedEntries) {
+  const baseForms = formsByBase.get(entry.baseSpecies.toLowerCase());
+  if (baseForms && baseForms.length > 0) {
+    entry.forms = baseForms;
   }
 }
 
@@ -210,10 +286,53 @@ while ((m = tsChargedRegex.exec(tsSrc)) !== null) {
   }
 }
 
+// Supplement speciesMap with single-line JSON species definitions from src/data/pokemonDb.ts (e.g. Nidoking)
+const tsJsonSpeciesRegex = /^\s*"([^"]+)":\s*(\{"speciesId":[^\n]+\}),?\s*$/gm;
+while ((m = tsJsonSpeciesRegex.exec(tsSrc)) !== null) {
+  try {
+    const obj = JSON.parse(m[2]);
+    if (!obj || !obj.name || !obj.speciesId) continue;
+    const spName = String(obj.name).trim();
+    const spId = String(obj.speciesId).trim();
+    const baseSp = String(obj.baseSpecies || spId.replace(/_shadow$/, "")).trim();
+    const formLbl = String(obj.formLabel || "Base").trim();
+    const keyLower = spName.toLowerCase();
+    const idLower = spId.toLowerCase();
+    if (speciesMap[keyLower] || speciesMap[idLower]) continue;
+    const chNames = Array.isArray(obj.chargedMoves) ? obj.chargedMoves.map((c) => String(c.name || "").trim()).filter(Boolean) : [];
+    const pool = [...new Set([...chNames, ...(speciesChargedPoolMap[idLower] || speciesChargedPoolMap[keyLower] || [])])];
+    const entry = {
+      name: spName,
+      speciesId: spId,
+      baseSpecies: baseSp,
+      formLabel: formLbl,
+      shadowEligible: computeShadowEligible(spName, spId, formLbl),
+      forms: [formLbl || "Base"],
+      types: Array.isArray(obj.types) && obj.types.length ? obj.types.map((t) => String(t).toLowerCase()) : ["normal"],
+      defaultCp: 1500,
+      fastMove: obj.defaultFastMove?.name || "Tackle",
+      fastTurns: Number(obj.defaultFastMove?.turns) || 2,
+      c1: chNames[0] || "Body Slam",
+      c2: chNames[1] || "Surf",
+      c3: chNames[2] || "",
+      pool,
+      atk: Number(obj.baseStats?.atk) || 175,
+      def: Number(obj.baseStats?.def) || 175,
+      hp: Number(obj.baseStats?.hp) || 180
+    };
+    speciesMap[keyLower] = entry;
+    speciesMap[idLower] = entry;
+    if (!speciesMap[baseSp.toLowerCase()]) {
+      speciesMap[baseSp.toLowerCase()] = entry;
+    }
+  } catch {}
+}
+
 const compactDb = {
   species: speciesMap,
   fastMoves,
-  chargedMoves
+  chargedMoves,
+  shadowEligibleKeys: Array.from(staticShadowSet)
 };
 
 const output = `// Auto-generated by scripts/generate-worker-overlay.mjs — DO NOT EDIT MANUALLY

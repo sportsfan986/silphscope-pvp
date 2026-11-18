@@ -106,6 +106,57 @@ function formatDvrLocalDateTime(raw?: string): string {
 
 const CANONICAL_FEATURED_REPLAYS: DvrReplayItem[] = [
   {
+    shareId: 'f_ul_aura_nidoking',
+    battleId: 'log-1794954952774-727',
+    screenName: 'Featured',
+    league: 'Ultra League',
+    result: 'WIN',
+    matchupSummary: 'Melmetal, Mimikyu, Moltres (Galarian) vs Shadow Nidoking, Clefable, Kommo-o',
+    durationSec: 152,
+    videoBytes: 16601071,
+    isPinned: true,
+    isPublic: true,
+    userTierBadge: '🌟 Official Showcase • 3D Shadow Aura & D-3 Math',
+    highlightSec: 5,
+    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_aura_nidoking/video.mp4',
+    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_aura_nidoking/trace.jsonl',
+    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_aura_nidoking'
+  },
+  {
+    shareId: 'f_ul_bp_skeledirge',
+    battleId: 'log-1794954741814-802',
+    screenName: 'Featured',
+    league: 'Ultra League',
+    result: 'WIN',
+    matchupSummary: 'Melmetal, Mimikyu, Moltres (Galarian) vs Tinkaton, Skeledirge, Goodra',
+    durationSec: 182,
+    videoBytes: 20487404,
+    isPinned: true,
+    isPublic: true,
+    userTierBadge: '🌟 Official Showcase • Live ⚡BP+1 & Shadow: N/A',
+    highlightSec: 134,
+    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_bp_skeledirge/video.mp4',
+    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_bp_skeledirge/trace.jsonl',
+    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_bp_skeledirge'
+  },
+  {
+    shareId: 'f_ul_catch_cobalion',
+    battleId: 'log-1794963518100-529',
+    screenName: 'Featured',
+    league: 'Ultra League',
+    result: 'WIN',
+    matchupSummary: 'Tinkaton, Mimikyu, Swampert vs Drifblim, Weezing (Galarian), Cobalion',
+    durationSec: 214,
+    videoBytes: 23342531,
+    isPinned: true,
+    isPublic: true,
+    userTierBadge: '🌟 Official Showcase • Disguise Sync & 0F Catch',
+    highlightSec: 79,
+    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_catch_cobalion/video.mp4',
+    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_catch_cobalion/trace.jsonl',
+    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_catch_cobalion'
+  },
+  {
     shareId: 'f_ml_closer',
     battleId: 'log-1794105062689-388',
     screenName: 'Featured',
@@ -117,44 +168,10 @@ const CANONICAL_FEATURED_REPLAYS: DvrReplayItem[] = [
     isPinned: true,
     isPublic: true,
     userTierBadge: '🌟 Official Showcase • Shiny Dialga & Closer Swap',
-    highlightSec: 100,
+    highlightSec: 18,
     videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ml_closer/video.mp4',
     traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ml_closer/trace.jsonl',
     shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer'
-  },
-  {
-    shareId: 'f_ul_shield',
-    battleId: 'log-1794012768340-568',
-    screenName: 'Featured',
-    league: 'Mega Ultra League',
-    result: 'WIN',
-    matchupSummary: 'Tinkaton, Mimikyu, Swampert vs Greninja, Giratina (Altered), Mewtwo (Armored) • 3 anomalies',
-    durationSec: 182,
-    videoBytes: 27582434,
-    isPinned: true,
-    isPublic: true,
-    userTierBadge: '🌟 Official Showcase • Shield Call & Backline Predictor',
-    highlightSec: 44,
-    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_shield/video.mp4',
-    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_shield/trace.jsonl',
-    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_shield'
-  },
-  {
-    shareId: 'f_gl_debuff',
-    battleId: 'log-1794105418391-578',
-    screenName: 'Featured',
-    league: 'GREAT LEAGUE',
-    result: 'WIN',
-    matchupSummary: 'Kanto Ninetales, Fearow, Shadow Pidgeot vs Milotic, Corviknight, Shadow Drifblim',
-    durationSec: 288,
-    videoBytes: 18613976,
-    isPinned: true,
-    isPublic: true,
-    userTierBadge: '🌟 Official Showcase • Debuff Math',
-    highlightSec: 118,
-    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_gl_debuff/video.mp4',
-    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_gl_debuff/trace.jsonl',
-    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_gl_debuff'
   }
 ];
 
@@ -163,6 +180,7 @@ interface HeroShowcaseSlide {
   label: string;
   shortLabel: string;
   league: string;
+  videoPath: string;
   gifPath: string;
   posterPath: string;
   watchUrl: string;
@@ -177,12 +195,13 @@ const HERO_SLIDES: HeroShowcaseSlide[] = [
     label: '✨ Shiny Origin Dialga • Roar of Time Pacing (Mega ML)',
     shortLabel: '✨ Shiny Dialga (ML)',
     league: 'MEGA MASTER LEAGUE',
+    videoPath: 'screenshots/featured_hero_shiny_dialga.mp4',
     gifPath: 'screenshots/featured_hero_shiny_dialga.gif',
     posterPath: 'screenshots/featured_hero_shiny_dialga_poster.png',
     watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer',
     highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer?t=18',
     caption:
-      '50% Translucent Shiny Origin Dialga HUD over live Mega Master League combat: Roar of Time (65E) READY (100% KO on Zekrom) with 1-Fast Throw Alert & Live Backline Predictor.',
+      '2x Retina 50% Translucent HUD over live Mega Master League combat: Roar of Time (65E) READY (100% KO on Zekrom) with 1-Fast Throw Alert & Live Backline Predictor.',
     callouts: [
       '50% Translucent HUD: Opponent CP & HP bars remain 100% visible through the glass',
       'Turn-Exact Alert: "1 LAST FAST -> THROW RoTime NOW! Beat Opp FsBolt"',
@@ -190,54 +209,57 @@ const HERO_SLIDES: HeroShowcaseSlide[] = [
     ]
   },
   {
-    id: 'ul_shield',
-    label: '🛡️ Shield Decision Call & Disguise Bust (Mega UL)',
-    shortLabel: '🛡️ Shield & Bust (UL)',
-    league: 'MEGA ULTRA LEAGUE',
-    gifPath: 'screenshots/featured_ul_disguise_shield.gif',
-    posterPath: 'screenshots/featured_ul_disguise_shield_poster.png',
-    watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_shield',
-    highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_shield?t=44',
+    id: 'ul_aura_nidoking',
+    label: '🟣 3D Shadow Aura & D-3 Stage Math (Ultra League)',
+    shortLabel: '🟣 Shadow Aura (UL)',
+    league: 'ULTRA LEAGUE',
+    videoPath: 'screenshots/featured_ul_aura_nidoking.mp4',
+    gifPath: 'screenshots/featured_ul_aura_nidoking.gif',
+    posterPath: 'screenshots/featured_ul_aura_nidoking_poster.png',
+    watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_aura_nidoking',
+    highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_aura_nidoking?t=5',
     caption:
-      'Mimikyu vs. Altered Giratina: Real-time Disguise Bust tracking, Shield Decision verdict, and live 3rd-slot Backline Prediction ("3rd: TINKA 16% FLRG 12%").',
+      'Auto-verifies Shadow Nidoking at 0:04 via 3D HSV Shadow Aura ("Shadow: 🟣 ON ✓") + dual AURA+DHP proof, narrows Observed-CP IVs (0/14/11), and scales D-3 Sand Tomb math live.',
     callouts: [
-      'Automatic Mimikyu Disguise Bust & stage tracking in the live header',
-      'Asymmetric 9-Shield Matrix (0S/1S/2S) updates dynamically as shields drop',
-      'Instant 2-Line AI Coach: "[ABC] STAY IN (PlyRgh) • Farm Locked Opp (34s)"'
+      '3D HSV Shadow Aura Detection: Automatically confirms Shadow: 🟣 ON ✓ in 0.4s',
+      'Observed-CP IV Narrowing: Narrows opponent spreads live for exact KO & survival math',
+      '3-Way ELO Backline Predictor: Surfaces live backline probabilities ("SKELE 21% • SAMPH 12%")'
     ]
   },
   {
-    id: 'gl_debuff',
-    label: '📉 Multi-Stage Debuff Math A-2 vs A-1 (Great League)',
-    shortLabel: '📉 Debuff Math (GL)',
-    league: 'GREAT LEAGUE',
-    gifPath: 'screenshots/featured_gl_debuff_math.gif',
-    posterPath: 'screenshots/featured_gl_debuff_math_poster.png',
-    watchUrl: 'https://dvr.silphscopepvp.com/watch/f_gl_debuff',
-    highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_gl_debuff?t=118',
+    id: 'ul_bp_skeledirge',
+    label: '⚡ Live BP+1 Breakpoint & Shadow: N/A Lock (Ultra League)',
+    shortLabel: '⚡ Live BP+1 (UL)',
+    league: 'ULTRA LEAGUE',
+    videoPath: 'screenshots/featured_ul_bp_skeledirge.mp4',
+    gifPath: 'screenshots/featured_ul_bp_skeledirge.gif',
+    posterPath: 'screenshots/featured_ul_bp_skeledirge_poster.png',
+    watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_bp_skeledirge',
+    highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_bp_skeledirge?t=134',
     caption:
-      'Shadow Pidgeot (Atk -2) vs. Shadow Drifblim (Atk -1): Every move damage cell scales in real time as Feather Dance & Icy Wind debuffs stack.',
+      'Mimikyu vs. Skeledirge (0/13/12 IVs): Lights up live ⚡BP+1 fast-move breakpoint badges, locks Shadow: N/A on unreleased Shadows, and verifies fast moves via Raw HP-Pulse Cadence.',
     callouts: [
-      'Real-Time Stage Scaling: Tracks [-4..+4] Attack & Defense stages per slot',
-      'Incoming Survival Math: "[SHIELD] TANK (0S) -> Twister IN 2F • Survives at 64% HP"',
-      'Tracks banked energy & HP across all 3 opponent slots simultaneously'
+      'Live Fast-Move Breakpoints: Flags ⚡BP+1 / 🛡️BLK-1 directly from Observed-CP IVs',
+      'Hybrid OTA Shadow Lock: Keeps Tinkaton, Skeledirge & Goodra locked to Shadow: N/A',
+      'Turn-Exact Catch Calls: Signals "0F LEFT -> CATCH Bulldo ON GMOLT!"'
     ]
   },
   {
-    id: 'ml_closer',
-    label: '🔄 Instant Closer Swap Alignment (Mega ML)',
-    shortLabel: '🔄 Closer Swap (ML)',
-    league: 'MEGA MASTER LEAGUE',
-    gifPath: 'screenshots/featured_ml_closer_align.gif',
-    posterPath: 'screenshots/featured_ml_closer_align_poster.png',
-    watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer',
-    highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer?t=100',
+    id: 'ul_catch_cobalion',
+    label: '🎭 A-2/D-1 Disguise Sync & 0F Catch (Ultra League)',
+    shortLabel: '🎭 Disguise & Catch (UL)',
+    league: 'ULTRA LEAGUE',
+    videoPath: 'screenshots/featured_ul_catch_cobalion.mp4',
+    gifPath: 'screenshots/featured_ul_catch_cobalion.gif',
+    posterPath: 'screenshots/featured_ul_catch_cobalion_poster.png',
+    watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_catch_cobalion',
+    highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_catch_cobalion?t=79',
     caption:
-      'Lugia KOs Primal Kyogre -> Opponent Origin Dialga enters -> AI Coach immediately signals "[ABB] SWAP -> KYOG TO CLOSE" to seal the endgame.',
+      'Tinkaton, Mimikyu & Swampert vs. Drifblim, Galarian Weezing & Cobalion: Ghost-VFX-safe Shadow: OFF ✓ proof, A-2/D-1 Disguise Bust sync, and 0F Swap-Catch onto Swampert.',
     callouts: [
-      'Instant Post-KO Alignment Coach: Signals exact switch window before opponent farms energy',
-      'Full 3v3 Bench Ledger: Shows Zekrom (0%), Primal Kyogre (0%), and Origin Dialga (100%)',
-      'Zero-Lag 30 FPS Hardware H.264 DVR with frame-synced Web Replay Theater'
+      'Ghost-VFX-Safe Shadow Proof: Verifies Drifblim as Shadow: OFF ✓ via ΔHP without aura bleed',
+      'Hardened Mimikyu Disguise Sync: Tracks A-2 👹D-1 cleanly without -2 DEF double-counting',
+      'Endgame Swap-Catch Coach: Signals exact 0F Brutal Swing catch onto Swampert'
     ]
   }
 ];
@@ -1173,7 +1195,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.54 • Latest Release
+                    v7.55 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1402,7 +1424,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.54)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.55)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -1514,11 +1536,24 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 }}
               >
                 <div className="relative rounded-[24px] overflow-hidden border border-teal-400/30 bg-slate-950">
-                  <img
-                    src={`${import.meta.env.BASE_URL}${heroShowStaticPoster ? activeHero.posterPath : activeHero.gifPath}`}
-                    alt={activeHero.label}
-                    className="w-full h-auto block"
-                  />
+                  {heroShowStaticPoster ? (
+                    <img
+                      src={`${import.meta.env.BASE_URL}${activeHero.posterPath}`}
+                      alt={activeHero.label}
+                      className="w-full h-auto block"
+                    />
+                  ) : (
+                    <video
+                      key={activeHero.videoPath}
+                      src={`${import.meta.env.BASE_URL}${activeHero.videoPath}`}
+                      poster={`${import.meta.env.BASE_URL}${activeHero.posterPath}`}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-auto block"
+                    />
+                  )}
                   {/* Floating Bottom Replay Theater Pill */}
                   <div className="absolute bottom-3 inset-x-3 flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-950/90 backdrop-blur-md border border-teal-400/50 shadow-lg">
                     <a
@@ -1533,9 +1568,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       type="button"
                       onClick={() => setHeroShowStaticPoster(!heroShowStaticPoster)}
                       className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono font-bold text-amber-300 border border-amber-400/40 cursor-pointer"
-                      title="Toggle between Animated GIF and High-Res Still Frame"
+                      title="Toggle between 2x Retina Video and High-Res Still Frame"
                     >
-                      {heroShowStaticPoster ? '🎞️ Play GIF' : '📸 Still Hi-Res'}
+                      {heroShowStaticPoster ? '🎬 Play 2x HD' : '📸 Still 2x Hi-Res'}
                     </button>
                   </div>
                 </div>
@@ -1580,10 +1615,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider" style={{ color: '#FACC15' }}>
                   <span>🌟 Official @Featured Replay Vault</span>
                   <span>•</span>
-                  <span className="text-teal-300">Click Any GIF to Open Full Battle + Live HUD</span>
+                  <span className="text-teal-300">Click Any Card to Open Full Battle + Live HUD</span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  See the 50% Translucent HUD in Real Combat
+                  See the 2x Retina 50% Translucent HUD in Real Combat
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl">
                   Every battle below was recorded at zero game lag using SilphScope&apos;s hardware H.264 DVR and cloned into our persistent <code className="text-teal-300">@Featured</code> vault. Click any card to open the full replay at <code className="text-amber-300">0:00</code> in the interactive Web Replay Theater, or tap a chapter pill to jump straight to the key moment.
@@ -1605,7 +1640,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Featured Battle Card 1: Great League Debuff Math */}
+              {/* Featured Battle Card 1: Ultra League 3D Shadow Aura & D-3 Stage Math */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
@@ -1613,14 +1648,21 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_gl_debuff') || CANONICAL_FEATURED_REPLAYS[2])}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(0);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_aura_nidoking') || CANONICAL_FEATURED_REPLAYS[0]);
+                    }}
                     className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
                     title="Click to watch full battle in the Synchronized HUD Replay Theater"
                   >
-                    <img
-                      src={`${import.meta.env.BASE_URL}screenshots/featured_gl_debuff_math.gif`}
-                      alt="Great League Multi-Stage Debuff Math & Shield Call"
-                      className="w-full h-[420px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+                    <video
+                      src={`${import.meta.env.BASE_URL}screenshots/featured_ul_aura_nidoking.mp4`}
+                      poster={`${import.meta.env.BASE_URL}screenshots/featured_ul_aura_nidoking_poster.png`}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-[460px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/90 border border-teal-400/60 text-[10.5px] font-extrabold text-teal-300">
                       @Featured • 🌟 Official Showcase
@@ -1630,17 +1672,17 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         ▶️ Watch Full Battle (0:00)
                       </span>
                       <span className="text-[11px] font-mono font-bold text-amber-300">
-                        WIN • Great League
+                        WIN • Ultra League
                       </span>
                     </div>
                   </button>
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
-                      1. Real-Time Multi-Stage Buff/Debuff Math (<code className="text-rose-300">A-2 vs A-1</code>)
+                      1. 3D Shadow Aura &amp; Observed-CP IV Math (<code className="text-rose-300">D-3</code>)
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong>Kanto Ninetales, Fearow &amp; Shadow Pidgeot</strong> vs. <strong>Milotic, Corviknight &amp; Shadow Drifblim</strong>. Watch the HUD dynamically recompute exact move damage as Feather Dance and Icy Wind debuffs stack to <code className="text-rose-300">Atk -2</code> and <code className="text-rose-300">Atk -1</code>, confirming Shadow Pidgeot safely tanks at 64% HP.
+                      <strong>Melmetal, Mimikyu &amp; Galarian Moltres</strong> vs. <strong>Shadow Nidoking, Clefable &amp; Kommo-o</strong>. Auto-verifies <code className="text-purple-300">Shadow: 🟣 ON ✓</code> at 0:04 via 3D HSV battlefield aura + dual <code className="text-teal-300">AURA+DHP</code>, narrows Observed-CP IVs (<code className="text-amber-300">0/14/11</code>), and tracks <code className="text-rose-300">Def -3</code> Sand Tomb + Disguise Bust.
                     </p>
                   </div>
                 </div>
@@ -1648,22 +1690,28 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_gl_debuff') || CANONICAL_FEATURED_REPLAYS[2])}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(0);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_aura_nidoking') || CANONICAL_FEATURED_REPLAYS[0]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30 cursor-pointer"
                   >
                     ▶️ Start (0:00)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_gl_debuff') || CANONICAL_FEATURED_REPLAYS[2]), highlightSec: 118 })}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(5);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_aura_nidoking') || CANONICAL_FEATURED_REPLAYS[0]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
-                    ⚡ Jump to Debuff &amp; Shield Call (1:58)
+                    🟣 Jump to 3D Aura Lock (0:05)
                   </button>
                 </div>
               </div>
 
-              {/* Featured Battle Card 2: Mega Master League Shiny Dialga & Closer Swap */}
+              {/* Featured Battle Card 2: Ultra League Live ⚡BP+1 Breakpoint & Shadow: N/A */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
@@ -1671,14 +1719,21 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0])}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(0);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_bp_skeledirge') || CANONICAL_FEATURED_REPLAYS[1]);
+                    }}
                     className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
                     title="Click to watch full battle in the Synchronized HUD Replay Theater"
                   >
-                    <img
-                      src={`${import.meta.env.BASE_URL}screenshots/featured_ml_closer_align.gif`}
-                      alt="Mega Master League Shiny Origin Dialga & Closer Swap Alignment"
-                      className="w-full h-[420px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+                    <video
+                      src={`${import.meta.env.BASE_URL}screenshots/featured_ul_bp_skeledirge.mp4`}
+                      poster={`${import.meta.env.BASE_URL}screenshots/featured_ul_bp_skeledirge_poster.png`}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-[460px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/90 border border-teal-400/60 text-[10.5px] font-extrabold text-teal-300">
                       @Featured • 🌟 Official Showcase
@@ -1688,17 +1743,17 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         ▶️ Watch Full Battle (0:00)
                       </span>
                       <span className="text-[11px] font-mono font-bold text-amber-300">
-                        WIN • Mega Master
+                        WIN • Ultra League
                       </span>
                     </div>
                   </button>
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
-                      2. Shiny Origin Dialga Pacing &amp; Instant Closer Alignment
+                      2. Live <code className="text-emerald-300">⚡BP+1</code> Breakpoint &amp; <code className="text-slate-300">Shadow: N/A</code> Lock
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong>Shiny Origin Dialga, Lugia &amp; Primal Kyogre</strong> vs. <strong>Zekrom, Primal Kyogre &amp; Origin Dialga</strong>. After Lugia KOs Primal Kyogre and the opponent&apos;s Origin Dialga enters at 100% HP, the 4-Pillar Coach immediately triggers <code className="text-teal-300">[ABB] SWAP -&gt; KYOG TO CLOSE</code>.
+                      <strong>Melmetal, Mimikyu &amp; Galarian Moltres</strong> vs. <strong>Tinkaton, Skeledirge &amp; Goodra</strong>. Narrowing Skeledirge&apos;s CP (<code className="text-amber-300">0/13/12</code>) triggers a live <code className="text-emerald-300">⚡BP+1</code> fast-move breakpoint badge while keeping unreleased Shadows locked to <code className="text-slate-200">Shadow: N/A</code>.
                     </p>
                   </div>
                 </div>
@@ -1706,29 +1761,38 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0])}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(0);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_bp_skeledirge') || CANONICAL_FEATURED_REPLAYS[1]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30 cursor-pointer"
                   >
                     ▶️ Start (0:00)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0]), highlightSec: 18 })}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(27);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_bp_skeledirge') || CANONICAL_FEATURED_REPLAYS[1]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 font-extrabold text-[11px] border border-teal-400/50 cursor-pointer"
                   >
-                    ✨ Shiny Dialga RoTime (0:18)
+                    🛑 0F Catch (0:27)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0]), highlightSec: 100 })}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(134);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_bp_skeledirge') || CANONICAL_FEATURED_REPLAYS[1]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
-                    🔄 Closer Swap (1:40)
+                    ⚡ Live BP+1 (2:14)
                   </button>
                 </div>
               </div>
 
-              {/* Featured Battle Card 3: Mega Ultra League Shield Call & Disguise Bust */}
+              {/* Featured Battle Card 3: Ultra League Disguise Sync, Non-Shadow Proof & 0F Catch */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
@@ -1736,14 +1800,21 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_shield') || CANONICAL_FEATURED_REPLAYS[1])}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(0);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_catch_cobalion') || CANONICAL_FEATURED_REPLAYS[2]);
+                    }}
                     className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
                     title="Click to watch full battle in the Synchronized HUD Replay Theater"
                   >
-                    <img
-                      src={`${import.meta.env.BASE_URL}screenshots/featured_ul_disguise_shield.gif`}
-                      alt="Mega Ultra League Shield Call, Disguise Bust & Backline Predictor"
-                      className="w-full h-[420px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+                    <video
+                      src={`${import.meta.env.BASE_URL}screenshots/featured_ul_catch_cobalion.mp4`}
+                      poster={`${import.meta.env.BASE_URL}screenshots/featured_ul_catch_cobalion_poster.png`}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-[460px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/90 border border-teal-400/60 text-[10.5px] font-extrabold text-teal-300">
                       @Featured • 🌟 Official Showcase
@@ -1753,17 +1824,17 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         ▶️ Watch Full Battle (0:00)
                       </span>
                       <span className="text-[11px] font-mono font-bold text-amber-300">
-                        WIN • Mega Ultra
+                        WIN • Ultra League
                       </span>
                     </div>
                   </button>
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
-                      3. Shield Decision Call, Disguise Bust &amp; Backline Predictor
+                      3. Disguise Sync, Non-Shadow Proof &amp; Endgame Catch
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong>Tinkaton, Mimikyu &amp; Swampert</strong> vs. <strong>Greninja, Altered Giratina &amp; Armored Mewtwo</strong>. Demonstrates live <code className="text-amber-300">BLOCKED!</code> shield verification, Mimikyu Disguise state tracking, and real-time 3rd-slot Backline Prediction (<code className="text-teal-300">3rd: TINKA 16% FLRG 12%</code>).
+                      <strong>Tinkaton, Mimikyu &amp; Swampert</strong> vs. <strong>Drifblim, Galarian Weezing &amp; Cobalion</strong>. Verifies Drifblim as <code className="text-teal-300">Shadow: OFF ✓</code> without Ghost VFX bleed, tracks <code className="text-rose-300">A-2 👹D-1</code> cleanly, and nails a <code className="text-amber-300">0F</code> Swap-Catch onto Swampert.
                     </p>
                   </div>
                 </div>
@@ -1771,17 +1842,33 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_shield') || CANONICAL_FEATURED_REPLAYS[1])}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(0);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_catch_cobalion') || CANONICAL_FEATURED_REPLAYS[2]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30 cursor-pointer"
                   >
                     ▶️ Start (0:00)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_shield') || CANONICAL_FEATURED_REPLAYS[1]), highlightSec: 44 })}
+                    onClick={() => {
+                      setSelectedWatchSeekSec(79);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_catch_cobalion') || CANONICAL_FEATURED_REPLAYS[2]);
+                    }}
                     className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
-                    🛡️ Jump to Shield &amp; Predictor (0:44)
+                    🎭 A-2/D-1 Sync (1:19)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedWatchSeekSec(105);
+                      setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_catch_cobalion') || CANONICAL_FEATURED_REPLAYS[2]);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 font-extrabold text-[11px] border border-teal-400/50 cursor-pointer"
+                  >
+                    🛑 0F Catch (1:45)
                   </button>
                 </div>
               </div>
@@ -2334,8 +2421,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 style={{ backgroundColor: '#081120', borderColor: '#FACC15' }}
               >
                 <img
-                  src={`${import.meta.env.BASE_URL}screenshots/featured_gl_debuff_math_poster.png`}
-                  alt="Annotated 50% Translucent HUD — Multi-Stage Debuff Math"
+                  src={`${import.meta.env.BASE_URL}screenshots/featured_ul_bp_skeledirge_poster.png`}
+                  alt="Annotated 50% Translucent HUD — Live BP+1 Breakpoint & Shadow Lock"
                   className="rounded-2xl w-full h-auto block"
                 />
               </div>
@@ -2344,9 +2431,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="lg:col-span-7 space-y-4">
               {[
                 {
-                  step: 'Row 1 • Mirrored Live Header',
-                  badge: '[CP, HP%, E, 🛡️] | [🛡️, E, HP%, CP]',
-                  desc: 'Displays your active Pokémon on the left and the opponent on the right. Single-tapping the top-left Origin Dialga crest strictly alternates between Full HUD <-> Compact HUD, while holding the crest for 2.0 seconds activates or deactivates Log-Only Stealth Mode. After combat finishes, the Post-Battle Summary includes a 1-tap 📊 Battle Log shortcut button to stop the overlay and jump straight to your logs. Live buff/debuff stage badges (e.g., A-2, D+1, BUST) appear automatically whenever stat-stage moves fire.'
+                  step: 'Row 1 • Mirrored Live Header & Auto-Provenance Pills',
+                  badge: '[HP%, E, 🛡️] | Shadow: 🟣 ON ✓ / OFF ✓ / N/A | Form ✓',
+                  desc: 'Displays your active Pokémon on the left and the opponent on the right, plus 3D HSV Shadow Aura verification (Shadow: 🟣 ON ✓, Shadow: OFF ✓, or Shadow: N/A for unreleased Shadows) and automatic Form ✓ disambiguation. Single-tapping the top-left crest alternates Full HUD <-> Compact HUD, while holding for 2.0s toggles Log-Only Stealth Mode, and idle/post-set bars keep a 1-tap 📊 Battle Log shortcut handy. Live buff/debuff stage badges (e.g., A-2, D-1, D-3, BUST) appear automatically whenever stat-stage moves fire.'
                 },
                 {
                   step: 'Row 2 • Active Matchup & Synchronized Swap Timers',
@@ -2359,9 +2446,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   desc: 'Shows how all 3 of your Pokémon perform against each revealed opponent Pokémon across 0-shield, 1-shield, and 2-shield scenarios (Green = Win, Grey = Neutral, Red = Loss). For unrevealed opponent slots, displays live Backline Predictor probabilities.'
                 },
                 {
-                  step: 'Rows 4 & 5 • Turn-Exact Move Pacing & Real-Time Stage Damage',
-                  badge: 'Double 80ms Haptic Pulse at 1 Fast Move Left',
-                  desc: 'Shows how many fast moves remain until each charged attack is ready, plus the exact damage percentage each move will deal against all 3 Pokémon on the other side—automatically scaled for Shadow 1.2x multipliers and live [-4..+4] Attack/Defense buffs and debuffs.'
+                  step: 'Rows 4 & 5 • Turn-Exact Move Pacing, Live Breakpoints & Stage Damage',
+                  badge: '⚡BP+1 / 🛡️BLK-1 • Raw-Pulse Cadence ✓ • Double 80ms Haptic',
+                  desc: 'Shows fast moves remaining until each charged attack is ready, confirms opponent fast moves via Raw HP-Pulse Turn Cadence (✓), narrows opponent IVs from Observed CP to surface live ⚡BP+1 / 🛡️BLK-1 fast-move breakpoints & bulkpoints, and computes exact damage percentages across all 3 slots—automatically scaled for Shadow 1.2x multipliers and live [-4..+4] Attack/Defense buffs and debuffs.'
                 },
                 {
                   step: 'Row 6 • 2-Line 4-Pillar AI Tactical Coach & Shield Verdict',

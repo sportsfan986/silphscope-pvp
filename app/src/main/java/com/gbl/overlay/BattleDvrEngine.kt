@@ -172,13 +172,20 @@ internal fun OverlayService.buildDvrTraceSnapshot(nowMs: Long): BattleDeepTraceF
     val oLocked = activeOppBase.isNotEmpty() && userManualShadowLocks.containsKey(activeOppBase)
     val oVerified = oLocked || (activeOppBase.isNotEmpty() && autoVerifiedShadowStates.containsKey(activeOppBase))
     val oSrc = if (oLocked) "MANUAL" else autoShadowProvenance[activeOppBase].orEmpty()
+    val activeLg = currentPreset?.league ?: "MASTER LEAGUE"
+    val oShadElig = activeOppBase.isEmpty() || FormResolver.isShadowEligibleVariant(
+        getPokemonMeta(activeOpponentName, activeLg, false)
+    )
+    val oFmLocked = activeOppBase.isNotEmpty() && userManualFormLocks.containsKey(activeOppBase)
+    val oFmVer = oFmLocked || (activeOppBase.isNotEmpty() && autoVerifiedForms.containsKey(activeOppBase))
+    val oFmSrc = if (oFmLocked) "MANUAL" else autoFormProvenance[activeOppBase].orEmpty()
     val oCp = oppSlotObservedCp.getOrElse(oIdx) { -1 }
     val oFastOvr = detectedOppFastMoveOverride.getOrNull(oIdx)?.trim().orEmpty()
     val oFastSt = oppFastMoveStatus.getOrElse(oIdx) { "UNCONFIRMED" }
     val oBgIvs = if (activeOppBase.isNotEmpty() && oCp > 0) {
         IvMatrixEngine.resolveBestGuessOpponentIvProfile(
             speciesName = activeOpponentName,
-            league = currentPreset?.league ?: "MASTER LEAGUE",
+            league = activeLg,
             isShadow = isOpponentShadow,
             observedCp = oCp
         )?.bestGuessIvs.orEmpty()
@@ -249,9 +256,13 @@ internal fun OverlayService.buildDvrTraceSnapshot(nowMs: Long): BattleDeepTraceF
         },
         revealedOppSpecies = detectedOpponents.map { formatOpponentNameWithShadow(it) },
         userSlotEverOnField = playerSlotEverOnField.toList(),
+        oppShadowEligible = oShadElig,
         oppShadowVerified = oVerified,
         oppShadowLocked = oLocked,
         oppShadowSource = oSrc,
+        oppFormVerified = oFmVer,
+        oppFormLocked = oFmLocked,
+        oppFormSource = oFmSrc,
         oppAuraDensity = oppSlotLastAuraDensity.getOrElse(oIdx) { 0f },
         oppAuraFlicker = oppSlotLastAuraFlicker.getOrElse(oIdx) { 0f },
         oppObservedCp = oCp,

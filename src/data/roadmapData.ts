@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.55',
+    codename: '2x Retina @Featured Battle Showcases, Replay HUD v7.54 Parity & Non-Truncating Breakpoint Pills',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Promotes three clean 0-anomaly v7.53 Ultra League wins to @Featured with 2x Retina (1088x2368, 24 fps) homepage media, upgrades /watch/:shareId to full v7.54 HUD parity, removes double-dimmed HUD glass opacity, and prevents live Breakpoint micro-pills from truncating behind ellipsis.',
+    icon: '🎬',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Promoted f_ul_aura_nidoking (3D HSV Shadow Aura + D-3 math), f_ul_bp_skeledirge (live ⚡BP+1 + Shadow: N/A), and f_ul_catch_cobalion (Shadow: OFF ✓ + A-2/D-1 Disguise sync + 0F Catch) to @Featured with 2x Retina 1088x2368 MP4 & poster assets and fixed ?t= chapter deep-linking',
+      'Extracted #sky-my-bp-pill and #sky-opp-bp-pill outside text-overflow: ellipsis spans in overlay.html so ⚡BP+1, ⚠️BP+1, and 🛡️BLK-1 badges always render unclipped next to READY pills',
+      'Upgraded Cloudflare Replay Theater to v7.54 parity with crisp 1.0 text opacity over 50% translucent glass, 511-key Shadow eligibility + pokemonDb.ts species backfill (333 species) & multi-form lists, and true videoElapsedMs duration extraction',
+      'Added oppShadowEligible, oppFormVerified, oppFormLocked, and oppFormSource trace emission to BattleDvrEngine.kt'
+    ]
+  },
+  {
     version: 'v7.54',
     codename: 'Persistent Idle & Post-Set "📊 Battle Log" Controls, 120s Post-Battle Bar & Non-DVR Stop Guard',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Restores 1-tap "Stop Overlay & Open Battle Log" access across idle between-battle toolbars, Compact hidden-toolbar headers, and GBL end-of-set / ELO Locked banners while extending the post-battle auto-logged window to 120s and protecting non-DVR Stop snapshots.',
     icon: '📊',

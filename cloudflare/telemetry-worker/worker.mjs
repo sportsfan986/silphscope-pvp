@@ -3487,6 +3487,7 @@ async function cloneReplayToFeatured(env, kv, store, options = {}) {
   const featTraceKey = `replays/_featured/${featuredId}_trace.jsonl`;
   let videoBytes = Number(source.videoBytes) || 0;
   let traceBytes = Number(source.traceBytes) || 0;
+  let resolvedDurationSec = Number(options.durationSec) || Number(source.durationSec) || 0;
 
   if (env.REPLAY_BUCKET) {
     let vidBuf = null;
@@ -3532,6 +3533,19 @@ async function cloneReplayToFeatured(env, kv, store, options = {}) {
           traceText = JSON.stringify(line0) + traceText.slice(nlIdx);
         } catch (_) {}
       }
+      const tailSlice = traceText.length > 65536 ? traceText.slice(-65536) : traceText;
+      let maxVideoElapsedMs = 0;
+      let vm;
+      const vmRe = /"videoElapsedMs":(\d+)/g;
+      while ((vm = vmRe.exec(tailSlice)) !== null) {
+        const valMs = Number(vm[1]) || 0;
+        if (valMs > maxVideoElapsedMs && valMs <= 600000) {
+          maxVideoElapsedMs = valMs;
+        }
+      }
+      if (maxVideoElapsedMs >= 3000) {
+        resolvedDurationSec = Math.round(maxVideoElapsedMs / 1000);
+      }
       traceBytes = new TextEncoder().encode(traceText).byteLength;
       await env.REPLAY_BUCKET.put(featTraceKey, traceText, {
         httpMetadata: { contentType: 'application/x-ndjson; charset=utf-8' },
@@ -3558,6 +3572,7 @@ async function cloneReplayToFeatured(env, kv, store, options = {}) {
     isPublic: true,
     hideNames: false,
     highlightSec,
+    durationSec: resolvedDurationSec,
     showcaseTitle,
     videoKey: featVideoKey,
     traceKey: featTraceKey,
@@ -3985,9 +4000,31 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       border: none;
       padding: 0;
       pointer-events: auto;
-      opacity: 0.50;
+      opacity: 1;
       transition: top 0.2s, bottom 0.2s, opacity 0.15s;
       z-index: 10;
+    }
+    html.clean-stage .close-theater-x,
+    html.clean-stage .controls-bar,
+    html.clean-stage #diag-issue-banner,
+    html.clean-stage #dual-energy-pill {
+      display: none !important;
+    }
+    html.clean-stage main,
+    html.clean-stage .theater-workspace,
+    html.clean-stage .stage-wrap {
+      padding: 0 !important;
+      margin: 0 !important;
+      gap: 0 !important;
+    }
+    html.clean-stage .video-box {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
     }
     .hud-layer.pos-top {
       top: 18px;
@@ -4351,6 +4388,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     let sideBySide = false;
     let selectedSpeed = 1;
     let mp4TimeCompressionRatio = 1.0;
+    const IS_CLEAN_STAGE = new URLSearchParams(window.location.search).get('cleanStage') === '1';
+    if (IS_CLEAN_STAGE) document.documentElement.classList.add('clean-stage');
+    let currentHudTransparencyPct = 50;
     let compactHudConfig = {
       showOppAttacks: false,
       showMyAttacks: false,
@@ -4575,7 +4615,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       document.getElementById('btn-pos').textContent = hudTop ? '⬆️ Top' : '⬇️ Bot';
     }
     function updateOpacity(val) {
-      hudLayer.style.opacity = (Number(val) / 100).toFixed(2);
+      currentHudTransparencyPct = Math.max(15, Math.min(100, Number(val) || 50));
+      syncHudFrame();
     }
     function togglePrivacy() {
       hideNames = !hideNames;
@@ -4795,6 +4836,10 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       const clean = s.replace(/^Shadow\\s+/i, '').replace(/\\s*\\(Shadow\\)/i, '').trim();
       const lower = clean.toLowerCase();
       const base = lower.replace(/\\s*\\([^)]*\\)/g, '').trim().replace(/\\s+/g, '_');
+      const shadSet = new Set(Array.isArray(PVP_DB.shadowEligibleKeys) ? PVP_DB.shadowEligibleKeys : []);
+      const fallbackShadElig = shadSet.size > 0
+        ? (shadSet.has(lower) || shadSet.has(base) || shadSet.has(base.replace(/-/g, '_')))
+        : true;
       const dbEntry =
         PVP_DB.species[lower] ||
         PVP_DB.species[lower.replace(/\\s+/g, '_')] ||
@@ -4804,6 +4849,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           speciesId: base || 'pokemon',
           baseSpecies: base || 'pokemon',
           formLabel: 'Base',
+          shadowEligible: fallbackShadElig,
+          forms: ['Base'],
           types: ['normal'],
           defaultCp: 1500,
           fastMove: 'Tackle',
@@ -5940,21 +5987,25 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         oppCountMode: 'my_fasts',
         enable4ChargedMoves: false,
         fastDetectTurnOffset: 0,
-        overlayTransparencyPct: 50,
+        overlayTransparencyPct: currentHudTransparencyPct,
         appThemeId: 'dialga_shiny_midnight',
         aiAdviceHudPosition: hudTop ? 'top' : 'bottom',
         isOverlayMinimized: false,
         maxHorizonTurns,
-        isOpponentShadow: actOpp.isShadow,
+        oppShadowEligible: (actOpp.meta.shadowEligible !== false) && (f.oppShadowEligible !== false),
+        isOpponentShadow: (f.oppShadowEligible === false || actOpp.meta.shadowEligible === false) ? false : actOpp.isShadow,
         oppShadowVerified: Boolean(f.oppShadowVerified),
         oppShadowLocked: Boolean(f.oppShadowLocked),
         oppShadowSource: typeof f.oppShadowSource === 'string' ? f.oppShadowSource : '',
+        oppFormVerified: f.oppFormVerified !== undefined ? Boolean(f.oppFormVerified) : Boolean(Array.isArray(actOpp.meta.forms) && actOpp.meta.forms.length > 1),
+        oppFormLocked: Boolean(f.oppFormLocked),
+        oppFormSource: typeof f.oppFormSource === 'string' && f.oppFormSource ? f.oppFormSource : 'AUTO',
         liveMyBpDeltaHp: Number(f.liveMyBpDeltaHp) || 0,
         liveOppBpDeltaHp: Number(f.liveOppBpDeltaHp) || 0,
         oppObservedCp: Number(f.oppObservedCp) || -1,
         oppBestGuessIvs: typeof f.oppBestGuessIvs === 'string' ? f.oppBestGuessIvs : '',
         currentFormLabel: actOpp.meta.formLabel || 'Base',
-        availableForms: [actOpp.meta.formLabel || 'Base'],
+        availableForms: (Array.isArray(actOpp.meta.forms) && actOpp.meta.forms.length > 0) ? actOpp.meta.forms : [actOpp.meta.formLabel || 'Base'],
         userActivePokemon: actUser.name,
         activeUserSlotIndex: uIdx,
         activeOpponentSlotIndex: oIdx,
@@ -6127,7 +6178,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           const pTag = String(f.oppHpPromoTag || (oEff > oM && oH >= oEff ? '★HP' : '')).trim();
           const pSuffix = pTag ? (' ' + pTag) : '';
           pillEl.textContent = '⚡ U: ' + uEff + 'E [M:' + uM + 'E ' + uCm + '% | H:' + uH + 'E ' + uCh + '%] • O: ' + oEff + 'E [M:' + oM + 'E ' + oCm + '% | H:' + oH + 'E ' + oCh + '%' + pSuffix + ']';
-          pillEl.style.display = hudMode === 'off' ? 'none' : 'block';
+          pillEl.style.display = (IS_CLEAN_STAGE || hudMode === 'off') ? 'none' : 'block';
         }
         if (typeof win.setReplayShieldOverlayEnabled === 'function') {
           win.setReplayShieldOverlayEnabled(showShieldHud);
@@ -8199,7 +8250,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.54',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.55',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;

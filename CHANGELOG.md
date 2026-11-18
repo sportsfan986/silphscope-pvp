@@ -2,6 +2,15 @@
 
 ---
 
+## v7.55 (2026-11-17) — 2x Retina @Featured Battle Showcases, Replay HUD v7.54 Parity & Non-Truncating Breakpoint Pills
+*Showcase, Web Replay Theater & HUD polish release (`v7.55`, `versionCode = 1755`) promoting three clean `0-anomaly` `v7.53` Ultra League wins to `@Featured`, upgrading `/watch/:shareId` to full `v7.54` HUD parity, fixing live Breakpoint micro-pill ellipsis truncation, and upgrading homepage showcase media to `2x` Retina (`1088×2368`, `24 fps`).*
+
+- **3 New Official `@Featured` Ultra League Replays & `2x` Retina Website Media (`MarketingWebsite.tsx`, `public/screenshots/`, `docs/screenshots/`)**: Promoted `f_ul_aura_nidoking` (3D HSV Shadow Aura `Shadow: 🟣 ON ✓`, `0/14/11` Observed-CP IVs & `D-3` Sand Tomb math), `f_ul_bp_skeledirge` (live `⚡BP+1` fast-move breakpoint, `Shadow: N/A` lock & `0F` Catch alerts), and `f_ul_catch_cobalion` (Ghost-VFX-safe `Shadow: OFF ✓` proof, `A-2 👹D-1` Disguise sync & `0F` Swap-Catch) to persistent `@Featured` storage, re-rendered all 4 Hero/Card clips & posters at `2x` Retina (`1088×2368` `24 fps` `.mp4` + `_poster.png` + optimized `.gif` fallbacks), and fixed `?t=` chapter deep-linking on homepage cards.
+- **Non-Truncating Live Breakpoint & Bulkpoint Micro-Pills (`overlay.html`, `overlay-asset.mjs`)**: Extracted `#sky-my-bp-pill` and `#sky-opp-bp-pill` (`flex-shrink: 0`) outside the `text-overflow: ellipsis` fast-move spans so `⚡BP+1`, `⚠️BP+1`, and `🛡️BLK-1` badges never clip behind `...` next to `READY` energy pills.
+- **Cloudflare Watch Theater `v7.54` Parity, Authentic 50% Glass Contrast & True Duration Extraction (`worker.mjs`, `generate-worker-overlay.mjs`, `BattleDvrEngine.kt`)**: Removed double-dimmed `.hud-layer` CSS opacity so text stays 100% crisp over 50% translucent glass, added `STATIC_RELEASED_SHADOW_KEYS` (`511` keys) + `pokemonDb.ts` species backfill (`333` species) & multi-form lists for `Shadow: N/A` and `Form ✓` parity in `/watch/:shareId`, persisted `oppShadowEligible` & `oppFormVerified` in `BattleDvrEngine.kt`, and auto-corrected `cloneReplayToFeatured` `durationSec` from `videoElapsedMs`.
+
+---
+
 ## v7.54 (2026-11-17) — Persistent Idle & Post-Set "📊 Battle Log" Controls, 120s Post-Battle Bar & Non-DVR Stop Guard
 *Usability & overlay navigation polish release (`v7.54`, `versionCode = 1754`) restoring always-accessible 1-tap exit from the floating overlay straight into SilphScope's Battle Log.*
 
