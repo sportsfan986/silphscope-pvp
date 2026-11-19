@@ -1199,12 +1199,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         ['--mk-accent2-rgb' as any]: mkAccent2Rgb,
         backgroundColor: activeTheme.bgHex,
         color: activeTheme.textPrimaryHex,
-        backgroundImage: `radial-gradient(circle at 18% 12%, rgba(${mkAccentRgb}, ${activeTheme.isLight ? '0.10' : '0.11'}) 0%, transparent 42%), radial-gradient(circle at 82% 18%, rgba(${mkAccent2Rgb}, ${activeTheme.isLight ? '0.08' : '0.08'}) 0%, transparent 38%), linear-gradient(180deg, ${activeTheme.bgHex} 0%, ${activeTheme.cardAltHex} 55%, ${activeTheme.bgHex} 100%)`
+        backgroundImage: `radial-gradient(circle at 12% 8%, rgba(${mkAccentRgb}, ${activeTheme.isLight ? '0.08' : '0.09'}) 0%, transparent 32%), radial-gradient(circle at 88% 36%, rgba(${mkAccent2Rgb}, ${activeTheme.isLight ? '0.06' : '0.06'}) 0%, transparent 28%), linear-gradient(180deg, ${activeTheme.bgHex} 0%, ${activeTheme.cardAltHex} 55%, ${activeTheme.bgHex} 100%)`
       }}
     >
       <style>{`
         .marketing-surface .bg-\\[\\#0E1B2E\\],
         .marketing-surface .bg-\\[\\#0E1B2E\\]\\/90,
+        .marketing-surface .bg-\\[\\#0A1526\\],
+        .marketing-surface .bg-\\[\\#0c1d33\\],
         .marketing-surface .bg-slate-900,
         .marketing-surface .bg-slate-900\\/90,
         .marketing-surface .bg-slate-900\\/80,
@@ -1213,7 +1215,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           backdrop-filter: ${showThemeWatermark ? 'blur(2px)' : 'none'};
         }
         .marketing-surface .bg-\\[\\#081120\\],
+        .marketing-surface .bg-\\[\\#081120\\]\\/90,
         .marketing-surface .bg-\\[\\#07101E\\],
+        .marketing-surface .bg-\\[\\#071222\\],
+        .marketing-surface .bg-\\[\\#091527\\],
         .marketing-surface .bg-slate-950:not(.mk-media-preserve *):not(.mk-media-preserve),
         .marketing-surface .bg-slate-950\\/90:not(.mk-media-preserve *),
         .marketing-surface .bg-slate-950\\/85:not(.fixed),
@@ -1222,47 +1227,108 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         }
         .marketing-surface .bg-slate-800:not(.mk-media-preserve *),
         .marketing-surface .bg-slate-800\\/80:not(.mk-media-preserve *),
+        .marketing-surface .bg-slate-800\\/70:not(.mk-media-preserve *),
         .marketing-surface .bg-slate-800\\/60:not(.mk-media-preserve *) {
           background-color: color-mix(in srgb, var(--mk-card-alt) 85%, var(--mk-accent2) 15%) !important;
           border-color: var(--mk-border) !important;
         }
+        .marketing-surface .hover\\:bg-\\[\\#0E1B2E\\]:hover {
+          background-color: var(--mk-card) !important;
+        }
         .marketing-surface .border-\\[\\#19304E\\],
         .marketing-surface .border-slate-800,
         .marketing-surface .border-slate-800\\/80,
+        .marketing-surface .border-slate-800\\/70,
         .marketing-surface .border-slate-800\\/60,
-        .marketing-surface .border-slate-700 {
+        .marketing-surface .border-slate-700,
+        .marketing-surface .border-slate-700\\/80,
+        .marketing-surface .border-slate-700\\/60 {
           border-color: var(--mk-border) !important;
         }
         .marketing-surface .bg-teal-400,
-        .marketing-surface .bg-cyan-400 {
+        .marketing-surface .bg-teal-500,
+        .marketing-surface .bg-cyan-400,
+        .marketing-surface .bg-cyan-500 {
           background-color: var(--mk-accent) !important;
           color: var(--mk-cta-text) !important;
           border-color: var(--mk-accent) !important;
         }
+        .marketing-surface .hover\\:bg-teal-300:hover {
+          background-color: var(--mk-accent) !important;
+          filter: brightness(1.08);
+        }
+        .marketing-surface .text-teal-400:not(.mk-media-preserve *),
         .marketing-surface .text-teal-300:not(.mk-media-preserve *),
         .marketing-surface .text-teal-200:not(.mk-media-preserve *),
         .marketing-surface .text-cyan-300:not(.mk-media-preserve *),
         .marketing-surface .text-cyan-200:not(.mk-media-preserve *) {
           color: var(--mk-accent) !important;
         }
+        .marketing-surface .text-teal-200\\/80:not(.mk-media-preserve *),
+        .marketing-surface .text-cyan-200\\/80:not(.mk-media-preserve *) {
+          color: var(--mk-muted) !important;
+        }
+        .marketing-surface .text-teal-100:not(.mk-media-preserve *) {
+          color: var(--mk-text) !important;
+        }
+        .marketing-surface .hover\\:text-teal-300:hover:not(.mk-media-preserve *),
+        .marketing-surface .hover\\:text-teal-200:hover:not(.mk-media-preserve *),
+        .marketing-surface .hover\\:text-cyan-200:hover:not(.mk-media-preserve *) {
+          color: var(--mk-accent) !important;
+        }
         .marketing-surface .text-amber-300:not(.mk-media-preserve *),
         .marketing-surface .text-amber-200:not(.mk-media-preserve *) {
           color: var(--mk-accent2) !important;
         }
+        .marketing-surface .border-teal-300,
+        .marketing-surface .border-teal-400,
+        .marketing-surface .border-teal-400\\/30,
         .marketing-surface .border-teal-400\\/40,
+        .marketing-surface .border-teal-400\\/45,
         .marketing-surface .border-teal-400\\/50,
         .marketing-surface .border-teal-400\\/60,
+        .marketing-surface .border-teal-500,
+        .marketing-surface .border-teal-500\\/30,
         .marketing-surface .border-teal-500\\/40,
+        .marketing-surface .border-cyan-400,
+        .marketing-surface .border-cyan-400\\/40,
         .marketing-surface .border-cyan-400\\/50,
+        .marketing-surface .border-cyan-500,
+        .marketing-surface .border-cyan-500\\/35,
         .marketing-surface .border-cyan-500\\/40 {
           border-color: rgba(var(--mk-accent-rgb), 0.45) !important;
         }
+        .marketing-surface .hover\\:border-teal-400:hover,
+        .marketing-surface .hover\\:border-teal-400\\/50:hover,
+        .marketing-surface .hover\\:border-teal-400\\/70:hover {
+          border-color: rgba(var(--mk-accent-rgb), 0.78) !important;
+        }
+        .marketing-surface .ring-teal-400\\/50 {
+          --tw-ring-color: rgba(var(--mk-accent-rgb), 0.5) !important;
+        }
+        .marketing-surface .bg-teal-950,
         .marketing-surface .bg-teal-950\\/40,
+        .marketing-surface .bg-cyan-950,
         .marketing-surface .bg-cyan-950\\/40,
+        .marketing-surface .bg-teal-400\\/10,
+        .marketing-surface .bg-teal-400\\/15,
         .marketing-surface .bg-teal-400\\/20,
         .marketing-surface .bg-teal-500\\/15,
+        .marketing-surface .bg-teal-500\\/20,
+        .marketing-surface .bg-cyan-400\\/10,
+        .marketing-surface .bg-cyan-400\\/15,
+        .marketing-surface .bg-cyan-500\\/15,
         .marketing-surface .bg-cyan-500\\/20 {
           background-color: rgba(var(--mk-accent-rgb), 0.14) !important;
+        }
+        .marketing-surface .hover\\:bg-teal-400\\/10:hover,
+        .marketing-surface .hover\\:bg-teal-400\\/25:hover,
+        .marketing-surface .hover\\:bg-teal-400\\/30:hover,
+        .marketing-surface .hover\\:bg-teal-500\\/25:hover,
+        .marketing-surface .hover\\:bg-teal-500\\/30:hover,
+        .marketing-surface .hover\\:bg-teal-900\\/50:hover,
+        .marketing-surface .hover\\:bg-cyan-900\\/50:hover {
+          background-color: rgba(var(--mk-accent-rgb), 0.24) !important;
         }
         .marketing-surface .bg-amber-400\\/15,
         .marketing-surface .bg-amber-400\\/20,
@@ -1310,7 +1376,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           color: #CBD5E1 !important;
         }
         .marketing-surface.mk-light .mk-media-preserve .text-teal-300 {
-          color: #5EEAD4 !important;
+          color: #38BDF8 !important;
         }
         .marketing-surface.mk-light .mk-media-preserve .text-amber-300 {
           color: #FDE047 !important;
@@ -1362,7 +1428,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: `rgba(${mkAccent2Rgb}, 0.12)`
                     }}
                   >
-                    v7.80 • Latest Release
+                    v7.81 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -1564,7 +1630,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <span
                   className="bg-clip-text text-transparent"
                   style={{
-                    backgroundImage: 'linear-gradient(90deg, #2DD4BF 0%, #67E8F9 50%, #FACC15 100%)'
+                    backgroundImage: 'linear-gradient(90deg, var(--mk-accent) 0%, var(--mk-text) 48%, var(--mk-accent2) 100%)'
                   }}
                 >
                   Frame-Synced Replay Math.
@@ -1582,8 +1648,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   onClick={() => onSelectSubpage('vault')}
                   className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
                   style={{
-                    background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)',
-                    borderColor: 'var(--mk-border)',
+                    background: 'linear-gradient(135deg, var(--mk-accent) 0%, color-mix(in srgb, var(--mk-accent) 82%, var(--mk-bg) 18%) 100%)',
+                    borderColor: 'var(--mk-accent)',
                     color: 'var(--mk-cta-text)',
                     boxShadow: '0 8px 25px rgba(var(--mk-accent-rgb), 0.28)'
                   }}
@@ -1616,7 +1682,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         Download Android APK
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Instant 1-Click Direct Release (v7.80)
+                        Instant 1-Click Direct Release (v7.81)
                       </div>
                     </div>
                   </div>
@@ -1675,10 +1741,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Key Telemetry Pill Strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
                 {[
-                  { k: 'Log-Only', v: 'Zero-HUD Stealth Recording', c: '#34D399' },
-                  { k: 'Auto-Log', v: 'Free 1-Click GOBattleLog Export', c: '#2DD4BF' },
-                  { k: 'ELO Meta', v: 'Personal + PvPoke Anti-Meta', c: '#FACC15' },
-                  { k: 'Web + iOS', v: 'Browser DVR & 3v3 Simulator', c: '#67E8F9' }
+                  { k: 'Log-Only', v: 'Zero-HUD Stealth Recording', c: activeTheme.isLight ? '#047857' : '#34D399' },
+                  { k: 'Auto-Log', v: 'Free 1-Click GOBattleLog Export', c: 'var(--mk-accent)' },
+                  { k: 'ELO Meta', v: 'Personal + PvPoke Anti-Meta', c: 'var(--mk-accent2)' },
+                  { k: 'Web + iOS', v: 'Browser DVR & 3v3 Simulator', c: 'var(--mk-accent)' }
                 ].map((stat) => (
                   <div
                     key={stat.k}
@@ -2091,7 +2157,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   style={{ backgroundColor: 'var(--mk-accent)', color: 'var(--mk-cta-text)' }}
                 >
                   <span>📱</span>
-                  <span>Download APK (v7.80)</span>
+                  <span>Download APK (v7.81)</span>
                 </a>
                 <button
                   type="button"
@@ -3247,7 +3313,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                           className="rounded-2xl border p-4.5 flex flex-col justify-between gap-4 transition hover:border-teal-400/50 hover:shadow-xl"
                           style={{
                             backgroundColor: 'var(--mk-card)',
-                            borderColor: item.isPinned ? '#2DD4BF' : '#19304E',
+                            borderColor: item.isPinned ? 'var(--mk-accent)' : 'var(--mk-border)',
                             boxShadow: item.isPinned ? '0 0 16px rgba(var(--mk-accent-rgb), 0.12)' : 'none'
                           }}
                         >
@@ -3554,7 +3620,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               SilphScope Live View{' '}
               <span
                 style={{
-                  background: 'linear-gradient(90deg, #67E8F9 0%, #2DD4BF 50%, #FACC15 100%)',
+                  background: 'linear-gradient(90deg, var(--mk-accent) 0%, var(--mk-text) 50%, var(--mk-accent2) 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent'
                 }}
@@ -3675,7 +3741,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               className="p-6 relative min-h-[460px] flex flex-col justify-between"
               style={{
                 background:
-                  'radial-gradient(circle at 50% 30%, rgba(var(--mk-accent-rgb), 0.15) 0%, transparent 60%), linear-gradient(180deg, #050B16 0%, #0A1728 50%, #050B16 100%)'
+                  'radial-gradient(circle at 50% 30%, rgba(var(--mk-accent-rgb), 0.15) 0%, transparent 60%), linear-gradient(180deg, #050810 0%, #0B1526 50%, #050810 100%)'
               }}
             >
               {/* Top Mirrored HUD Header */}
@@ -3873,7 +3939,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             onClick={() => setSelectedWatchReplay(null)}
             className="fixed top-3 right-3 z-[60] w-9 h-9 rounded-xl bg-[#081120]/90 hover:bg-[#0E1B2E] text-teal-200 hover:text-white flex items-center justify-center font-black text-sm cursor-pointer transition shadow-2xl backdrop-blur-md"
             style={{
-              border: '1.5px solid #2DD4BF',
+              border: '1.5px solid var(--mk-accent)',
               boxShadow: '0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(var(--mk-accent-rgb), 0.35)'
             }}
             title="Close Replay & Return to Vault"

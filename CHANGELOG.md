@@ -2,6 +2,14 @@
 
 ---
 
+## v7.81 (2026-11-19) — Website, Roadmap Infographic, Download Portal & PWA Manifest Theme Polish
+*Patch release (`v7.81`, `versionCode = 1781`) eliminating remaining Shiny Origin Dialga teal (`#2DD4BF` / `teal-*` / `#050B16`) color leaks across the public marketing site, Version Roadmap section, `dl.silphscopepvp.com` download page, and PWA manifests.*
+
+- **Website & Version Roadmap Theme Parity (`MarketingWebsite.tsx`, `VersionRoadmapInfographic.tsx`)**: Vertically separated mobile Hero radial glows to eliminate teal/green backdrop blending behind narrow portrait screens; expanded `.marketing-surface` overrides to cover all 64 Tailwind teal/cyan utility, hover, border, ring, and muted nav classes (`text-teal-200/80`); converted Hero gradients, `Cloud DVR Replay Vault` CTA card, telemetry pills, Live View stage/headline, Vault card borders, replay modal close button, and Version Roadmap cards/banners to `var(--mk-*)` theme variables.
+- **`dl.silphscopepvp.com` & PWA Manifest Consistency (`worker.mjs`, `index.html`, `manifest.json`, `manifest.webmanifest`)**: Updated `renderDownloadLandingPage` CSS tokens, APK CTA button, trust grid, install steps, and `<meta name="theme-color">` to Duel Scope Midnight Black (`#050810` / `#0B1526` + `#38BDF8` + `#FACC15`), added transparent-HUD watermark + signed-in cookie hydration (`sspvp_theme`, `sspvp_watermark`) while keeping anonymous visitors on the default theme, and updated `/manifest.json` + `/manifest.webmanifest` colors to `#050810`.
+
+---
+
 ## v7.80 (2026-11-19) — Duel Scope Midnight Black Default, 11-Theme WCAG AA+ Suite & Cross-Platform Cloud Sync
 *Roadmap milestone release (`v7.80`, `versionCode = 1780`) promoting the unified **Duel Scope Midnight Black** theme derived from the `2B Duel Scope` emblem across all 5 surfaces, auditing and consolidating every retained palette to WCAG 2.1 AA+ contrast, adding 5 new PvP OLED themes with translucent HUD reticle & 10-theme constellation watermarks, and syncing user theme/watermark choices via Cloudflare D1 & cross-subdomain cookies.*
 

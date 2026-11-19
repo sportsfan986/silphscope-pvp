@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.81',
+    codename: 'Website, Roadmap, Download Portal & PWA Manifest Theme Polish',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Eliminates all remaining Shiny Origin Dialga teal/navy leaks across the marketing site, Version Roadmap infographic, dl.silphscopepvp.com download portal, and PWA manifests so every web surface honors Duel Scope Midnight Black by default and syncs dynamically with user themes.',
+    icon: '🎨',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Vertically separated mobile Hero radial glows and expanded MarketingWebsite.tsx CSS overrides across all 64 teal/cyan classes, muted nav pills, Hero gradients, Vault/Live View panels, and VersionRoadmapInfographic cards',
+      'Themed dl.silphscopepvp.com with Duel Scope Midnight Black tokens, transparent-HUD watermark, and signed-in cookie continuity while keeping anonymous visitors on the clean default',
+      'Updated index.html, public/manifest.json, public/manifest.webmanifest, and Worker manifest endpoints to #050810'
+    ]
+  },
+  {
     version: 'v7.80',
     codename: 'Duel Scope Midnight Black Default, 11-Theme WCAG AA+ Suite & Cross-Platform Cloud Sync',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Promotes Duel Scope Midnight Black derived from the 2B Duel Scope emblem as the universal default across Android, Live HUD, Web Simulator, Marketing Website, and Cloud Vault/Watch; adds 5 new PvP OLED themes with translucent HUD reticle & 10-theme constellation watermarks; audits all 11 retained palettes to WCAG 2.1 AA+ contrast; and syncs theme & watermark preferences across every signed-in device via Cloudflare D1 and shared cookies.',
     icon: '⚔️',

@@ -9220,9 +9220,10 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.80');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.81');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
+  const dlWatermarkMap = buildWorkerWatermarkSvgMap();
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -9232,23 +9233,29 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
   <title>Download SilphScope PvP • Battle DVR, Auto-Logger &amp; Anti-Meta (${ver})</title>
   <meta name="description" content="Download SilphScope PvP for Android. Automated Battle DVR, zero-typing 3v3 battle logger with Log-Only Stealth Mode, ELO Anti-Meta builder, and an optional semi-transparent overlay with adjustable transparency." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="theme-color" content="#050B16" />
+  <meta id="meta-theme-color" name="theme-color" content="#050810" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #050b16;
-      --card: #0e1b2e;
-      --card-alt: #081120;
-      --border: #19304e;
-      --accent: #2dd4bf;
-      --accent-hover: #5eead4;
-      --cyan: #67e8f9;
+      --bg: #050810;
+      --bg-mid: #070d19;
+      --card: #0b1526;
+      --card-alt: #070d19;
+      --card-rgb: 11, 21, 38;
+      --border: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --accent-rgb: 56, 189, 248;
+      --cyan: #7dd3fc;
       --amber: #facc15;
       --amber-hover: #fde047;
-      --text: #ecfeff;
+      --amber-rgb: 250, 204, 21;
+      --text: #f8fafc;
       --text-dim: #94a3b8;
+      --cta-text: #050810;
+      --wm-opacity: 0.20;
     }
     * { box-sizing: border-box; }
     body {
@@ -9256,15 +9263,37 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
       background-color: var(--bg);
       background-image:
-        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.12) 0%, transparent 45%),
-        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 40%),
-        linear-gradient(180deg, #050B16 0%, #081120 100%);
+        radial-gradient(circle at 12% 8%, rgba(var(--accent-rgb), 0.09) 0%, transparent 34%),
+        radial-gradient(circle at 88% 42%, rgba(var(--amber-rgb), 0.06) 0%, transparent 30%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-mid) 55%, var(--bg) 100%);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       padding: 32px 16px;
+      position: relative;
+    }
+    .fixed-watermark-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 0;
+      overflow: hidden;
+      opacity: var(--wm-opacity);
+    }
+    .fixed-watermark-bg.hidden {
+      display: none !important;
+    }
+    .theme-watermark-svg {
+      width: 520px;
+      height: 520px;
+      max-width: 90vw;
+      max-height: 90vh;
     }
     .container {
       width: 100%;
@@ -9272,6 +9301,8 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       display: flex;
       flex-direction: column;
       gap: 24px;
+      position: relative;
+      z-index: 1;
     }
     .header {
       text-align: center;
@@ -9286,8 +9317,8 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       gap: 6px;
       padding: 4px 12px;
       border-radius: 9999px;
-      background: rgba(45, 212, 191, 0.12);
-      border: 1px solid rgba(45, 212, 191, 0.35);
+      background: rgba(var(--accent-rgb), 0.12);
+      border: 1px solid rgba(var(--accent-rgb), 0.38);
       color: var(--accent);
       font-size: 12px;
       font-weight: 800;
@@ -9299,7 +9330,7 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       font-size: 32px;
       font-weight: 900;
       line-height: 1.2;
-      background: linear-gradient(135deg, #ffffff 40%, var(--accent) 100%);
+      background: linear-gradient(135deg, var(--text) 35%, var(--accent) 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -9339,17 +9370,17 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       gap: 4px;
       padding: 16px 20px;
       border-radius: 16px;
-      background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
-      color: #042f2e;
+      background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 82%, var(--bg) 18%) 100%);
+      color: var(--cta-text);
       text-decoration: none;
       font-weight: 900;
       font-size: 15px;
-      box-shadow: 0 8px 24px rgba(45, 212, 191, 0.35);
+      box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.32);
       transition: transform 0.15s ease, filter 0.15s ease;
     }
     .btn-download:hover {
       transform: translateY(-2px);
-      filter: brightness(1.1);
+      filter: brightness(1.08);
     }
     .btn-subtext {
       font-size: 11px;
@@ -9365,8 +9396,8 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       gap: 4px;
       padding: 16px 20px;
       border-radius: 16px;
-      background: rgba(250, 204, 21, 0.1);
-      border: 1px solid rgba(250, 204, 21, 0.4);
+      background: rgba(var(--amber-rgb), 0.10);
+      border: 1px solid rgba(var(--amber-rgb), 0.40);
       color: var(--amber);
       text-decoration: none;
       font-weight: 900;
@@ -9375,11 +9406,11 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
     }
     .btn-web:hover {
       transform: translateY(-2px);
-      background: rgba(250, 204, 21, 0.18);
+      background: rgba(var(--amber-rgb), 0.18);
     }
     .trust-section {
       background: var(--card-alt);
-      border: 1px solid rgba(45, 212, 191, 0.3);
+      border: 1px solid rgba(var(--accent-rgb), 0.32);
       border-radius: 20px;
       padding: 24px;
       display: flex;
@@ -9407,7 +9438,7 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       }
     }
     .trust-item {
-      background: rgba(14, 27, 46, 0.6);
+      background: rgba(var(--card-rgb), 0.72);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 12px 14px;
@@ -9421,7 +9452,7 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
     .trust-title {
       font-size: 12px;
       font-weight: 800;
-      color: #fff;
+      color: var(--text);
       margin-bottom: 2px;
     }
     .trust-desc {
@@ -9460,8 +9491,8 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       width: 24px;
       height: 24px;
       border-radius: 8px;
-      background: rgba(45, 212, 191, 0.15);
-      border: 1px solid rgba(45, 212, 191, 0.4);
+      background: rgba(var(--accent-rgb), 0.15);
+      border: 1px solid rgba(var(--accent-rgb), 0.40);
       color: var(--accent);
       font-size: 11px;
       font-weight: 900;
@@ -9476,12 +9507,12 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       line-height: 1.5;
     }
     .step-content strong {
-      color: #fff;
+      color: var(--text);
     }
     .footer {
       text-align: center;
       font-size: 11px;
-      color: #64748b;
+      color: var(--text-dim);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -9494,9 +9525,16 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
     .footer a:hover {
       text-decoration: underline;
     }
+    html.dl-light .hero-card,
+    html.dl-light .guide-card,
+    html.dl-light .trust-section,
+    html.dl-light .trust-item {
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+    }
   </style>
 </head>
 <body>
+  <div id="dl-watermark-bg" class="fixed-watermark-bg" aria-hidden="true">${renderWorkerWatermarkSvg(DEFAULT_WORKER_THEME_ID)}</div>
   <div class="container">
     <div class="header">
       <img src="/favicon.svg" alt="SilphScope PvP Icon" style="width:56px;height:56px;border-radius:14px;border:1px solid rgba(56,189,248,0.4);box-shadow:0 8px 24px rgba(0,0,0,0.45);" />
@@ -9596,6 +9634,63 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       </div>
     </div>
   </div>
+  <script>
+    (function () {
+      const DL_THEMES = ${safeJsonForScript(WORKER_THEME_PRESETS)};
+      const DL_WMS = ${safeJsonForScript(dlWatermarkMap)};
+      const DEFAULT_ID = 'duel_scope_midnight';
+      function readCk(name) {
+        try {
+          const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+          return m && m[1] ? decodeURIComponent(m[1]).trim() : '';
+        } catch (_) { return ''; }
+      }
+      function normId(raw) {
+        const c = String(raw || '').trim();
+        if (!c || c === 'amoled_cyan' || c === 'amoled_matrix' || c === 'slate') return DEFAULT_ID;
+        if (c === 'instinct_light') return 'instinct_dark';
+        if (c === 'valor_light') return 'valor_dark';
+        if (c === 'mystic_dark') return 'mystic_light';
+        if (c === 'sylveon_light') return 'sylveon_pink';
+        return DL_THEMES[c] ? c : DEFAULT_ID;
+      }
+      const hasSignedCookie = Boolean(readCk('sspvp_vault_session') || readCk('sspvp_vault_user'));
+      const tid = hasSignedCookie ? normId(readCk('sspvp_theme')) : DEFAULT_ID;
+      const wmRaw = hasSignedCookie ? readCk('sspvp_watermark') : '';
+      const wmOn = !(hasSignedCookie && (wmRaw === '0' || wmRaw.toLowerCase() === 'false'));
+      const t = DL_THEMES[tid] || DL_THEMES[DEFAULT_ID];
+      const root = document.documentElement;
+      root.classList.toggle('dl-light', Boolean(t.isLight));
+      root.style.setProperty('--bg', t.bg);
+      root.style.setProperty('--bg-mid', t.bgMid || t.bg);
+      root.style.setProperty('--card', t.card);
+      root.style.setProperty('--card-alt', t.cardAlt);
+      root.style.setProperty('--card-rgb', t.cardRgb);
+      root.style.setProperty('--border', t.border);
+      root.style.setProperty('--accent', t.accent);
+      root.style.setProperty('--accent-hover', t.accentHover);
+      root.style.setProperty('--accent-rgb', t.accentRgb);
+      root.style.setProperty('--cyan', t.cyan);
+      root.style.setProperty('--amber', t.amber);
+      root.style.setProperty('--amber-hover', t.amberHover);
+      root.style.setProperty('--amber-rgb', t.amberRgb);
+      root.style.setProperty('--text', t.text);
+      root.style.setProperty('--text-dim', t.textDim);
+      root.style.setProperty('--cta-text', t.ctaText);
+      root.style.setProperty('--wm-opacity', String(t.wmAlpha || 0.20));
+      const mc = document.getElementById('meta-theme-color');
+      if (mc) mc.setAttribute('content', t.bg);
+      const wmEl = document.getElementById('dl-watermark-bg');
+      if (wmEl) {
+        if (wmOn && DL_WMS[t.id]) {
+          wmEl.innerHTML = DL_WMS[t.id];
+          wmEl.classList.remove('hidden');
+        } else {
+          wmEl.classList.add('hidden');
+        }
+      }
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -9716,8 +9811,8 @@ export default {
         start_url: '/?view=vault',
         scope: '/',
         display: 'standalone',
-        background_color: '#050B16',
-        theme_color: '#050B16',
+        background_color: '#050810',
+        theme_color: '#050810',
         orientation: 'any',
         categories: ['games', 'utilities', 'entertainment'],
         icons: [
@@ -9815,7 +9910,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.80',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.81',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -9983,8 +10078,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.80',
-        releaseTitle: 'SilphScope PvP v7.80',
+        versionName: 'v7.81',
+        releaseTitle: 'SilphScope PvP v7.81',
         publishedAt: '',
         assetSizeMb: '',
       };

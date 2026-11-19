@@ -5,8 +5,8 @@
   "start_url": "/?view=vault",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#050B16",
-  "theme_color": "#050B16",
+  "background_color": "#050810",
+  "theme_color": "#050810",
   "orientation": "any",
   "categories": ["games", "utilities", "entertainment"],
   "icons": [

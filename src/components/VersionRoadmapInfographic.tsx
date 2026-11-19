@@ -10,7 +10,7 @@ export const VersionRoadmapInfographic: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'roadmap'>('timeline');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const latestVersionLabel = VERSION_EVOLUTION_HISTORY[0]?.version || 'v7.80';
+  const latestVersionLabel = VERSION_EVOLUTION_HISTORY[0]?.version || 'v7.81';
   const categories = [
     'all',
     ...Array.from(new Set(ACTIVE_ROADMAP_ITEMS.map((item: RoadmapItem) => item.category)))
@@ -25,19 +25,19 @@ export const VersionRoadmapInfographic: React.FC = () => {
       id="version-roadmap"
       className="rounded-3xl p-6 sm:p-8 border space-y-8 relative overflow-hidden"
       style={{
-        backgroundColor: '#0A1526',
-        borderColor: '#1E3A5F',
-        boxShadow: '0 20px 40px -15px rgba(2, 6, 23, 0.7)'
+        backgroundColor: 'var(--mk-card, #0B1526)',
+        borderColor: 'var(--mk-border, #1E293B)',
+        boxShadow: '0 20px 40px -15px rgba(2, 6, 23, 0.5)'
       }}
     >
       {/* Decorative ambient gradients */}
       <div
         className="absolute -top-32 -left-32 w-80 h-80 rounded-full blur-3xl pointer-events-none opacity-20"
-        style={{ background: 'radial-gradient(circle, #2DD4BF, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, var(--mk-accent, #38BDF8), transparent 70%)' }}
       />
       <div
         className="absolute -bottom-32 -right-32 w-80 h-80 rounded-full blur-3xl pointer-events-none opacity-15"
-        style={{ background: 'radial-gradient(circle, #FACC15, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, var(--mk-accent2, #FACC15), transparent 70%)' }}
       />
 
       {/* Header and Toggle */}
@@ -101,8 +101,8 @@ export const VersionRoadmapInfographic: React.FC = () => {
                     isCurrent ? 'ring-1 ring-teal-400/50' : ''
                   }`}
                   style={{
-                    backgroundColor: isCurrent ? '#0c1d33' : '#071222',
-                    borderColor: isCurrent ? '#2DD4BF' : '#19304E'
+                    backgroundColor: isCurrent ? 'color-mix(in srgb, var(--mk-card, #0B1526) 86%, var(--mk-accent, #38BDF8) 14%)' : 'var(--mk-card-alt, #070D19)',
+                    borderColor: isCurrent ? 'var(--mk-accent, #38BDF8)' : 'var(--mk-border, #1E293B)'
                   }}
                 >
                   {isCurrent && (
@@ -167,7 +167,7 @@ export const VersionRoadmapInfographic: React.FC = () => {
           {/* Timeline Summary Banner */}
           <div
             className="rounded-2xl p-4 sm:p-5 border flex flex-col sm:flex-row items-center justify-between gap-4"
-            style={{ backgroundColor: '#091527', borderColor: '#1F3C64' }}
+            style={{ backgroundColor: 'var(--mk-card-alt, #070D19)', borderColor: 'var(--mk-border, #1E293B)' }}
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚡</span>
@@ -220,7 +220,7 @@ export const VersionRoadmapInfographic: React.FC = () => {
               <div
                 key={item.id}
                 className="rounded-2xl p-5 border flex flex-col justify-between space-y-4 hover:border-amber-400/50 transition duration-200"
-                style={{ backgroundColor: '#071222', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card-alt, #070D19)', borderColor: 'var(--mk-border, #1E293B)' }}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
@@ -272,7 +272,7 @@ export const VersionRoadmapInfographic: React.FC = () => {
           {/* Interactive Community Contribution / Feature Suggestion Box */}
           <div
             className="rounded-2xl p-5 border flex flex-col sm:flex-row items-center justify-between gap-4"
-            style={{ backgroundColor: '#091527', borderColor: '#FACC15', borderWidth: '1px' }}
+            style={{ backgroundColor: 'var(--mk-card-alt, #070D19)', borderColor: 'var(--mk-accent2, #FACC15)', borderWidth: '1px' }}
           >
             <div className="space-y-1">
               <div className="flex items-center gap-2">
