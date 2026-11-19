@@ -2,6 +2,13 @@
 
 ---
 
+## v7.76 (2026-11-19) — Compact Mode Default (AI Coach OFF) & Clean Web DVR Viewport
+
+- **Compact Mode Default for New Users (Android & Web Simulator)**: Switched the default HUD layout from Full HUD to **Compact HUD (`Moves (Def)` preset)** (`Header [HP/E/Shields]` + `Opp Attacks` + `My Attacks` + `Pacing` + `Shield Call`, with **AI Tactical Coach OFF** and **3×3 Matrix OFF**) across `OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `overlay.html`, and `src/App.tsx`. Cloud DVR replays (`/watch/:shareId`) stay on Full HUD by default, and shared Full HUD Web Simulator links now explicitly encode `hud=full`.
+- **Clean Web DVR Viewport (`#dual-energy-pill` Removal)**: Removed the redundant top telemetry toast pill (`#dual-energy-pill`) from all Web DVR Replay Theater modes in `cloudflare/telemetry-worker/worker.mjs` so web replays match the clean native Android viewport while keeping diagnostic telemetry inside `#sky-replay-diag-row`.
+
+---
+
 ## v7.75 (2026-11-19) — Bottom-Attached Shield Call & AI Coach DVR Parity, `Moves (Def)` Compact HUD & Shareable URL Config
 *UI/UX & replay parity update (`v7.75`, `versionCode = 1775`) aligning DVR replay bottom Shield Call & AI Tactical Coach attachment with Android, introducing the `Moves (Def)` Compact HUD preset across Android/Web/DVR with full 6-module granular toggles, and encoding custom real-time HUD configurations into shareable URL query parameters.*
 

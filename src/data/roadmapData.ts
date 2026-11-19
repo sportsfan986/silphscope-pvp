@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.76',
+    codename: 'Compact Mode Default (AI Coach OFF) & Clean Web DVR Viewport',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Switches new-user defaults on Android and the Web Simulator to Compact Mode (Moves (Def) preset with AI Tactical Coach OFF and 3x3 Matrix OFF) while keeping Cloud DVR replays on Full HUD and removing the top toast telemetry pill from all Web DVR modes.',
+    icon: '⚡',
+    accentColor: '#34D399',
+    highlights: [
+      'Defaulted new Android and Web Simulator sessions to Compact HUD (Moves (Def): Mirrored Header [HP/E/Shields] + Opp Attacks + My Attacks + Pacing + Shield Call, with AI Tactical Coach OFF and 3x3 Matrix OFF)',
+      'Preserved Cloud DVR (/watch/:shareId) defaulting to Full HUD for post-battle analysis while explicitly encoding hud=full on shared Full HUD Web Simulator links',
+      'Removed the redundant #dual-energy-pill top toast bar from all Web DVR Replay Theater modes so web video playback matches the clean native Android viewport'
+    ]
+  },
+  {
     version: 'v7.75',
     codename: 'Bottom-Attached Shield Call & AI Coach DVR Parity, Moves (Def) Compact HUD & Shareable URL Config',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Fixes DVR Replay bottom Shield Call & AI Tactical Coach anchoring to match Android, upgrades the default Compact HUD preset to Moves (Def) across Android/Web/DVR with full 6-module granular controls, and encodes live HUD layouts into shareable URL query parameters.',
     icon: '🎛️',

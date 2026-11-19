@@ -10099,15 +10099,15 @@ class MainActivity : AppCompatActivity() {
         ) ?: OverlayService.DEFAULT_OVERLAY_HUD_MODE
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         if (mode.equals("compact", ignoreCase = true)) {
-            btnToggleOverlayHudMode.text = "Compact HUD"
-            btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-            btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
-            textOverlayHudModeDesc.text = "Active: Compact HUD (Header [Shields/E] + Selected Modules + Shield Card • Tap emblem for Full HUD • Hold 2s for Stealth)"
-        } else {
-            btnToggleOverlayHudMode.text = "Full HUD (Def)"
+            btnToggleOverlayHudMode.text = "Compact HUD (Def)"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
-            textOverlayHudModeDesc.text = "Default: Full HUD • Tap emblem to alternate Full ↔ Compact • Hold 2s for Log-Only Stealth"
+            textOverlayHudModeDesc.text = "Default: Compact HUD (Header [Shields/E] + Move Counts + Shield Card, AI Coach OFF • Tap emblem for Full HUD • Hold 2s for Stealth)"
+        } else {
+            btnToggleOverlayHudMode.text = "Full HUD"
+            btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+            btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
+            textOverlayHudModeDesc.text = "Active: Full HUD (3x3 Matrix + Move Counts + 2-Line AI Coach • Tap emblem for Compact HUD • Hold 2s for Stealth)"
         }
     }
 

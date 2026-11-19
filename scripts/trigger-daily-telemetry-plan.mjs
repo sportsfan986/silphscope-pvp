@@ -44,6 +44,7 @@ const rawArgs = process.argv.slice(2);
 const STAGE0_ONLY = rawArgs.includes("--stage0-only");
 const TELEGRAM_ONLY = rawArgs.includes("--telegram-only");
 const LAUNCH_CHAT_ONLY = rawArgs.includes("--launch-chat-only");
+const FROM_SIDECAR = rawArgs.includes("--from-sidecar");
 const IMMEDIATE_MODE = rawArgs.includes("--immediate");
 const NO_TELEGRAM = rawArgs.includes("--no-telegram");
 const FORCE_RUN = rawArgs.includes("--force");
@@ -187,15 +188,16 @@ function buildDailyNewChatPrompt(digest, todayDate) {
 }
 
 function tryAgentApiNewConversation(dailyTitle, prompt) {
-  if (!process.env.ANTIGRAVITY_LS_ADDRESS) {
-    logLine("[ERROR] ANTIGRAVITY_LS_ADDRESS is unset; Desktop sidebar chat creation requires running inside Antigravity (`schedule` daemon or Automation sidecar).");
+  if (!process.env.ANTIGRAVITY_LS_ADDRESS && !process.env.ANTIGRAVITY_AGENTAPI_EXE) {
+    logLine("[ERROR] Neither ANTIGRAVITY_LS_ADDRESS nor ANTIGRAVITY_AGENTAPI_EXE is set; Desktop sidebar chat creation requires running inside Antigravity (`schedule` daemon or Automation sidecar).");
     return null;
   }
   if (!fs.existsSync(LANGUAGE_SERVER_EXE)) {
     logLine(`[ERROR] language_server.exe not found at ${LANGUAGE_SERVER_EXE}`);
     return null;
   }
-  logLine(`[LAUNCH] Calling language_server.exe agentapi new-conversation --model=${ORCHESTRATOR_MODEL} ...`);
+  const activeProjectId = process.env.ANTIGRAVITY_PROJECT_ID || "default";
+  logLine(`[LAUNCH] Calling language_server.exe agentapi new-conversation --model=${ORCHESTRATOR_MODEL} projectId=${activeProjectId} title="${dailyTitle}" ...`);
   const res = spawnSync(
     LANGUAGE_SERVER_EXE,
     ["agentapi", "new-conversation", `--model=${ORCHESTRATOR_MODEL}`, `--title=${dailyTitle}`, "--", prompt],
@@ -318,7 +320,7 @@ async function main() {
 
   const dailyTitle = `📊 [${todayDate}] Daily Telemetry Audit & Plan — SilphScope PvP`;
 
-  if (LAUNCH_CHAT_ONLY && !FORCE_RUN) {
+  if (LAUNCH_CHAT_ONLY && !FORCE_RUN && !FROM_SIDECAR) {
     const agyCfg = readJsonSafe("C:/Users/Chris/.gemini/config/config.json", null);
     if (
       agyCfg?.sidecars?.["silphscope-nightly-telemetry"] &&

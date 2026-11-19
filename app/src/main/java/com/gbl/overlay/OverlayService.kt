@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.75"
-        const val APP_VERSION_CODE = 1775
+        const val APP_VERSION = "7.76"
+        const val APP_VERSION_CODE = 1776
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -166,7 +166,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_AI_ADVICE_HUD_POSITION = "ai_advice_hud_position"
         const val DEFAULT_AI_ADVICE_HUD_POSITION = "bottom" // "bottom" (new v6.00 default) | "top"
         const val PREFS_KEY_OVERLAY_HUD_MODE = "gbl_overlay_hud_mode"
-        const val DEFAULT_OVERLAY_HUD_MODE = "full" // "full" (default) | "compact"
+        const val DEFAULT_OVERLAY_HUD_MODE = "compact" // "compact" (default, Moves preset, Coach OFF) | "full"
         const val PREFS_KEY_COMPACT_HUD_SHOW_MATRIX = "gbl_compact_hud_show_matrix"
         const val DEFAULT_COMPACT_HUD_SHOW_MATRIX = false
         const val PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS = "gbl_compact_hud_show_opp_attacks"

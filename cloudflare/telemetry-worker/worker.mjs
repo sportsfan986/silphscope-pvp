@@ -4272,8 +4272,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     }
     html.clean-stage .close-theater-x,
     html.clean-stage .controls-bar,
-    html.clean-stage #diag-issue-banner,
-    html.clean-stage #dual-energy-pill {
+    html.clean-stage #diag-issue-banner {
       display: none !important;
     }
     html.clean-stage main,
@@ -4545,7 +4544,6 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       <div class="stage-wrap" id="stage-wrap">
         <div class="video-box" id="video-box">
           <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous" onclick="togglePlay()"></video>
-          <div id="dual-energy-pill" style="position:absolute;top:4px;left:5px;z-index:25;background:rgba(8,17,32,0.92);border:1px solid #2dd4bf;border-radius:999px;padding:1.5px 8px;font-size:9.5px;font-weight:800;font-family:'Roboto Condensed',sans-serif;color:#ecfeff;white-space:nowrap;pointer-events:none;max-width:calc(100% - 10px);overflow:hidden;text-overflow:ellipsis">⚡ U: 0E • O: 0E</div>
           <div class="hud-layer pos-top" id="hud-layer">
             <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
           </div>
@@ -6653,23 +6651,6 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         const win = hudIframe.contentWindow;
         if (!win || typeof win.updateBattleData !== 'function') return;
         const payload = buildReplayOverlayPayload(f);
-        const pillEl = document.getElementById('dual-energy-pill');
-        if (pillEl) {
-          const uEff = Number(payload.activeUserEnergy ?? f.userEnergy ?? 0);
-          const oEff = Number(payload.activeOppEnergy ?? f.oppEnergy ?? 0);
-          const uM = Number(f.userEnergyMeter ?? uEff);
-          const uH = Number(f.userEnergyHp ?? uEff);
-          const uCm = Number(f.userConfMeter ?? (f.leftCircleFillPct >= 1 && f.leftCircleFillPct <= 94 ? 96 : 84));
-          const uCh = Number(f.userConfHp ?? 82);
-          const oM = Number(f.oppEnergyMeter ?? oEff);
-          const oH = Number(f.oppEnergyHp ?? oEff);
-          const oCm = Number(f.oppConfMeter ?? 86);
-          const oCh = Number(f.oppConfHp ?? 82);
-          const pTag = String(f.oppHpPromoTag || (oEff > oM && oH >= oEff ? '★HP' : '')).trim();
-          const pSuffix = pTag ? (' ' + pTag) : '';
-          pillEl.textContent = '⚡ U: ' + uEff + 'E [M:' + uM + 'E ' + uCm + '% | H:' + uH + 'E ' + uCh + '%] • O: ' + oEff + 'E [M:' + oM + 'E ' + oCm + '% | H:' + oH + 'E ' + oCh + '%' + pSuffix + ']';
-          pillEl.style.display = (IS_CLEAN_STAGE || hudMode === 'off') ? 'none' : 'block';
-        }
         if (typeof win.setReplayShieldOverlayEnabled === 'function') {
           win.setReplayShieldOverlayEnabled(showShieldHud);
         }
@@ -8570,7 +8551,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.75');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.76');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
 
@@ -9165,7 +9146,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.75',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.76',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -9333,8 +9314,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.75',
-        releaseTitle: 'SilphScope PvP v7.75',
+        versionName: 'v7.76',
+        releaseTitle: 'SilphScope PvP v7.76',
         publishedAt: '',
         assetSizeMb: '',
       };

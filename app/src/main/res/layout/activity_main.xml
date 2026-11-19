@@ -2912,7 +2912,7 @@
                         android:id="@+id/text_overlay_hud_mode_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Default: Full HUD • Tap top-left emblem to switch Full ↔ Compact • Hold 2s for Log-Only Stealth Mode"
+                        android:text="Default: Compact HUD (Move Counts + Shields/E, AI Coach OFF) • Tap top-left emblem to switch Compact ↔ Full • Hold 2s for Log-Only Stealth Mode"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -2921,7 +2921,7 @@
                     android:id="@+id/btn_toggle_overlay_hud_mode"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:text="Full HUD (Def)"
+                    android:text="Compact HUD (Def)"
                     android:textSize="10.5sp"
                     android:textStyle="bold"
                     android:backgroundTint="#0284c7"

@@ -765,7 +765,7 @@ export default function App() {
     }
   });
 
-  // Overlay HUD Mode ("full" default vs "compact") & Modular 6-Toggle Compact HUD Customizer
+  // Overlay HUD Mode ("compact" default vs "full") & Modular 6-Toggle Compact HUD Customizer
   const [overlayHudMode, setOverlayHudModeState] = useState<'full' | 'compact'>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -779,9 +779,9 @@ export default function App() {
       ) {
         return 'compact';
       }
-      return localStorage.getItem('gbl_overlay_hud_mode') === 'compact' ? 'compact' : 'full';
+      return localStorage.getItem('gbl_overlay_hud_mode') === 'full' ? 'full' : 'compact';
     } catch {
-      return 'full';
+      return 'compact';
     }
   });
 
@@ -869,8 +869,9 @@ export default function App() {
       qs.set('cmp', cmpList.length > 0 ? cmpList.join(',') : 'none');
       if (cmpVal.toolbarMode !== 'auto') qs.set('tb', cmpVal.toolbarMode);
       qs.set('sh', shieldVal ? '1' : '0');
-    } else if (!shieldVal) {
-      qs.set('sh', '0');
+    } else {
+      qs.set('hud', 'full');
+      if (!shieldVal) qs.set('sh', '0');
     }
     if (advVal === 'top') qs.set('adv', 'top');
     return qs.toString();
@@ -7273,7 +7274,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.75 • Android Native Overlay
+                  v7.76 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -15833,7 +15834,7 @@ export default function App() {
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300">
                   {(() => {
-                    if (overlayHudMode !== 'compact') return 'Full HUD (Def)';
+                    if (overlayHudMode !== 'compact') return 'Full HUD';
                     const c = compactHudConfig;
                     const p =
                       c.showOppAttacks && c.showMyAttacks && !c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto'
@@ -15865,7 +15866,7 @@ export default function App() {
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  📐 Full HUD (Default)
+                  📐 Full HUD
                 </button>
                 <button
                   type="button"
@@ -15876,7 +15877,7 @@ export default function App() {
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  ⚡ Compact HUD
+                  ⚡ Compact HUD (Default)
                 </button>
               </div>
 
@@ -20281,7 +20282,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.75 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.76 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
