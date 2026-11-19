@@ -8551,7 +8551,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.76');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.77');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
 
@@ -8560,8 +8560,8 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Download SilphScope PvP • Real-Time Battle HUD &amp; DVR (${ver})</title>
-  <meta name="description" content="Download SilphScope PvP for Android. 100% TOS-safe 50% translucent battle HUD, fast move counter, and synchronized DVR replay theater for Pokémon GO PvP." />
+  <title>Download SilphScope PvP • Battle DVR, Auto-Logger &amp; Anti-Meta (${ver})</title>
+  <meta name="description" content="Download SilphScope PvP for Android. Automated Battle DVR, zero-typing 3v3 battle logger with Log-Only Stealth Mode, ELO Anti-Meta builder, and an optional semi-transparent overlay with adjustable transparency." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="theme-color" content="#050B16" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -8834,7 +8834,7 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       <div class="badge">⚔️ Official Release • ${ver}</div>
       <h1>Download SilphScope PvP</h1>
       <p class="subtitle">
-        The 50% translucent real-time battle HUD, fast move turn counter, and cloud replay DVR for Pokémon GO PvP.
+        Automated Battle DVR, zero-typing 3v3 battle logger, ELO Anti-Meta builder, and an optional semi-transparent overlay with adjustable transparency for Pokémon GO PvP.
       </p>
     </div>
 
@@ -8854,10 +8854,10 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
       </div>
     </div>
 
-    <!-- 100% TOS-SAFE GUARANTEE -->
+    <!-- READ-ONLY SCREEN CAPTURE & STEALTH ARCHITECTURE -->
     <div class="trust-section">
       <div class="trust-header">
-        <span>🛡️ 100% TOS-Safe &amp; Ban-Proof Guarantee</span>
+        <span>🛡️ Read-Only Screen Capture &amp; Log-Only Stealth Architecture</span>
       </div>
       <div class="trust-grid">
         <div class="trust-item">
@@ -8878,7 +8878,7 @@ function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
           <div class="trust-icon">🚫</div>
           <div>
             <div class="trust-title">No Automation or GPS</div>
-            <p class="trust-desc">Zero macros, zero auto-tapping, and zero location spoofing. Purely a tactical HUD and turn-counting calculator.</p>
+            <p class="trust-desc">Zero macros, zero auto-tapping, and zero location spoofing. Includes Log-Only Stealth Mode (zero on-screen HUD) for clean match recording.</p>
           </div>
         </div>
         <div class="trust-item">
@@ -9043,7 +9043,7 @@ export default {
       const manifestObj = {
         name: 'SilphScope DVR',
         short_name: 'SilphScope DVR',
-        description: 'Frame-Synced Cloud DVR Replay Vault, 50% Translucent HUD & Live View Secondary Screen for Pokémon GO PvP.',
+        description: 'Automated Battle DVR Replay Vault, Auto-Logger & ELO Anti-Meta Builder for Pokémon GO PvP.',
         start_url: '/?view=vault',
         scope: '/',
         display: 'standalone',
@@ -9058,7 +9058,7 @@ export default {
           { src: '/favicon.svg', sizes: '108x108', type: 'image/svg+xml', purpose: 'any' }
         ],
         shortcuts: [
-          { name: 'Cloud DVR Vault', short_name: 'DVR Vault', description: 'Watch battle recordings with frame-accurate 50% HUD overlay', url: '/?view=vault', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
+          { name: 'Cloud DVR Vault', short_name: 'DVR Vault', description: 'Watch battle recordings with an optional semi-transparent replay overlay', url: '/?view=vault', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
           { name: 'Live View (Coming Soon)', short_name: 'Live View', description: 'Upcoming: Stream live combat telemetry to your tablet or iPhone', url: '/?view=live', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
           { name: 'Web Battle Simulator', short_name: 'Simulator', description: '3v3 Pokémon GO PvP Battle Simulator & Team Builder', url: '/?view=app', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] }
         ]
@@ -9146,7 +9146,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.76',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.77',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -9314,8 +9314,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.76',
-        releaseTitle: 'SilphScope PvP v7.76',
+        versionName: 'v7.77',
+        releaseTitle: 'SilphScope PvP v7.77',
         publishedAt: '',
         assetSizeMb: '',
       };

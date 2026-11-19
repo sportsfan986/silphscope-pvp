@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.77',
+    codename: 'Replay-First & Auto-Logger Website Rebrand + Natural Transparency Copy',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Reorganizes silphscopepvp.com and dl.silphscopepvp.com around Battle DVR, zero-typing auto-logging (free GOBattleLog export), and ELO Anti-Meta first with optional 3-mode tactical data, replacing rigid "50% translucent" / "Ban-Proof Guarantee" jargon with clearer semi-transparent, adjustable transparency, and Read-Only Screen Capture copy.',
+    icon: '🎬',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Reordered the website and dl.silphscopepvp.com around 1. Hardware Battle DVR & Zero-Typing Auto-Logging, 2. ELO-Adaptive Meta & Anti-Meta Builder (+ Free GOBattleLog Export), and 3. Optional 3-Mode Tactical Data',
+      'Promoted the @Featured Browser Replay Theater and Log-Only Stealth / Read-Only Screen Capture architecture directly below the Hero for desktop, iOS, and Android visitors',
+      'Refreshed Landing, Field Manual (?view=guide), Comparison Table (?view=compare), Live View (?view=live), and PWA manifest wording to natural "semi-transparent" and "adjustable transparency" descriptions'
+    ]
+  },
+  {
     version: 'v7.76',
     codename: 'Compact Mode Default (AI Coach OFF) & Clean Web DVR Viewport',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Switches new-user defaults on Android and the Web Simulator to Compact Mode (Moves (Def) preset with AI Tactical Coach OFF and 3x3 Matrix OFF) while keeping Cloud DVR replays on Full HUD and removing the top toast telemetry pill from all Web DVR modes.',
     icon: '⚡',

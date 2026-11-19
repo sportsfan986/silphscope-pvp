@@ -1,7 +1,7 @@
 {
   "name": "SilphScope DVR",
   "short_name": "SilphScope DVR",
-  "description": "Frame-Synced Cloud DVR Replay Vault, 50% Translucent HUD & Live View Secondary Screen for Pokémon GO PvP.",
+  "description": "Automated Battle DVR Replay Vault, Auto-Logger & ELO Anti-Meta Builder for Pokémon GO PvP.",
   "start_url": "/?view=vault",
   "scope": "/",
   "display": "standalone",
@@ -39,7 +39,7 @@
     {
       "name": "Cloud DVR Vault",
       "short_name": "DVR Vault",
-      "description": "Watch battle recordings with frame-accurate 50% HUD overlay",
+      "description": "Watch battle recordings with an optional semi-transparent replay overlay",
       "url": "/?view=vault",
       "icons": [{ "src": "/pwa-icon-192.svg", "sizes": "192x192" }]
     },

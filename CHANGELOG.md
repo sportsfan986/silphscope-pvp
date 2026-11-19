@@ -2,6 +2,13 @@
 
 ---
 
+## v7.77 (2026-11-19) — Replay-First & Auto-Logger Website Rebrand + Natural Transparency Copy
+
+- **Replay-First & Auto-Logger Landing Hierarchy (`MarketingWebsite.tsx`, `index.html`, `manifest.json`, `manifest.webmanifest`, `worker.mjs`)**: Reordered `silphscopepvp.com` and `dl.silphscopepvp.com` around **1. Hardware Battle DVR & Zero-Typing Auto-Logging** (promoting the `@Featured` Interactive Browser Replay Theater alongside **Log-Only Stealth Mode** and calm Read-Only Screen-Capture architecture right below the Hero), **2. ELO-Adaptive Meta & Anti-Meta Team Builder + Free 1-Click GOBattleLog Export**, and **3. Optional Real-Time Tactical Data (3 Opt-In Modes: Log-Only Stealth, Compact Reference Default, Full Practice HUD)**.
+- **Natural Transparency & Copy Polish**: Replaced technical `"50% translucent"` / `"50% HUD"` / `"Ban-Proof Guarantee"` marketing wording across the landing page, Visual Field Manual (`?view=guide`), Comparison Table (`?view=compare`), Live View (`?view=live`), PWA manifests, and `dl.silphscopepvp.com` with clearer **"semi-transparent"** / **"adjustable transparency"** and factual Read-Only Screen Capture phrasing.
+
+---
+
 ## v7.76 (2026-11-19) — Compact Mode Default (AI Coach OFF) & Clean Web DVR Viewport
 
 - **Compact Mode Default for New Users (Android & Web Simulator)**: Switched the default HUD layout from Full HUD to **Compact HUD (`Moves (Def)` preset)** (`Header [HP/E/Shields]` + `Opp Attacks` + `My Attacks` + `Pacing` + `Shield Call`, with **AI Tactical Coach OFF** and **3×3 Matrix OFF**) across `OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `overlay.html`, and `src/App.tsx`. Cloud DVR replays (`/watch/:shareId`) stay on Full HUD by default, and shared Full HUD Web Simulator links now explicitly encode `hud=full`.

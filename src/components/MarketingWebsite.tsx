@@ -192,7 +192,7 @@ interface HeroShowcaseSlide {
 const HERO_SLIDES: HeroShowcaseSlide[] = [
   {
     id: 'shiny_dialga',
-    label: '✨ Shiny Origin Dialga • Roar of Time Pacing (Mega ML)',
+    label: '✨ Shiny Origin Dialga • Roar of Time Trace (Mega ML)',
     shortLabel: '✨ Shiny Dialga (ML)',
     league: 'MEGA MASTER LEAGUE',
     videoPath: 'screenshots/featured_hero_shiny_dialga.mp4',
@@ -201,16 +201,16 @@ const HERO_SLIDES: HeroShowcaseSlide[] = [
     watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer',
     highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer?t=18',
     caption:
-      '2x Retina 50% Translucent HUD over live Mega Master League combat: Roar of Time (65E) READY (100% KO on Zekrom) with 1-Fast Throw Alert & Live Backline Predictor.',
+      'Post-match Browser Replay Theater over Mega Master League footage: scrub to 0:18 to verify Roar of Time (65E) KO thresholds on Zekrom, turn-clock windows, and backline likelihoods.',
     callouts: [
-      '50% Translucent HUD: Opponent CP & HP bars remain 100% visible through the glass',
-      'Turn-Exact Alert: "1 LAST FAST -> THROW RoTime NOW! Beat Opp FsBolt"',
-      'Live Backline Predictor: "Back: ZAC-C 22% PAL-O 15%" (100% Free in Open Leagues)'
+      'Frame-Synced Replay Trace: Video stays clean while you toggle Full/Compact/Off HUD in browser',
+      'Turn-Clock Audit: Inspects 1-Fast throw windows & opponent Fusion Bolt pacing post-match',
+      'Backline Probability Context: Estimates common partners ("ZAC-C 22% PAL-O 15%") in Open Leagues'
     ]
   },
   {
     id: 'ul_aura_nidoking',
-    label: '🟣 3D Shadow Aura & D-3 Stage Math (Ultra League)',
+    label: '🟣 3D Shadow Aura & D-3 Stage Replay (Ultra League)',
     shortLabel: '🟣 Shadow Aura (UL)',
     league: 'ULTRA LEAGUE',
     videoPath: 'screenshots/featured_ul_aura_nidoking.mp4',
@@ -219,17 +219,17 @@ const HERO_SLIDES: HeroShowcaseSlide[] = [
     watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_aura_nidoking',
     highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_aura_nidoking?t=5',
     caption:
-      'Auto-verifies Shadow Nidoking at 0:04 via 3D HSV Shadow Aura ("Shadow: 🟣 ON ✓") + dual AURA+DHP proof, narrows Observed-CP IVs (0/14/11), and scales D-3 Sand Tomb math live.',
+      'Hardware DVR + JSONL telemetry log: verifies Shadow Nidoking at 0:04 via 3D HSV Shadow Aura ("Shadow: 🟣 ON ✓"), narrows Observed-CP IVs (0/14/11), and scrubs D-3 Sand Tomb math.',
     callouts: [
-      '3D HSV Shadow Aura Detection: Automatically confirms Shadow: 🟣 ON ✓ in 0.4s',
-      'Observed-CP IV Narrowing: Narrows opponent spreads live for exact KO & survival math',
-      '3-Way ELO Backline Predictor: Surfaces live backline probabilities ("SKELE 21% • SAMPH 12%")'
+      '3D HSV Shadow Verification: Confirms Shadow: 🟣 ON ✓ in 0.4s without manual logging',
+      'Observed-CP IV Narrowing: Tightens candidate IV spreads for post-match KO & survival review',
+      '3-Way ELO Meta Logging: Records opponent cores ("SKELE 21% • SAMPH 12%") automatically'
     ]
   },
   {
     id: 'ul_bp_skeledirge',
-    label: '⚡ Live BP+1 Breakpoint & Shadow: N/A Lock (Ultra League)',
-    shortLabel: '⚡ Live BP+1 (UL)',
+    label: '⚡ Observed-CP BP+1 & Shadow: N/A Replay (Ultra League)',
+    shortLabel: '⚡ Breakpoint Trace (UL)',
     league: 'ULTRA LEAGUE',
     videoPath: 'screenshots/featured_ul_bp_skeledirge.mp4',
     gifPath: 'screenshots/featured_ul_bp_skeledirge.gif',
@@ -237,16 +237,16 @@ const HERO_SLIDES: HeroShowcaseSlide[] = [
     watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_bp_skeledirge',
     highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_bp_skeledirge?t=134',
     caption:
-      'Mimikyu vs. Skeledirge (0/13/12 IVs): Lights up live ⚡BP+1 fast-move breakpoint badges, locks Shadow: N/A on unreleased Shadows, and verifies fast moves via Raw HP-Pulse Cadence.',
+      'Replay study of Mimikyu vs. Skeledirge (0/13/12 IVs): reconstructs ⚡BP+1 fast-move breakpoints from Observed CP and verifies fast moves offline via Raw HP-Pulse Cadence.',
     callouts: [
-      'Live Fast-Move Breakpoints: Flags ⚡BP+1 / 🛡️BLK-1 directly from Observed-CP IVs',
+      'Offline Breakpoint Inspection: Surfaces ⚡BP+1 / 🛡️BLK-1 flips directly in the replay timeline',
       'Hybrid OTA Shadow Lock: Keeps Tinkaton, Skeledirge & Goodra locked to Shadow: N/A',
-      'Turn-Exact Catch Calls: Signals "0F LEFT -> CATCH Bulldo ON GMOLT!"'
+      'Catch-Timing Breakdown: Pinpoints 0F endgame switch windows during post-battle review'
     ]
   },
   {
     id: 'ul_catch_cobalion',
-    label: '🎭 A-2/D-1 Disguise Sync & 0F Catch (Ultra League)',
+    label: '🎭 A-2/D-1 Disguise Sync & 0F Catch Replay (Ultra League)',
     shortLabel: '🎭 Disguise & Catch (UL)',
     league: 'ULTRA LEAGUE',
     videoPath: 'screenshots/featured_ul_catch_cobalion.mp4',
@@ -255,11 +255,11 @@ const HERO_SLIDES: HeroShowcaseSlide[] = [
     watchUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_catch_cobalion',
     highlightUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_catch_cobalion?t=79',
     caption:
-      'Tinkaton, Mimikyu & Swampert vs. Drifblim, Galarian Weezing & Cobalion: Ghost-VFX-safe Shadow: OFF ✓ proof, A-2/D-1 Disguise Bust sync, and 0F Swap-Catch onto Swampert.',
+      'Tinkaton, Mimikyu & Swampert vs. Drifblim, Galarian Weezing & Cobalion: clean VOD trace verifying Ghost-VFX-safe Shadow: OFF ✓, A-2/D-1 Disguise Bust sync, and 0F Swap-Catch onto Swampert.',
     callouts: [
       'Ghost-VFX-Safe Shadow Proof: Verifies Drifblim as Shadow: OFF ✓ via ΔHP without aura bleed',
       'Hardened Mimikyu Disguise Sync: Tracks A-2 👹D-1 cleanly without -2 DEF double-counting',
-      'Endgame Swap-Catch Coach: Signals exact 0F Brutal Swing catch onto Swampert'
+      'Endgame Catch Replay: Scrub straight to 1:45 to study the 0F Brutal Swing catch onto Swampert'
     ]
   }
 ];
@@ -1176,13 +1176,13 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.76 • Latest Release
+                    v7.77 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
                   {activeSubpage === 'vault'
                     ? 'Cloud Replay Vault • Frame-Synced Video & HUD Overlay'
-                    : 'Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault'}
+                    : 'Automated Battle DVR & Auto-Logger • ELO Anti-Meta Builder • Optional Compact HUD'}
                 </p>
               </div>
             </button>
@@ -1275,7 +1275,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
-                  📖 How to Use Overlay
+                  📖 Field Manual &amp; Modes
                 </button>
                 <button
                   type="button"
@@ -1355,45 +1355,46 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
          ===================================================================== */}
       {activeSubpage === 'home' && (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 sm:py-12 space-y-16">
-          {/* 1. HERO SECTION: Left Pitch & Action Stack + Right Straight-On Vertical 50% HUD Phone */}
+          {/* 1. HERO SECTION: DVR & Auto-Logging First + Right Browser Replay Theater Phone */}
           <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
             {/* Left 7 Columns */}
             <div className="lg:col-span-7 space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-extrabold"
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-extrabold flex-wrap"
                 style={{
                   backgroundColor: 'rgba(45, 212, 191, 0.10)',
                   borderColor: 'rgba(45, 212, 191, 0.45)',
                   color: '#2DD4BF'
                 }}
               >
-                <span>⚡ ZERO-LAG ANDROID OVERLAY</span>
+                <span>🎬 FRAME-SYNCED BATTLE DVR</span>
                 <span className="text-slate-500">•</span>
-                <span style={{ color: '#FACC15' }}>50% TRANSLUCENT HUD</span>
+                <span style={{ color: '#FACC15' }}>📊 ZERO-TYPING AUTO-LOGGER</span>
                 <span className="text-slate-500">•</span>
-                <span>GBL &amp; SHOW 6</span>
+                <span className="text-emerald-300">🔕 LOG-ONLY STEALTH MODE</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-[1.12] text-white">
-                Master Every Turn, Shield Call &amp; Swap with{' '}
+                Record, Auto-Log &amp; Review Every GBL Battle with{' '}
                 <span
                   className="bg-clip-text text-transparent"
                   style={{
                     backgroundImage: 'linear-gradient(90deg, #2DD4BF 0%, #67E8F9 50%, #FACC15 100%)'
                   }}
                 >
-                  Real-Time PvP Combat Math.
+                  Frame-Synced Replay Math.
                 </span>
               </h1>
 
               <p className="text-sm sm:text-base leading-relaxed text-slate-300 max-w-2xl">
-                SilphScope PvP projects a crystal-clear <strong className="text-teal-300">50% translucent tactical HUD</strong> directly over Pokémon GO. It tracks fast-move turn clocks, banked energy across all 3 opponent slots, real-time multi-stage buff/debuff damage, and live backline probabilities — while automatically logging your battles and building <strong className="text-amber-300">ELO-adaptive Anti-Meta teams</strong> tailored to the exact Pokémon you face.
+                SilphScope PvP pairs <strong className="text-teal-300">hardware Battle DVR + JSONL frame traces</strong> with zero-typing 3v3 battle logging (including <strong className="text-amber-300">free 1-click GOBattleLog export</strong>). Play cleanly with zero HUD on screen in <strong className="text-emerald-300">Log-Only Stealth Mode</strong>, scrub energy and IV calls afterward in the browser Replay Theater, build <strong className="text-amber-300">ELO-adaptive Anti-Meta teams</strong>, or enable the optional Compact move-count reference when practicing.
               </p>
 
-              {/* Prominent 4-Banner Action Stack (Thumb-Friendly on Mobile & Desktop) */}
+              {/* Prominent 4-Banner Action Stack (1. DVR -> 2. APK -> 3. ELO Anti-Meta -> 4. Guide & Modes) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <a
-                  href="https://dl.silphscopepvp.com"
-                  className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01]"
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('vault')}
+                  className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
                   style={{
                     background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)',
                     borderColor: '#99F6E4',
@@ -1402,19 +1403,20 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">📱</span>
+                    <span className="text-2xl">🎬</span>
                     <div className="text-left">
-                      <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.76)</div>
+                      <div className="text-sm font-black leading-tight">Cloud DVR Replay Vault</div>
+                      <div className="text-[11px] font-bold opacity-85">
+                        Watch @Featured Battles &amp; Scrub Synced Traces
+                      </div>
                     </div>
                   </div>
-                  <span className="text-lg font-black">↓</span>
-                </a>
+                  <span className="text-lg font-black">→</span>
+                </button>
 
-                <button
-                  type="button"
-                  onClick={() => onSelectSubpage('vault')}
-                  className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
+                <a
+                  href="https://dl.silphscopepvp.com"
+                  className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01]"
                   style={{
                     backgroundColor: '#0E1B2E',
                     borderColor: '#2DD4BF',
@@ -1422,18 +1424,18 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">🎬</span>
+                    <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight" style={{ color: '#2DD4BF' }}>
-                        Cloud DVR Replay Vault
+                        Download Android APK
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Watch @Featured Battles + Frame-Synced HUD
+                        Instant 1-Click Direct Release (v7.77)
                       </div>
                     </div>
                   </div>
-                  <span className="text-teal-300">→</span>
-                </button>
+                  <span className="text-teal-300">↓</span>
+                </a>
 
                 <button
                   type="button"
@@ -1449,10 +1451,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">🧬</span>
                     <div>
                       <div className="text-sm font-black leading-tight" style={{ color: '#FACC15' }}>
-                        Live Anti-Meta Team Builder
+                        ELO Anti-Meta Builder &amp; Web Sim
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Fuse Your ELO Battle Logs + PvPoke Ratings
+                        iOS &amp; Desktop Friendly • Fuse Logs + PvPoke
                       </div>
                     </div>
                   </div>
@@ -1473,10 +1475,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📖</span>
                     <div>
                       <div className="text-sm font-black leading-tight text-cyan-300">
-                        How to Use the 50% HUD
+                        Field Manual &amp; 3 Modes
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Visual Guide, Shield Calls &amp; Haptic Cues
+                        Log-Only Stealth, Compact Default &amp; Replay Controls
                       </div>
                     </div>
                   </div>
@@ -1487,10 +1489,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Key Telemetry Pill Strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
                 {[
-                  { k: '50% Alpha', v: 'Crystal-Clear Glass HUD', c: '#2DD4BF' },
-                  { k: '±4 Stages', v: 'Live Buff/Debuff Damage', c: '#FACC15' },
-                  { k: '100% Free', v: 'In-Game HUD & GBL Export', c: '#34D399' },
-                  { k: '$2 Forever', v: 'Supporter Shield HUD Unlock', c: '#67E8F9' }
+                  { k: 'Log-Only', v: 'Zero-HUD Stealth Recording', c: '#34D399' },
+                  { k: 'Auto-Log', v: 'Free 1-Click GOBattleLog Export', c: '#2DD4BF' },
+                  { k: 'ELO Meta', v: 'Personal + PvPoke Anti-Meta', c: '#FACC15' },
+                  { k: 'Web + iOS', v: 'Browser DVR & 3v3 Simulator', c: '#67E8F9' }
                 ].map((stat) => (
                   <div
                     key={stat.k}
@@ -1506,7 +1508,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               </div>
             </div>
 
-            {/* Right 5 Columns: Straight-On Vertical (Portrait) Phone Frame showcasing Shiny Origin Dialga */}
+            {/* Right 5 Columns: Straight-On Vertical (Portrait) Phone Frame showcasing Browser Replay Theater */}
             <div className="lg:col-span-5 flex flex-col items-center">
               <div
                 className="relative w-full max-w-[340px] rounded-[34px] p-2.5 border-4 shadow-2xl"
@@ -1543,7 +1545,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       rel="noopener noreferrer"
                       className="text-xs font-black text-teal-300 hover:text-teal-200 flex items-center gap-1.5"
                     >
-                      <span>▶️ Watch Full Battle + Live HUD</span>
+                      <span>▶️ Open Interactive Replay Theater</span>
                     </a>
                     <button
                       type="button"
@@ -1586,92 +1588,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </div>
           </section>
 
-          {/* 1.5. 100% TOS-SAFE & BAN-PROOF GUARANTEE */}
-          <section
-            className="rounded-3xl p-6 sm:p-8 border space-y-6"
-            style={{
-              backgroundColor: '#07101E',
-              borderColor: 'rgba(45, 212, 191, 0.35)',
-              boxShadow: '0 0 30px rgba(45, 212, 191, 0.08)'
-            }}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-teal-300">
-                  <span>🛡️ Verified Fair Play &amp; Safety</span>
-                  <span>•</span>
-                  <span className="text-amber-300">Poke Genie &amp; Calcy IV Compatible Architecture</span>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  100% TOS-Safe &amp; Ban-Proof Guarantee
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                  Your account safety is paramount. SilphScope PvP was engineered from day one to operate exclusively as a passive, non-intrusive battle aid that strictly respects Niantic Terms of Service.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href="https://dl.silphscopepvp.com"
-                  className="px-4 py-2.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-md hover:brightness-110"
-                  style={{ backgroundColor: '#2DD4BF', color: '#042F2E' }}
-                >
-                  <span>📱</span>
-                  <span>Download APK (v7.76)</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => onLaunchWebApp('presets')}
-                  className="px-4 py-2.5 rounded-xl font-black text-xs border border-amber-400/50 text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 transition cursor-pointer"
-                >
-                  🌐 Try Web Demo First
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
-                <div className="w-9 h-9 rounded-xl bg-teal-400/15 border border-teal-400/40 text-teal-300 text-lg flex items-center justify-center">
-                  🛡️
-                </div>
-                <h3 className="font-black text-sm text-white">Zero Game Injection</h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Never touches Pokémon GO&apos;s code, memory, or game files. Operates as an independent OS overlay without interacting with game servers.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
-                <div className="w-9 h-9 rounded-xl bg-teal-400/15 border border-teal-400/40 text-teal-300 text-lg flex items-center justify-center">
-                  👁️
-                </div>
-                <h3 className="font-black text-sm text-white">Screen Pixels Only</h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Uses standard Android <code className="text-teal-300">MediaProjection</code> to read screen pixels—the exact same passive visual technology used safely by Poke Genie and Calcy IV since 2016.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
-                <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-300 text-lg flex items-center justify-center">
-                  🚫
-                </div>
-                <h3 className="font-black text-sm text-white">No Automation or GPS</h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Zero macros, zero screen tapping, and zero GPS spoofing. It does not play the battle for you; it only provides tactical combat telemetry.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
-                <div className="w-9 h-9 rounded-xl bg-cyan-400/15 border border-cyan-400/40 text-cyan-300 text-lg flex items-center justify-center">
-                  🌐
-                </div>
-                <h3 className="font-black text-sm text-white">Zero-Install Web Sim</h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Hesitant to install an APK? Experience full turn-pacing, team building, and combat calculations directly in your mobile browser with zero downloads.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* 2. FEATURED BATTLES SHOWCASE (@Featured • Official Showcase Clickable GIF Cards) */}
+          {/* 2A. FEATURED BATTLES SHOWCASE (@Featured • Interactive Browser Replay Theater) */}
           <section
             className="rounded-3xl p-6 sm:p-8 border space-y-6"
             style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
@@ -1679,15 +1596,15 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div>
                 <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider" style={{ color: '#FACC15' }}>
-                  <span>🌟 Official @Featured Replay Vault</span>
+                  <span>🎬 Interactive Browser Replay Theater (@Featured Vault)</span>
                   <span>•</span>
-                  <span className="text-teal-300">Click Any Card to Open Full Battle + Live HUD</span>
+                  <span className="text-teal-300">Post-Match VOD Review on Desktop, iOS &amp; Android</span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  See the 2x Retina 50% Translucent HUD in Real Combat
+                  Scrub Every Turn, Energy Count &amp; Breakpoint After the Match
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl">
-                  Every battle below was recorded at zero game lag using SilphScope&apos;s hardware H.264 DVR and cloned into our persistent <code className="text-teal-300">@Featured</code> vault. Click any card to open the full replay at <code className="text-amber-300">0:00</code> in the interactive Web Replay Theater, or tap a chapter pill to jump straight to the key moment.
+                  Every battle below pairs hardware H.264 DVR video with a synchronized <code className="text-teal-300">_deep_trace.jsonl</code> telemetry stream in our persistent <code className="text-teal-300">@Featured</code> vault. Click any card to inspect the replay from <code className="text-amber-300">0:00</code> in your browser — toggling Full HUD, Compact HUD, or clean unassisted video on and off at any turn.
                 </p>
               </div>
               <a
@@ -1719,7 +1636,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_aura_nidoking') || CANONICAL_FEATURED_REPLAYS[0]);
                     }}
                     className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
-                    title="Click to watch full battle in the Synchronized HUD Replay Theater"
+                    title="Click to inspect full battle in the Interactive Browser Replay Theater"
                   >
                     <video
                       src={`${import.meta.env.BASE_URL}screenshots/featured_ul_aura_nidoking.mp4`}
@@ -1731,11 +1648,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       className="w-full h-[460px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/90 border border-teal-400/60 text-[10.5px] font-extrabold text-teal-300">
-                      @Featured • 🌟 Official Showcase
+                      @Featured • 🌟 Replay Trace
                     </div>
                     <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex items-center justify-between">
                       <span className="px-2.5 py-1 rounded-lg bg-teal-400 text-slate-950 font-black text-xs shadow">
-                        ▶️ Watch Full Battle (0:00)
+                        ▶️ Inspect Replay (0:00)
                       </span>
                       <span className="text-[11px] font-mono font-bold text-amber-300">
                         WIN • Ultra League
@@ -1745,10 +1662,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
-                      1. 3D Shadow Aura &amp; Observed-CP IV Math (<code className="text-rose-300">D-3</code>)
+                      1. 3D Shadow Aura &amp; Observed-CP IV Trace (<code className="text-rose-300">D-3</code>)
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong>Melmetal, Mimikyu &amp; Galarian Moltres</strong> vs. <strong>Shadow Nidoking, Clefable &amp; Kommo-o</strong>. Auto-verifies <code className="text-purple-300">Shadow: 🟣 ON ✓</code> at 0:04 via 3D HSV battlefield aura + dual <code className="text-teal-300">AURA+DHP</code>, narrows Observed-CP IVs (<code className="text-amber-300">0/14/11</code>), and tracks <code className="text-rose-300">Def -3</code> Sand Tomb + Disguise Bust.
+                      <strong>Melmetal, Mimikyu &amp; Galarian Moltres</strong> vs. <strong>Shadow Nidoking, Clefable &amp; Kommo-o</strong>. Post-match trace confirms <code className="text-purple-300">Shadow: 🟣 ON ✓</code> at 0:04 via 3D HSV aura + dual <code className="text-teal-300">AURA+DHP</code>, narrows Observed-CP IVs (<code className="text-amber-300">0/14/11</code>), and logs <code className="text-rose-300">Def -3</code> Sand Tomb + Disguise Bust.
                     </p>
                   </div>
                 </div>
@@ -1777,7 +1694,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
               </div>
 
-              {/* Featured Battle Card 2: Ultra League Live ⚡BP+1 Breakpoint & Shadow: N/A */}
+              {/* Featured Battle Card 2: Ultra League ⚡BP+1 Breakpoint & Shadow: N/A Trace */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
@@ -1790,7 +1707,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_bp_skeledirge') || CANONICAL_FEATURED_REPLAYS[1]);
                     }}
                     className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
-                    title="Click to watch full battle in the Synchronized HUD Replay Theater"
+                    title="Click to inspect full battle in the Interactive Browser Replay Theater"
                   >
                     <video
                       src={`${import.meta.env.BASE_URL}screenshots/featured_ul_bp_skeledirge.mp4`}
@@ -1802,11 +1719,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       className="w-full h-[460px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/90 border border-teal-400/60 text-[10.5px] font-extrabold text-teal-300">
-                      @Featured • 🌟 Official Showcase
+                      @Featured • 🌟 Replay Trace
                     </div>
                     <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex items-center justify-between">
                       <span className="px-2.5 py-1 rounded-lg bg-teal-400 text-slate-950 font-black text-xs shadow">
-                        ▶️ Watch Full Battle (0:00)
+                        ▶️ Inspect Replay (0:00)
                       </span>
                       <span className="text-[11px] font-mono font-bold text-amber-300">
                         WIN • Ultra League
@@ -1816,10 +1733,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
-                      2. Live <code className="text-emerald-300">⚡BP+1</code> Breakpoint &amp; <code className="text-slate-300">Shadow: N/A</code> Lock
+                      2. Offline <code className="text-emerald-300">⚡BP+1</code> Breakpoint &amp; <code className="text-slate-300">Shadow: N/A</code> Lock
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong>Melmetal, Mimikyu &amp; Galarian Moltres</strong> vs. <strong>Tinkaton, Skeledirge &amp; Goodra</strong>. Narrowing Skeledirge&apos;s CP (<code className="text-amber-300">0/13/12</code>) triggers a live <code className="text-emerald-300">⚡BP+1</code> fast-move breakpoint badge while keeping unreleased Shadows locked to <code className="text-slate-200">Shadow: N/A</code>.
+                      <strong>Melmetal, Mimikyu &amp; Galarian Moltres</strong> vs. <strong>Tinkaton, Skeledirge &amp; Goodra</strong>. Replay telemetry reconstructs Skeledirge&apos;s Observed-CP IV spread (<code className="text-amber-300">0/13/12</code>) to flag <code className="text-emerald-300">⚡BP+1</code> breakpoints while keeping unreleased Shadows locked to <code className="text-slate-200">Shadow: N/A</code>.
                     </p>
                   </div>
                 </div>
@@ -1853,7 +1770,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     }}
                     className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
-                    ⚡ Live BP+1 (2:14)
+                    ⚡ Breakpoint Review (2:14)
                   </button>
                 </div>
               </div>
@@ -1871,7 +1788,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_catch_cobalion') || CANONICAL_FEATURED_REPLAYS[2]);
                     }}
                     className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
-                    title="Click to watch full battle in the Synchronized HUD Replay Theater"
+                    title="Click to inspect full battle in the Interactive Browser Replay Theater"
                   >
                     <video
                       src={`${import.meta.env.BASE_URL}screenshots/featured_ul_catch_cobalion.mp4`}
@@ -1883,11 +1800,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       className="w-full h-[460px] object-cover object-top transition duration-300 group-hover:scale-[1.02]"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/90 border border-teal-400/60 text-[10.5px] font-extrabold text-teal-300">
-                      @Featured • 🌟 Official Showcase
+                      @Featured • 🌟 Replay Trace
                     </div>
                     <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex items-center justify-between">
                       <span className="px-2.5 py-1 rounded-lg bg-teal-400 text-slate-950 font-black text-xs shadow">
-                        ▶️ Watch Full Battle (0:00)
+                        ▶️ Inspect Replay (0:00)
                       </span>
                       <span className="text-[11px] font-mono font-bold text-amber-300">
                         WIN • Ultra League
@@ -1900,7 +1817,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       3. Disguise Sync, Non-Shadow Proof &amp; Endgame Catch
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong>Tinkaton, Mimikyu &amp; Swampert</strong> vs. <strong>Drifblim, Galarian Weezing &amp; Cobalion</strong>. Verifies Drifblim as <code className="text-teal-300">Shadow: OFF ✓</code> without Ghost VFX bleed, tracks <code className="text-rose-300">A-2 👹D-1</code> cleanly, and nails a <code className="text-amber-300">0F</code> Swap-Catch onto Swampert.
+                      <strong>Tinkaton, Mimikyu &amp; Swampert</strong> vs. <strong>Drifblim, Galarian Weezing &amp; Cobalion</strong>. Replay log verifies Drifblim as <code className="text-teal-300">Shadow: OFF ✓</code> without Ghost VFX bleed, syncs <code className="text-rose-300">A-2 👹D-1</code> cleanly, and timestamps a <code className="text-amber-300">0F</code> Swap-Catch onto Swampert.
                     </p>
                   </div>
                 </div>
@@ -1937,6 +1854,108 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     🛑 0F Catch (1:45)
                   </button>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 2B. LOG-ONLY STEALTH MODE & READ-ONLY SCREEN-CAPTURE ARCHITECTURE */}
+          <section
+            className="rounded-3xl p-6 sm:p-8 border space-y-6"
+            style={{
+              background: 'linear-gradient(135deg, rgba(6, 78, 59, 0.35) 0%, rgba(7, 16, 30, 0.96) 55%, rgba(14, 27, 46, 0.96) 100%)',
+              borderColor: 'rgba(16, 185, 129, 0.45)',
+              boxShadow: '0 10px 35px rgba(16, 185, 129, 0.10)'
+            }}
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-2 max-w-3xl">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-300">
+                  <span>🔕 Play! Pokémon &amp; Show 6 Tournament Friendly</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-teal-300">Poke Genie &amp; Calcy IV Capture API</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-amber-300">100% Free Across All Tiers</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white">
+                  Read-Only Screen Capture &amp; Zero-HUD Stealth Architecture
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Want pure, unassisted matches while still automating your battle logs and VOD archives? Press and hold the corner emblem for <strong>2.0 seconds</strong> to activate <strong>Log-Only Stealth Mode</strong>: every floating view is removed (<code className="text-emerald-300 font-mono">View.GONE</code>), haptics are silenced, and background vision quietly records a clean H.264 video + <code className="text-teal-300 font-mono">_deep_trace.jsonl</code> stream so you can tap <code className="text-white font-mono bg-slate-900/80 px-1.5 py-0.5 rounded">📊 Battle Log</code> after the match to review mistakes.
+                </p>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-[11.5px] text-emerald-200/90 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                    <span><strong>2.0s Press-and-Hold:</strong> Toggles Log-Only Stealth Mode (zero HUD, zero haptics)</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0"></span>
+                    <span><strong>Single-Tap Emblem:</strong> Strictly alternates <code className="text-white font-mono bg-slate-900/80 px-1 py-0.5 rounded">Full HUD ↔ Compact HUD</code></span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                    <span><strong>Post-Battle Summary:</strong> 1-Tap <code className="text-white font-mono bg-slate-900/80 px-1 py-0.5 rounded">📊 Battle Log</code> &amp; Cloud DVR upload</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap lg:flex-col items-stretch sm:items-center lg:items-stretch gap-2 shrink-0">
+                <a
+                  href="https://dl.silphscopepvp.com"
+                  className="px-4 py-2.5 rounded-xl font-black text-xs transition flex items-center justify-center gap-1.5 shadow-md hover:brightness-110"
+                  style={{ backgroundColor: '#2DD4BF', color: '#042F2E' }}
+                >
+                  <span>📱</span>
+                  <span>Download APK (v7.77)</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onLaunchWebApp('presets')}
+                  className="px-4 py-2.5 rounded-xl font-black text-xs border border-amber-400/50 text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 transition cursor-pointer"
+                >
+                  🌐 Try Web Demo First
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E]/90 border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-400/15 border border-teal-400/40 text-teal-300 text-lg flex items-center justify-center">
+                  🛡️
+                </div>
+                <h3 className="font-black text-sm text-white">Zero Game Injection</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Never touches Pokémon GO&apos;s APK, memory, or network traffic. Runs strictly as an external Android recorder &amp; analyzer without inspecting game packets.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E]/90 border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-400/15 border border-teal-400/40 text-teal-300 text-lg flex items-center justify-center">
+                  👁️
+                </div>
+                <h3 className="font-black text-sm text-white">Passive Screen Pixels Only</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Uses standard Android <code className="text-teal-300">MediaProjection</code> read-only pixels — the exact same OS capture permission used by Poke Genie and Calcy IV since 2016.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E]/90 border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-emerald-400/15 border border-emerald-400/40 text-emerald-300 text-lg flex items-center justify-center">
+                  🚫
+                </div>
+                <h3 className="font-black text-sm text-white">Zero Automation or Inputs</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  No macros, no automated taps, and no GPS spoofing. In Stealth Mode it is completely invisible (<code className="text-emerald-300 font-mono">View.GONE</code>) for pure unassisted battles and VOD logging.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E]/90 border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-cyan-400/15 border border-cyan-400/40 text-cyan-300 text-lg flex items-center justify-center">
+                  🌐
+                </div>
+                <h3 className="font-black text-sm text-white">Zero-Install Web &amp; iOS</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  On iPhone or desktop? Open the interactive Browser Replay Vault, 3v3 Simulator, and ELO Anti-Meta Team Builder in Safari or Chrome with zero downloads.
+                </p>
               </div>
             </div>
           </section>
@@ -1982,17 +2001,17 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
               </div>
 
-              {/* Hybrid Backline Predictor Callout */}
+              {/* Hybrid Backline Probability Engine Callout */}
               <div
                 className="p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
               >
                 <div className="space-y-0.5">
                   <div className="text-xs font-black text-teal-300">
-                    🔮 Live Backline Predictor — 100% Free in Open Leagues!
+                    🔮 Hybrid Backline Probability Engine — Free in Open Leagues!
                   </div>
                   <p className="text-[11.5px] text-slate-300">
-                    The 2-line in-game HUD predicts the opponent&apos;s unrevealed 2nd &amp; 3rd Pokémon in real time for free in Great, Ultra &amp; Master League. Supporter &amp; Pro unlock Limited/Specialty Cups and the Deep Pair Explorer.
+                    Estimates likely unrevealed 2nd &amp; 3rd Pokémon from your ELO battle logs + crowd meta for post-match replay study and optional reference views in Great, Ultra &amp; Master League. Supporter &amp; Pro unlock Limited Cups and the Deep Pair Explorer.
                   </p>
                 </div>
                 <button
@@ -2116,85 +2135,86 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </div>
           </section>
 
-          {/* TOURNAMENT COMPLIANCE: COMPETITIVE LOG-ONLY STEALTH MODE (100% Free Across All Tiers!) */}
+          {/* 4. OPTIONAL REAL-TIME TACTICAL DATA: 3 MODES, YOUR CHOICE */}
           <section
-            className="rounded-3xl p-6 sm:p-8 border relative overflow-hidden space-y-5"
+            className="rounded-3xl p-6 sm:p-8 border space-y-6"
             style={{
-              background: 'linear-gradient(135deg, rgba(6, 78, 59, 0.45) 0%, rgba(14, 27, 46, 0.95) 60%, rgba(15, 118, 110, 0.35) 100%)',
-              borderColor: '#10B981',
-              boxShadow: '0 10px 35px rgba(16, 185, 129, 0.15)'
+              background: 'linear-gradient(135deg, rgba(14, 27, 46, 0.96) 0%, rgba(7, 16, 30, 0.98) 100%)',
+              borderColor: 'rgba(45, 212, 191, 0.35)',
+              boxShadow: '0 10px 35px rgba(15, 23, 42, 0.45)'
             }}
           >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="space-y-3 max-w-3xl">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-mono text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🔕</span>
-                    <span>Play! Pokémon &amp; Show 6 Tournament Compliance</span>
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-teal-400/10 border border-teal-400/30 text-teal-300 text-[11px] font-bold">
-                    ✅ 100% Free Across All Tiers
-                  </span>
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+              <div className="space-y-2 max-w-3xl">
+                <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-cyan-300">
+                  <span>🎛️ Optional Android HUD Modes</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-emerald-300">Zero HUD Defaultable Any Time</span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">
-                  Competitive Log-Only Stealth Mode <span className="text-emerald-400 font-mono text-lg font-bold">(v7.30)</span>
+                  Optional Real-Time Tactical Data: 3 Modes, Your Choice
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Competing in official <strong>Play! Pokémon Regionals &amp; International Championships</strong> or grassroots <strong>Show 6 / BF</strong> tournaments? SilphScope is engineered to comply 100% with strict tournament &amp; referee regulations. In <strong>Competitive Mode: Log-Only</strong>, the overlay is completely invisible (<code className="text-emerald-300 font-mono">View.GONE</code>), haptic vibrations are silenced, and zero turn alerts or floating toasts display during live play.
+                  Prefer strictly zero overlay during matches, a quiet move-count reference sheet, or full scrim study telemetry? Switch between all three modes cleanly from the corner emblem — without losing battle auto-logging or DVR recording.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs text-slate-200">
-                  <div className="flex items-start gap-2.5 bg-slate-950/60 p-3.5 rounded-2xl border border-emerald-500/20">
-                    <span className="text-xl text-emerald-400 shrink-0">⚡</span>
-                    <div className="space-y-1">
-                      <strong className="text-white block font-bold">Headless Background Vision &amp; Hardware DVR</strong>
-                      <p className="text-slate-300 leading-relaxed">
-                        Silently captures OCR nameplates, pixel HP%, energy pacing, and scaled hardware H.264 DVR + <code className="text-teal-300 font-mono text-[11px]">_deep_trace.jsonl</code> with zero screen impact and under 0.5% CPU load.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2.5 bg-slate-950/60 p-3.5 rounded-2xl border border-emerald-500/20">
-                    <span className="text-xl text-emerald-400 shrink-0">📊</span>
-                    <div className="space-y-1">
-                      <strong className="text-white block font-bold">Automatic Logging &amp; Between-Round VOD Review</strong>
-                      <p className="text-slate-300 leading-relaxed">
-                        Matches commit automatically to your Battle Log and sync to your private cloud vault for between-round coaching, matchup review, and VOD analysis without touching your phone mid-set.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-[11.5px] text-emerald-200/90 font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-                    <span><strong>Single-Tap Emblem:</strong> Strictly alternates <code className="text-white font-mono bg-slate-900/80 px-1 py-0.5 rounded">Full HUD ↔ Compact HUD</code></span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-                    <span><strong>2.0s Press-and-Hold:</strong> Toggles Log-Only Stealth Mode on/off</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-                    <span><strong>Post-Battle Summary:</strong> 1-Tap <code className="text-white font-mono bg-slate-900/80 px-1 py-0.5 rounded">📊 Battle Log</code> shortcut button</span>
-                  </span>
-                </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0 justify-center">
+              <div className="flex flex-wrap gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => onSelectSubpage('guide')}
-                  className="px-4 py-3 rounded-2xl font-black text-xs bg-emerald-400 hover:bg-emerald-300 text-slate-950 transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl font-black text-xs bg-teal-400 hover:bg-teal-300 text-slate-950 transition shadow-md cursor-pointer"
                 >
-                  <span>📖 Visual Field Manual</span>
-                  <span>→</span>
+                  📖 Open Field Manual &amp; Modes →
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSelectSubpage('compare')}
-                  className="px-4 py-3 rounded-2xl font-bold text-xs bg-slate-900/80 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 transition flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={() => onLaunchWebApp('simulator')}
+                  className="px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-400/40 transition cursor-pointer"
                 >
-                  <span>⚔️ Feature Matrix</span>
-                  <span>→</span>
+                  🧮 Preview Compact &amp; Full Layouts in Web Simulator →
                 </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Mode 1: Log-Only Stealth */}
+              <div className="p-5 rounded-2xl border bg-[#07101E] border-emerald-500/40 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-black text-white">🔕 Mode 1: Log-Only Stealth (Zero HUD)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold shrink-0">
+                    Tournament &amp; Clean-Play Safe
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Hold the top-left emblem for <strong>2.0s</strong> to remove every floating overlay view (<code className="text-emerald-300 font-mono">View.GONE</code>) and mute haptics while silently auto-logging teams and recording frame-synced DVR replays for post-match review.
+                </p>
+              </div>
+
+              {/* Mode 2: Compact Reference HUD */}
+              <div className="p-5 rounded-2xl border bg-[#081120] border-teal-400/45 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-black text-white">⚡ Mode 2: Compact Reference HUD (Default)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-teal-400/15 border border-teal-400/45 text-teal-300 text-[10px] font-bold shrink-0">
+                    AI Coach OFF by Default
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Ships with the <code className="text-teal-300 font-mono">Moves (Def)</code> preset (Mirrored Header + Opp/My Attacks + Pacing, with <strong>AI Coach OFF</strong> &amp; <strong>3×3 Matrix OFF</strong>), 6-module granular toggles, and shareable HUD layout URLs.
+                </p>
+              </div>
+
+              {/* Mode 3: Full Practice HUD */}
+              <div className="p-5 rounded-2xl border bg-[#081120] border-amber-400/35 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-black text-white">📐 Mode 3: Full Practice HUD (Opt-In)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-bold shrink-0">
+                    Optional Study &amp; Practice
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Single-tap the emblem when practicing with friends or studying matchups to expand the full 9-shield matchup matrix, turn pacing bars, and optional Shield Decision cards.
+                </p>
               </div>
             </div>
           </section>
@@ -2211,7 +2231,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   💎 Community-First Pricing • No Forced Subscriptions
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  100% Free Live HUD Forever. Upgrade for Shield HUD &amp; Cloud DVR Vault.
+                  Free Auto-Logger, Replay Viewer &amp; Team Builder Forever. Upgrade for Cloud DVR Vault &amp; All-Cup Anti-Meta.
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl">
                   Subscribing to <strong>Legend Pro</strong> or <strong>VIP</strong> even once permanently grants you <strong className="text-amber-300">🏅 Lifetime Supporter (Alumni)</strong> status forever—keeping the <strong>🛡️ Attack Incoming! Shield Decision Overlay</strong>, Unlimited Lifetime Battle Logs, and 5 Local DVR Videos unlocked even if your seasonal pass expires.
@@ -2261,11 +2281,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   </div>
                   <div className="text-2xl font-black text-white">$0</div>
                   <ul className="text-xs text-slate-300 space-y-1.5">
-                    <li>✅ <strong>100% Free Live 50% HUD &amp; 9-Shield Matrix</strong></li>
-                    <li>✅ <strong>Live 2-Line Backline Predictor</strong> (Open GL/UL/ML)</li>
-                    <li>✅ <strong>Synchronized Haptics</strong> (Swap Clock &amp; Move Alerts)</li>
-                    <li>✅ <strong>1 Local Hardware DVR Video</strong> (15 FPS)</li>
-                    <li>✅ <strong>Current Season Logs + Free GOBattleLog Export</strong></li>
+                    <li>✅ <strong>Current Season Auto-Logs + Free 1-Click GOBattleLog Export</strong></li>
+                    <li>✅ <strong>Log-Only Stealth Mode + 1 Local Hardware DVR Video</strong> (15 FPS)</li>
+                    <li>✅ <strong>Great &amp; Master League Anti-Meta Builder + Web 3v3 Simulator</strong></li>
+                    <li>✅ <strong>Optional Compact Reference HUD (AI Coach OFF) &amp; 9-Shield Matrix</strong></li>
+                    <li>✅ <strong>Synchronized Haptics &amp; Open-League Backline Estimates</strong></li>
                   </ul>
                 </div>
                 <a
@@ -2451,13 +2471,13 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
             <div>
               <div className="text-xs font-extrabold uppercase tracking-wider text-teal-300">
-                📖 Visual Field Manual • 50% Translucent HUD
+                📖 Visual Field Manual • Semi-Transparent Overlay &amp; Modes
               </div>
               <h1 className="text-2xl sm:text-4xl font-black text-white mt-1">
                 How to Read &amp; Master the SilphScope PvP Overlay
               </h1>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl">
-                Designed for split-second readability without ever blocking Pokémon GO&apos;s health bars, nameplates, or charged-move buttons.
+                Built with adjustable transparency so Pokémon GO&apos;s health bars, nameplates, and charged-move buttons stay crisp — or toggle Log-Only Stealth Mode for zero HUD during live sets.
               </p>
             </div>
             <button
@@ -2469,7 +2489,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </button>
           </div>
 
-          {/* Annotated 6-Zone Breakdown with Vertical 50% HUD Frames */}
+          {/* Annotated 6-Zone Breakdown with Semi-Transparent Overlay Frames */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div className="lg:col-span-5 flex flex-col items-center gap-4">
               <div
@@ -2478,7 +2498,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               >
                 <img
                   src={`${import.meta.env.BASE_URL}screenshots/featured_hero_shiny_dialga_poster.png`}
-                  alt="Annotated 50% Translucent HUD — Shiny Origin Dialga"
+                  alt="Annotated Semi-Transparent Overlay — Shiny Origin Dialga"
                   className="rounded-2xl w-full h-auto block"
                 />
               </div>
@@ -2488,7 +2508,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               >
                 <img
                   src={`${import.meta.env.BASE_URL}screenshots/featured_ul_bp_skeledirge_poster.png`}
-                  alt="Annotated 50% Translucent HUD — Live BP+1 Breakpoint & Shadow Lock"
+                  alt="Annotated Semi-Transparent Overlay — Breakpoint & Shadow Lock"
                   className="rounded-2xl w-full h-auto block"
                 />
               </div>
@@ -2607,10 +2627,16 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               <tbody className="divide-y divide-slate-800/70">
                 {[
                   [
-                    'Real-Time In-Game Android HUD (50% Translucent)',
-                    '✅ 100% Free Forever',
-                    '❌ Web-Only',
-                    '❌ Web-Only'
+                    'Synchronized H.264 Battle DVR + Web Replay Theater',
+                    '✅ 15/30 FPS DVR + dvr.silphscopepvp.com',
+                    '❌ None',
+                    '❌ None'
+                  ],
+                  [
+                    'Tournament-Compliant Log-Only Stealth Mode (0 HUD / 0 Haptics + Headless DVR & Auto-Log)',
+                    '✅ Built-In & Free Across All Tiers',
+                    '—',
+                    '—'
                   ],
                   [
                     'Automatic OCR Battle Logging (No Manual Typing)',
@@ -2625,6 +2651,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     'Native Format'
                   ],
                   [
+                    'Objective Skill Math (BMF Matchmaking Luck vs. WAE Skill)',
+                    '✅ Full BMF, WAE & Safe-Swap MVP Grades',
+                    '❌ None',
+                    '❌ Win/Loss Count Only'
+                  ],
+                  [
                     'ELO-Adaptive Anti-Meta Team Builder',
                     '✅ Fuses Personal Logs (70%) + PvPoke (30%)',
                     'Static Theoretical Rankings Only',
@@ -2637,22 +2669,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     '❌ None'
                   ],
                   [
-                    'Objective Skill Math (BMF Matchmaking Luck vs. WAE Skill)',
-                    '✅ Full BMF, WAE & Safe-Swap MVP Grades',
-                    '❌ None',
-                    '❌ Win/Loss Count Only'
-                  ],
-                  [
-                    'Synchronized H.264 Battle DVR + Web Replay Theater',
-                    '✅ 15/30 FPS DVR + dvr.silphscopepvp.com',
-                    '❌ None',
-                    '❌ None'
-                  ],
-                  [
-                    'Tournament-Compliant Log-Only Stealth Mode (0 HUD / 0 Haptics + Headless DVR & Auto-Log)',
-                    '✅ Built-In & Free Across All Tiers',
-                    '—',
-                    '—'
+                    'Optional Semi-Transparent Android HUD (Adjustable Transparency)',
+                    '✅ 100% Free Forever',
+                    '❌ Web-Only',
+                    '❌ Web-Only'
                   ],
                   [
                     'Cost',
@@ -3456,7 +3476,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="p-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between text-xs font-mono font-bold">
               <div className="flex items-center gap-2 text-teal-300">
                 <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping"></span>
-                <span>SILPHSCOPE SECONDARY HUD • 50% TRANSLUCENT GLASS</span>
+                <span>SILPHSCOPE SECONDARY DISPLAY • ADJUSTABLE TRANSPARENCY</span>
               </div>
               <div className="text-slate-400">
                 Turn {simTurn} • {(simTurn * 0.5).toFixed(1)}s • 1 Turn = 0.5s
