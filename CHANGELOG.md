@@ -2,6 +2,14 @@
 
 ---
 
+## v7.72 (2026-11-18) — Direct In-App APK Downloads (`/direct`) & Full Android 2B Icon Suite
+*Release update & branding parity patch (`v7.72`, `versionCode = 1772`) routing Android's in-app updater directly to the latest signed `.apk` asset via `dl.silphscopepvp.com/direct` and upgrading the unified 2B Split-Arc Duel Scope icon across launcher, Pixel monochrome themed icons, in-app header, and foreground notification bar.*
+
+- **Direct In-App APK Downloads (`worker.mjs`, `MainActivity.kt`, `OverlayService.kt`)**: Added dedicated direct-download subpath routes (`dl.silphscopepvp.com/direct`, `/latest`, `/apk`) returning an immediate `302` redirect to the latest GitHub Release `.apk` (`60s` edge cache TTL) while keeping `https://dl.silphscopepvp.com/` as the TOS-safe landing page; updated `GET /v1/version/latest` (`downloadUrl: https://dl.silphscopepvp.com/direct`) and added `normalizeDirectApkDownloadUrl()` + GitHub `.apk` `browser_download_url` asset parsing in `MainActivity` so in-app updates never detour through the web landing page.
+- **Full Android 2B Split-Arc Duel Scope Icon Suite (`ic_launcher_foreground.xml`, `ic_launcher_monochrome.xml`, `ic_launcher*.xml`, `ic_gbl_logo.xml`, `OverlayService.kt`)**: Scaled the adaptive launcher foreground boldly to `0.84×` with thicker `6.4dp` split arcs and `6.0dp` catch bullseye, added Android 13+ `<monochrome>` adaptive support (`ic_launcher_monochrome.xml`) for Pixel Themed Icons and the foreground service status bar (`setSmallIcon`), and replaced `ic_gbl_logo.xml` with a full-scale `1.0×` vector matching `public/favicon.svg` 1:1.
+
+---
+
 ## v7.71 (2026-11-18) — Inline Mega Helix Icons Across League Badges, Filter Chips & Idle Overlay
 *UI visual polish release (`v7.71`, `versionCode = 1771`) replacing Mega league abbreviations (`MGL`, `MUL`, `MML`, `Mega GL`/`UL`/`ML`) and Mega Limited Cup prefixes (`Mega Halloween`, `Mega Color`) with an inline Mega Helix vector glyph across Android, Web, and the idle HUD overlay.*
 

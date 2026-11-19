@@ -1776,8 +1776,7 @@ class MainActivity : AppCompatActivity() {
             checkForAppUpdateAsync(manual = true)
         }
         btnAppUpdateDownload.setOnClickListener {
-            val targetUrl = activeUpdateReleaseInfo?.downloadUrl?.takeIf { it.isNotBlank() }
-                ?: "https://dl.silphscopepvp.com"
+            val targetUrl = normalizeDirectApkDownloadUrl(activeUpdateReleaseInfo?.downloadUrl)
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
             } catch (e: Exception) {
@@ -2890,6 +2889,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Ensures in-app update actions always resolve to a direct APK download URL
+     * rather than a bare landing page (including stale cached SharedPreferences payloads).
+     */
+    private fun normalizeDirectApkDownloadUrl(rawUrl: String?): String {
+        val trimmed = rawUrl?.trim().orEmpty()
+        if (trimmed.isBlank() ||
+            !trimmed.startsWith("https://") ||
+            trimmed.equals(OverlayService.OFFICIAL_DOWNLOAD_URL, ignoreCase = true) ||
+            trimmed.equals("${OverlayService.OFFICIAL_DOWNLOAD_URL}/", ignoreCase = true)
+        ) {
+            return OverlayService.OFFICIAL_DIRECT_DOWNLOAD_URL
+        }
+        return trimmed
+    }
+
     private fun parseLatestAppReleasePayload(rawJson: String): OverlayService.Companion.AppUpdateReleaseInfo? {
         if (rawJson.isBlank()) return null
         return try {
@@ -2939,9 +2954,16 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            val dlUrl = root.get("downloadUrl")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            val ghApkAssetUrl = root.get("assets")?.takeIf { it.isJsonArray }?.asJsonArray
+                ?.firstOrNull { el ->
+                    val obj = el?.takeIf { it.isJsonObject }?.asJsonObject
+                    val name = obj?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+                    name.endsWith(".apk", ignoreCase = true)
+                }?.asJsonObject?.get("browser_download_url")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 ?.takeIf { it.startsWith("https://") }
-                ?: "https://dl.silphscopepvp.com"
+            val explicitDlUrl = root.get("downloadUrl")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                ?.takeIf { it.startsWith("https://") }
+            val dlUrl = normalizeDirectApkDownloadUrl(explicitDlUrl ?: ghApkAssetUrl)
             val htmlUrl = root.get("releaseNotesUrl")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 ?: root.get("html_url")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 ?: "https://github.com/sportsfan986/silphscope-pvp/releases/latest"
@@ -2999,7 +3021,7 @@ class MainActivity : AppCompatActivity() {
                 textAppUpdateNotes.text = if (info.highlights.isNotEmpty()) {
                     info.highlights.take(5).joinToString("\n") { "• $it" }
                 } else {
-                    "New SilphScope PvP Android build ready at https://dl.silphscopepvp.com"
+                    "New SilphScope PvP Android build ready — tap Download to install directly."
                 }
                 layoutAppUpdateBanner.visibility = android.view.View.VISIBLE
             } else if (!isNewer) {

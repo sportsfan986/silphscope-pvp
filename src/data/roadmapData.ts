@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.72',
+    codename: 'Direct In-App APK Downloads (/direct) & Full Android 2B Icon Suite',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Routes Android in-app updates straight to the signed APK via dl.silphscopepvp.com/direct and upgrades the unified 2B Split-Arc Duel Scope icon across the 0.84x launcher foreground, Android 13+ monochrome themed layer, full-scale in-app header logo, and notification bar.',
+    icon: '🚀',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Added dl.silphscopepvp.com/direct (/latest, /apk) 302 APK redirect with 60s cache TTL, updated /v1/version/latest downloadUrl, and wired normalizeDirectApkDownloadUrl() + GitHub .apk asset parsing in MainActivity.kt & OverlayService.kt',
+      'Upgraded ic_launcher_foreground.xml to bold 0.84x scale with thicker 6.4dp split energy arcs and 6.0dp catch bullseye while adding ic_launcher_monochrome.xml to both adaptive mipmap XMLs for Android 13+ Pixel Themed Icons',
+      'Replaced ic_gbl_logo.xml with a full-scale 1.0x 2B Duel Scope vector matching favicon.svg 1:1 and updated OverlayService notification setSmallIcon to R.drawable.ic_launcher_monochrome'
+    ]
+  },
+  {
     version: 'v7.71',
     codename: 'Inline Mega Helix Icons Across League Badges, Filter Chips & Idle Overlay',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Replaces Mega league abbreviations (MGL, MUL, MML, Mega GL/UL/ML) and Mega Limited Cup prefixes with an inline 4-stop rainbow Mega Helix vector glyph across Android, Web, and the idle HUD overlay while keeping exports and dropdowns plain ASCII.',
     icon: '🧬',

@@ -8315,7 +8315,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.71');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.72');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
 
@@ -8910,7 +8910,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.71',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.72',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -8919,7 +8919,7 @@ self.addEventListener('fetch', (e) => {
           'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
           {
             headers: ghHeaders,
-            cf: { cacheTtl: 300, cacheEverything: true },
+            cf: { cacheTtl: 60, cacheEverything: true },
           }
         );
         if (ghRes.status === 401 && ghHeaders.Authorization) {
@@ -8928,7 +8928,7 @@ self.addEventListener('fetch', (e) => {
             'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
             {
               headers: ghHeaders,
-              cf: { cacheTtl: 300, cacheEverything: true },
+              cf: { cacheTtl: 60, cacheEverything: true },
             }
           );
         }
@@ -8959,7 +8959,7 @@ self.addEventListener('fetch', (e) => {
                   releaseTitle,
                   publishedAt,
                   highlights,
-                  downloadUrl: 'https://dl.silphscopepvp.com',
+                  downloadUrl: 'https://dl.silphscopepvp.com/direct',
                 },
                 null,
                 2
@@ -8969,7 +8969,7 @@ self.addEventListener('fetch', (e) => {
             headers: buildSecurityHeaders({
               'Content-Type': 'application/json; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Cache-Control': 'public, max-age=300',
+              'Cache-Control': 'public, max-age=60',
             }),
           }
         );
@@ -9078,8 +9078,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.71',
-        releaseTitle: 'SilphScope PvP v7.71',
+        versionName: 'v7.72',
+        releaseTitle: 'SilphScope PvP v7.72',
         publishedAt: '',
         assetSizeMb: '',
       };
@@ -9091,7 +9091,7 @@ self.addEventListener('fetch', (e) => {
               Accept: 'application/vnd.github+json',
               'User-Agent': 'SilphScope-PvP-Download-Redirect/7.13',
             },
-            cf: { cacheTtl: 300, cacheEverything: true },
+            cf: { cacheTtl: 60, cacheEverything: true },
           }
         );
         if (ghRes.ok) {
@@ -9116,6 +9116,9 @@ self.addEventListener('fetch', (e) => {
       const isDirectDownload =
         url.searchParams.get('direct') === '1' ||
         url.searchParams.get('direct') === 'true' ||
+        path === '/direct' ||
+        path === '/latest' ||
+        path === '/apk' ||
         path.endsWith('.apk');
 
       if (isDirectDownload) {
@@ -9123,14 +9126,14 @@ self.addEventListener('fetch', (e) => {
           status: 302,
           headers: buildSecurityHeaders({
             Location: apkUrl,
-            'Cache-Control': 'public, max-age=300',
+            'Cache-Control': 'public, max-age=60',
           }),
         });
       }
 
       // Render high-converting 100% TOS-Safe Android Download Landing Page
       const directDownloadHref =
-        url.hostname === 'dl.silphscopepvp.com' ? '/?direct=1' : '/download?direct=1';
+        url.hostname === 'dl.silphscopepvp.com' ? '/direct' : '/download?direct=1';
 
       return new Response(
         request.method === 'HEAD'
@@ -9141,7 +9144,7 @@ self.addEventListener('fetch', (e) => {
           headers: buildSecurityHeaders(
             {
               'Content-Type': 'text/html; charset=utf-8',
-              'Cache-Control': 'public, max-age=300',
+              'Cache-Control': 'public, max-age=60',
             },
             true
           ),

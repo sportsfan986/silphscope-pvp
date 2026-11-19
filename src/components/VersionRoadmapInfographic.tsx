@@ -10,7 +10,7 @@ export const VersionRoadmapInfographic: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'roadmap'>('timeline');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const latestVersionLabel = VERSION_EVOLUTION_HISTORY[0]?.version || 'v7.71';
+  const latestVersionLabel = VERSION_EVOLUTION_HISTORY[0]?.version || 'v7.72';
   const categories = [
     'all',
     ...Array.from(new Set(ACTIVE_ROADMAP_ITEMS.map((item: RoadmapItem) => item.category)))

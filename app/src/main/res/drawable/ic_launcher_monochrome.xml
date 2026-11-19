@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Monochrome 2B Split-Arc Duel Scope Silhouette (Android 13+ Themed Icons & Notification Bar) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.84"
+        android:scaleY="0.84">
+
+        <!-- Split Scope Arcs -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6.8"
+            android:strokeLineCap="round"
+            android:pathData="M33,83.3 A36,36 0 0,1 38,21.8" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6.8"
+            android:strokeLineCap="round"
+            android:pathData="M70,21.8 A36,36 0 0,1 77.5,81" />
+
+        <!-- Top Crown: Crossed Swords & Flanking Pips -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round"
+            android:pathData="M47,14 L61,25 M61,14 L47,25" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M40.5,19.5m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M67.5,19.5m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+
+        <!-- Center 3x3 Matchup Matrix Tiles -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M39.8,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M51.6,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M63.4,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M39.8,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M51.6,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M63.4,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M39.8,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M51.6,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M63.4,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+
+        <!-- Bottom 6 o'clock Hollow Shield Anchor -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.2"
+            android:strokeLineJoin="round"
+            android:pathData="M54,84.5 L59,87.3 L59,91.8 L54,95 L49,91.8 L49,87.3 Z" />
+
+        <!-- Hollow Catch Bullseye Ring + Center Pip -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.8"
+            android:pathData="M76.5,80.5m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M76.5,80.5m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+
+    </group>
+</vector>

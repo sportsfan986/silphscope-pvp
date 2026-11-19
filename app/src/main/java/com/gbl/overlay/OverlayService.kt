@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.71"
-        const val APP_VERSION_CODE = 1771
+        const val APP_VERSION = "7.72"
+        const val APP_VERSION_CODE = 1772
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -733,6 +733,7 @@ class OverlayService : LifecycleService() {
         const val CLOUDFLARE_DVR_VAULT_URL = "https://dvr.silphscopepvp.com"
         const val OFFICIAL_WEBSITE_URL = "https://silphscopepvp.com"
         const val OFFICIAL_DOWNLOAD_URL = "https://dl.silphscopepvp.com"
+        const val OFFICIAL_DIRECT_DOWNLOAD_URL = "https://dl.silphscopepvp.com/direct"
         const val PREFS_KEY_DEVICE_INGEST_TOKEN = "gbl_device_ingest_token_v713"
         val CLOUDFLARE_CLIENT_INGEST_KEY: String
             get() {
@@ -2999,7 +3000,7 @@ class OverlayService : LifecycleService() {
             val versionName: String = "",
             val versionCode: Int = 0,
             val tagName: String = "",
-            val downloadUrl: String = OFFICIAL_DOWNLOAD_URL,
+            val downloadUrl: String = OFFICIAL_DIRECT_DOWNLOAD_URL,
             val releaseNotesUrl: String = "https://github.com/sportsfan986/silphscope-pvp/releases/latest",
             val publishedAt: String = "",
             val highlights: List<String> = emptyList(),
@@ -7745,7 +7746,7 @@ class OverlayService : LifecycleService() {
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle(titleText)
             .setContentText(statusText)
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setPriority(NotificationCompat.PRIORITY_LOW)
 
         if (isLogOnlyStealthMode) {

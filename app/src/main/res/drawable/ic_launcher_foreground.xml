@@ -9,8 +9,8 @@
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="0.78"
-        android:scaleY="0.78">
+        android:scaleX="0.84"
+        android:scaleY="0.84">
 
         <!-- Dark Sapphire Optical Lens Base -->
         <path
@@ -22,7 +22,7 @@
         <!-- Left Arc: Player Energy Gauge (Cyan to Blue) -->
         <path
             android:fillColor="#00000000"
-            android:strokeWidth="5.2"
+            android:strokeWidth="6.4"
             android:strokeLineCap="round"
             android:pathData="M33,83.3 A36,36 0 0,1 38,21.8">
             <aapt:attr name="android:strokeColor">
@@ -41,7 +41,7 @@
         <!-- Right Arc: Opponent Energy Gauge (Amber to Orange to Red) -->
         <path
             android:fillColor="#00000000"
-            android:strokeWidth="5.2"
+            android:strokeWidth="6.4"
             android:strokeLineCap="round"
             android:pathData="M70,21.8 A36,36 0 0,1 77.5,81">
             <aapt:attr name="android:strokeColor">
@@ -62,7 +62,7 @@
         <path
             android:fillColor="#00000000"
             android:strokeColor="#FACC15"
-            android:strokeWidth="3"
+            android:strokeWidth="3.4"
             android:strokeLineCap="round"
             android:pathData="M47,14 L61,25 M61,14 L47,25" />
         <path
@@ -121,11 +121,11 @@
         <path
             android:fillColor="#DC2626"
             android:strokeColor="#FCA5A5"
-            android:strokeWidth="1.8"
-            android:pathData="M76.5,80.5m-5.4,0a5.4,5.4 0,1 1,10.8 0a5.4,5.4 0,1 1,-10.8 0" />
+            android:strokeWidth="1.9"
+            android:pathData="M76.5,80.5m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M76.5,80.5m-2.2,0a2.2,2.2 0,1 1,4.4 0a2.2,2.2 0,1 1,-4.4 0" />
+            android:pathData="M76.5,80.5m-2.4,0a2.4,2.4 0,1 1,4.8 0a2.4,2.4 0,1 1,-4.8 0" />
 
     </group>
 </vector>

@@ -1,5 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_launcher_background" />
-    <item android:drawable="@drawable/ic_launcher_foreground" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Full-Scale (1.0x) In-App Header Logo matching public/favicon.svg 1:1 -->
+    <!-- Rounded Obsidian Squircle Base + Subtle Border -->
+    <path
+        android:fillColor="#08101D"
+        android:pathData="M24,0 h60 a24,24 0 0,1 24,24 v60 a24,24 0 0,1 -24,24 h-60 a24,24 0 0,1 -24,-24 v-60 a24,24 0 0,1 24,-24 z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#1E3A5F"
+        android:strokeWidth="1.2"
+        android:pathData="M24,1 h60 a23,23 0 0,1 23,23 v60 a23,23 0 0,1 -23,23 h-60 a23,23 0 0,1 -23,-23 v-60 a23,23 0 0,1 23,-23 z" />
+
+    <!-- Dark Sapphire Optical Lens Base -->
+    <path
+        android:fillColor="#0B1526"
+        android:strokeColor="#1E293B"
+        android:strokeWidth="2"
+        android:pathData="M54,54m-36,0a36,36 0,1 1,72 0a36,36 0,1 1,-72 0" />
+
+    <!-- Left Arc: Player Energy Gauge (Cyan to Blue) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round"
+        android:pathData="M33,83.3 A36,36 0 0,1 38,21.8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="25"
+                android:startY="83"
+                android:endX="38"
+                android:endY="21"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#38BDF8" />
+                <item android:offset="1.0" android:color="#2563EB" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Arc: Opponent Energy Gauge (Amber to Orange to Red) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round"
+        android:pathData="M70,21.8 A36,36 0 0,1 77.5,81">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="70"
+                android:startY="21"
+                android:endX="78"
+                android:endY="81"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FACC15" />
+                <item android:offset="0.55" android:color="#F97316" />
+                <item android:offset="1.0" android:color="#EF4444" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Top 12 o'clock Crown: Gold Crossed Swords + Glint + Flanking Pips -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FACC15"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M47,14 L61,25 M61,14 L47,25" />
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M54,19.5m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M40.5,19.5m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M67.5,19.5m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+
+    <!-- Center 3x3 Matchup Matrix -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M39.8,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M51.6,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M63.4,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M39.8,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M51.6,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M63.4,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M39.8,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#475569"
+        android:pathData="M51.6,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#475569"
+        android:pathData="M63.4,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+
+    <!-- Bottom 6 o'clock Anchor Shield -->
+    <path
+        android:fillColor="#0E2038"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="1.6"
+        android:strokeLineJoin="round"
+        android:pathData="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" />
+
+    <!-- Red/White Catch Bullseye -->
+    <path
+        android:fillColor="#DC2626"
+        android:strokeColor="#FCA5A5"
+        android:strokeWidth="1.9"
+        android:pathData="M76.5,80.5m-5.8,0a5.8,5.8 0,1 1,11.6 0a5.8,5.8 0,1 1,-11.6 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M76.5,80.5m-2.3,0a2.3,2.3 0,1 1,4.6 0a2.3,2.3 0,1 1,-4.6 0" />
+</vector>
