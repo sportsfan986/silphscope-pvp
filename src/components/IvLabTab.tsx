@@ -9,6 +9,7 @@ import {
   Edit3,
   CheckCircle2
 } from "lucide-react";
+import { MegaMetaText } from "./MegaBadge";
 import {
   type AppCombatMode,
   type BuiltPokemonEntry,
@@ -829,7 +830,7 @@ export function IvLabTab({
                       title={formatLeagueDisplayLabel(lg)}
                     >
                       {locked && <Lock className="w-3 h-3 text-amber-400" />}
-                      <span>{isActive ? "✓ " : ""}{formatMatrixCupChipLabel(lg)}</span>
+                      <span>{isActive ? "✓ " : ""}<MegaMetaText text={formatMatrixCupChipLabel(lg)} iconHeightPx={11} /></span>
                     </button>
                   );
                 })}
@@ -841,7 +842,7 @@ export function IvLabTab({
                     key={`rank-pill-${info.league}`}
                     className="px-2 py-0.5 rounded-md border border-slate-700 bg-slate-950 font-mono text-slate-200"
                   >
-                    {info.label}:{" "}
+                    <MegaMetaText text={info.label} iconHeightPx={10.5} />:{" "}
                     <strong className={info.rank ? "text-amber-300" : "text-slate-500"}>
                       {info.rank ? `#${info.rank}` : "Unranked"}
                     </strong>
@@ -1109,7 +1110,7 @@ export function IvLabTab({
                               key={`comb-rank-${card.cid}-${item.league}`}
                               className="px-1.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-[10px] font-mono text-slate-300"
                             >
-                              {formatMatrixCupChipLabel(item.league)}:{" "}
+                              <MegaMetaText text={formatMatrixCupChipLabel(item.league)} iconHeightPx={10.5} />:{" "}
                               <strong className={item.res.cupRank ? "text-amber-300" : "text-slate-500"}>
                                 {item.res.cupRank ? `#${item.res.cupRank}` : "Unranked"}
                               </strong>
@@ -1235,7 +1236,7 @@ export function IvLabTab({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                     <div>
                       <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                        <span>{formatLeagueDisplayLabel(lgMatrix.league)}</span>
+                        <span><MegaMetaText text={formatLeagueDisplayLabel(lgMatrix.league)} iconHeightPx={14} /></span>
                         <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300">
                           {lgMatrix.opponentCount} Meta Opponents • Opp IVs: {lgMatrix.oppIvBaseline}
                         </span>

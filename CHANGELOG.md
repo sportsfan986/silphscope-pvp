@@ -2,6 +2,15 @@
 
 ---
 
+## v7.71 (2026-11-18) — Inline Mega Helix Icons Across League Badges, Filter Chips & Idle Overlay
+*UI visual polish release (`v7.71`, `versionCode = 1771`) replacing Mega league abbreviations (`MGL`, `MUL`, `MML`, `Mega GL`/`UL`/`ML`) and Mega Limited Cup prefixes (`Mega Halloween`, `Mega Color`) with an inline Mega Helix vector glyph across Android, Web, and the idle HUD overlay.*
+
+- **Crisp Vector Mega Helix Asset & Gradient Styling (`ic_mega_helix.xml`, `MegaBadge.tsx`, `overlay.html`)**: Bundled a `42×56` `evenOdd` vector silhouette traced from the PoGO / PvPoke Mega glyph with a 4-stop Mega gradient (`#FF5EC4` → `#E879F9` → `#38BDF8` → `#4ADE80`) as a native Android `VectorDrawable` and inline SVG on Web/Overlay.
+- **Android Inline Mega Badges (`MegaBadgeUi.kt`, `MainActivity.kt`)**: Added `MegaBadgeUi.stylize()` (`ImageSpan.ALIGN_CENTER` preserving `Html.fromHtml` formatting) and `formatCupChip()` across Team Builder card header pills (`UL ⇄ [Mega]UL`), `Record:` per-meta splits, multi-meta pool rows, Tier 2 cup filter tabs, Anti-Meta cup chips, Edit Team `containerMultiMetaChips`, and IV Lab cup chips & rankings strip.
+- **Web & Idle Overlay Mega Badges (`MegaBadge.tsx`, `src/App.tsx`, `src/components/IvLabTab.tsx`, `overlay.html`, `overlay-asset.mjs`)**: Wired `<MegaMetaText />` across Team Builder cards, multi-meta pools, Tier 2 tabs, Edit Team chips, Anti-Meta cup chips, Simulator opponent pills, `dbTelemetry` tiles, and IV Lab chips/headers; added `getMegaHelixSvg`/`formatOverlayMegaHtml` to `.idle-league-pill` while preserving plain ASCII abbreviations (`MGL`/`MUL`/`MML`) in exports, `Toast`s, copy/share text, and native `<option>` dropdowns.
+
+---
+
 ## v7.70 (2026-11-18) — High-Res Pokémon Sprites, Unified 2B Duel Scope Icon & TOS-Safe Website Upgrade
 *Major Roadmap Feature Release (`v7.70`, `versionCode = 1770`) introducing high-resolution Web Simulator Battle Arena sprites and selective zero-bloat mini sprites across Android & Web, rolling out the unified 2B (Split-Arc Duel Scope) icon across launcher/PWA/overlay/Cloudflare assets, and launching the 100% TOS-Safe website & download portal upgrade.*
 

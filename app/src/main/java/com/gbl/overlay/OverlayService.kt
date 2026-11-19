@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.70"
-        const val APP_VERSION_CODE = 1770
+        const val APP_VERSION = "7.71"
+        const val APP_VERSION_CODE = 1771
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"

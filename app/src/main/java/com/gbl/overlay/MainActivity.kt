@@ -6137,7 +6137,7 @@ class MainActivity : AppCompatActivity() {
         return when {
             u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE" -> "Open / Standard"
             u.startsWith("MEGA ") -> clean
-            u.contains("MEGA") -> "Mega ($clean)"
+            u.contains("MEGA") -> "Mega " + clean.replace(Regex("\\s*\\(Mega\\)", RegexOption.IGNORE_CASE), "").trim()
             else -> clean
         }
     }
@@ -11012,7 +11012,7 @@ class MainActivity : AppCompatActivity() {
                 for ((subKey, subLabel) in tier2Tabs) {
                     val isSelectedSub = subKey.equals(selectedPresetsLeagueFilter, ignoreCase = true)
                     val subBtn = Button(this).apply {
-                        text = subLabel
+                        text = MegaBadgeUi.stylize(this@MainActivity, subLabel, 9.5f)
                         textSize = 9.0f
                         isAllCaps = false
                         minHeight = 0
@@ -11127,7 +11127,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (assignedMetas.size > 1) {
-                textLeague.text = assignedMetas.joinToString(" ⇄ ") { OverlayService.formatShortMetaBadgeStatic(it) }
+                textLeague.text = MegaBadgeUi.stylize(
+                    this,
+                    assignedMetas.joinToString(" ⇄ ") { OverlayService.formatShortMetaBadgeStatic(it) },
+                    10.5f
+                )
                 textLeague.isClickable = true
                 textLeague.setOnClickListener {
                     val curIdx = assignedMetas.indexOfFirst { it.equals(resolvedLeague, ignoreCase = true) }
@@ -11135,7 +11139,11 @@ class MainActivity : AppCompatActivity() {
                     switchActivePool(nextMeta)
                 }
             } else {
-                textLeague.text = OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague)
+                textLeague.text = MegaBadgeUi.stylize(
+                    this,
+                    OverlayService.formatLeagueDisplayLabelStatic(resolvedLeague),
+                    10.5f
+                )
                 textLeague.setOnClickListener(null)
                 textLeague.isClickable = false
             }
@@ -11204,7 +11212,11 @@ class MainActivity : AppCompatActivity() {
                 val topLine = (wlPrefixHtml + sharedWeakBadge.removePrefix("  •  ")).removeSuffix("<br>")
                 textMetricsBadges?.visibility = android.view.View.VISIBLE
                 textMetricsBadges?.text = if (topLine.isNotBlank()) {
-                    android.text.Html.fromHtml(topLine, android.text.Html.FROM_HTML_MODE_LEGACY)
+                    MegaBadgeUi.stylize(
+                        this,
+                        android.text.Html.fromHtml(topLine, android.text.Html.FROM_HTML_MODE_LEGACY),
+                        10.5f
+                    )
                 } else {
                     ""
                 }
@@ -11248,7 +11260,11 @@ class MainActivity : AppCompatActivity() {
                         "◦ <b>[$shortMeta]</b>  <font color='#94a3b8'>Computing BR...</font>"
                     }
                     val rowView = TextView(this).apply {
-                        text = android.text.Html.fromHtml(poolHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
+                        text = MegaBadgeUi.stylize(
+                            this@MainActivity,
+                            android.text.Html.fromHtml(poolHtml, android.text.Html.FROM_HTML_MODE_LEGACY),
+                            10.5f
+                        )
                         textSize = 10f
                         setTextColor(0xFFCBD5E1.toInt())
                         setPadding((7 * density).toInt(), (5 * density).toInt(), (7 * density).toInt(), (5 * density).toInt())
@@ -11275,7 +11291,11 @@ class MainActivity : AppCompatActivity() {
                 val topSingleHtml = wlPrefixHtml +
                     "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
                     "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta"
-                textMetricsBadges?.text = android.text.Html.fromHtml(topSingleHtml.removeSuffix("<br>"), android.text.Html.FROM_HTML_MODE_LEGACY)
+                textMetricsBadges?.text = MegaBadgeUi.stylize(
+                    this,
+                    android.text.Html.fromHtml(topSingleHtml.removeSuffix("<br>"), android.text.Html.FROM_HTML_MODE_LEGACY),
+                    10.5f
+                )
                 val subSingleHtml =
                     "Lead BR: <font color='$leadHex'>${preset.leadAggBr} ($leadTier)</font>  •  " +
                     "Swap BR: <font color='$swap2Hex'>#2 ${preset.safeSwapBr} ($swap2Tier)</font> / <font color='$swap3Hex'>#3 ${preset.closerSwapBr} ($swap3Tier)</font>  •  " +
@@ -11947,22 +11967,19 @@ class MainActivity : AppCompatActivity() {
         cupChipsContainer?.let { row ->
             row.removeAllViews()
             for (cupLg in visibleCups) {
-                val norm = OverlayService.normalizeLeagueKeyStatic(cupLg)
-                val shortLbl = when (norm) {
-                    "GREAT LEAGUE" -> "Open GL"
-                    "ULTRA LEAGUE" -> "Open UL"
-                    "MASTER LEAGUE" -> "Open ML"
-                    "MEGA MASTER LEAGUE" -> "Mega ML"
-                    else -> OverlayService.formatLeagueDisplayLabelStatic(cupLg)
-                }
                 val isSelected = antiMetaSelectedLeagues.any { it.equals(cupLg, ignoreCase = true) }
                 val isLocked = !isAntiMetaLeagueUnlockedForTier(cupLg, tier)
                 row.addView(Button(this).apply {
-                    text = when {
-                        isLocked -> "🔒 $shortLbl"
-                        isSelected -> "✓ $shortLbl"
-                        else -> shortLbl
-                    }
+                    text = MegaBadgeUi.formatCupChip(
+                        this@MainActivity,
+                        cupLg,
+                        prefix = when {
+                            isLocked -> "🔒 "
+                            isSelected -> "✓ "
+                            else -> ""
+                        },
+                        textSizeSp = 9.5f
+                    )
                     textSize = 9.0f
                     isAllCaps = false
                     minHeight = 0
@@ -15898,7 +15915,11 @@ class MainActivity : AppCompatActivity() {
                     }
                     val lblView = TextView(this).apply {
                         val disp = OverlayService.formatLeagueDisplayLabelStatic(meta)
-                        text = "${if (isLiveRot) "🟢 " else ""}$disp${if (isPreview) " ★" else ""}"
+                        text = MegaBadgeUi.stylize(
+                            this@MainActivity,
+                            "${if (isLiveRot) "🟢 " else ""}$disp${if (isPreview) " ★" else ""}",
+                            10.5f
+                        )
                         textSize = 10.5f
                         maxLines = 2
                         setTypeface(null, if (isChecked) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -18451,15 +18472,13 @@ class MainActivity : AppCompatActivity() {
             val isCup = normLg !in coreLeagues
             val locked = isCup && tier == "free"
             val isSelected = ivLabSelectedLeagues.any { it.equals(lg, ignoreCase = true) }
-            val shortName = when (normLg) {
-                "GREAT LEAGUE" -> "Open GL"
-                "ULTRA LEAGUE" -> "Open UL"
-                "MASTER LEAGUE" -> "Open ML"
-                "MEGA MASTER LEAGUE" -> "Mega ML"
-                else -> OverlayService.formatLeagueDisplayLabelStatic(lg)
-            }
             leagueRow.addView(Button(this).apply {
-                text = (if (locked) "🔒 " else if (isSelected) "✓ " else "") + shortName
+                text = MegaBadgeUi.formatCupChip(
+                    this@MainActivity,
+                    lg,
+                    prefix = if (locked) "🔒 " else if (isSelected) "✓ " else "",
+                    textSizeSp = 10f
+                )
                 textSize = 10f
                 isAllCaps = false
                 setTypeface(null, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -18515,7 +18534,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         cfgCard.addView(TextView(this).apply {
-            text = "🏅 Selected Cup Rankings ($ivLabSpeciesName): $cupRankSummaryText"
+            text = android.text.SpannableStringBuilder("🏅 Selected Cup Rankings ($ivLabSpeciesName): ")
+                .append(MegaBadgeUi.stylize(this@MainActivity, cupRankSummaryText, 10.5f))
             textSize = 10.5f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(0xFFFDE68A.toInt())

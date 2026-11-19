@@ -177,6 +177,7 @@ import {
   getAvailableMovePoolForPokemon
 } from './data/gblData';
 import { PokemonSprite } from './components/PokemonSprite';
+import { MegaMetaText } from './components/MegaBadge';
 import {
   BattleQualityMetadata,
   BattleTimelineEvent,
@@ -6729,7 +6730,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.70 • Android Native Overlay
+                  v7.71 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -9130,7 +9131,7 @@ export default function App() {
                     {dbTelemetry.selectedLeagues.map((lg) => (
                       <div key={lg.key} className="p-1.5 rounded bg-slate-900 border border-slate-800">
                         <span className="text-sky-400 block text-[9px] truncate" title={lg.key}>
-                          {lg.shortLabel}
+                          <MegaMetaText text={lg.shortLabel} iconHeightPx={10} />
                         </span>
                         <strong className="text-white">{lg.count}</strong>
                       </div>
@@ -9257,15 +9258,16 @@ export default function App() {
                       <button
                         key={lg}
                         onClick={() => setSelectedOpponentLeague(lg)}
-                        className={`px-2.5 py-1 rounded-lg font-bold border transition shrink-0 ${
+                        className={`px-2.5 py-1 rounded-lg font-bold border transition shrink-0 inline-flex items-center ${
                           selectedOpponentLeague === lg
                             ? 'bg-sky-500/20 border-sky-400 text-sky-200 shadow-[0_0_8px_rgba(56,189,248,0.25)]'
                             : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {lg === 'MEGA MASTER LEAGUE'
-                          ? 'MEGA ML'
-                          : formatLeagueDisplayLabel(lg)}
+                        <MegaMetaText
+                          text={lg === 'MEGA MASTER LEAGUE' ? 'Mega ML' : formatLeagueDisplayLabel(lg)}
+                          iconHeightPx={11}
+                        />
                       </button>
                     ))}
                   </div>
@@ -11113,6 +11115,10 @@ export default function App() {
                               ? 'Open UL'
                               : norm === 'MASTER LEAGUE'
                               ? 'Open ML'
+                              : norm === 'MEGA GREAT LEAGUE'
+                              ? 'Mega GL'
+                              : norm === 'MEGA ULTRA LEAGUE'
+                              ? 'Mega UL'
                               : norm === 'MEGA MASTER LEAGUE'
                               ? 'Mega ML'
                               : formatLeagueDisplayLabel(lgId);
@@ -11161,7 +11167,10 @@ export default function App() {
                               }`}
                               title={formatLeagueDisplayLabel(lgId)}
                             >
-                              {isLocked ? `🔒 ${shortLbl}` : isSelected ? `✓ ${shortLbl}` : shortLbl}
+                              <MegaMetaText
+                                text={isLocked ? `🔒 ${shortLbl}` : isSelected ? `✓ ${shortLbl}` : shortLbl}
+                                iconHeightPx={11}
+                              />
                             </button>
                           );
                         })}
@@ -11732,7 +11741,8 @@ export default function App() {
                 const u = lg.trim().toUpperCase();
                 if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 'Open / Standard';
                 const clean = formatLeagueDisplayLabel(lg);
-                if (u.includes('MEGA')) return `Mega (${clean})`;
+                if (u.startsWith('MEGA ')) return clean;
+                if (u.includes('MEGA')) return `Mega ${clean.replace(/\s*\(Mega\)/i, '').trim()}`;
                 if (lg === 'Battle Frontier (Spectral)' || u === 'BATTLE FRONTIER (SPECTRAL)' || u === 'BF (SPECTRAL)') return 'BF Spectral';
                 if (lg === 'Battle Frontier (Cauldron)' || u === 'BATTLE FRONTIER (CAULDRON)' || u === 'BF (CAULDRON)') return 'BF Cauldron';
                 if (lg === 'Battle Frontier (Master)' || u === 'BATTLE FRONTIER (MASTER)' || u === 'BF (MASTER)') return 'BF Master';
@@ -11882,7 +11892,7 @@ export default function App() {
                                 : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                             }`}
                           >
-                            <span>{formatCupSubLabel(lg)}</span>
+                            <span><MegaMetaText text={formatCupSubLabel(lg)} iconHeightPx={11} /></span>
                             <span
                               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                                 isSelected
@@ -12081,7 +12091,10 @@ export default function App() {
                                   : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
                               }`}
                             >
-                              {assignedMetas.map(formatShortMetaBadge).join(' ⇄ ')}
+                              <MegaMetaText
+                                text={assignedMetas.map(formatShortMetaBadge).join(' ⇄ ')}
+                                iconHeightPx={11}
+                              />
                             </button>
                           ) : (
                             <span
@@ -12095,7 +12108,7 @@ export default function App() {
                                   : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
                               }`}
                             >
-                              {preset.league}
+                              <MegaMetaText text={preset.league} iconHeightPx={11} />
                             </span>
                           )}
                           <span
@@ -12116,9 +12129,11 @@ export default function App() {
                             Beats {topWinsCount}/{totalMetaDepth} Top Meta
                           </span>
                           {wlSummary && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-sky-500/15 text-sky-300 border-sky-400/30">
-                              🏆 {wlSummary.rec} ({wlSummary.pct}%)
-                              {wlSummary.perMeta.length > 0 ? ` • ${wlSummary.perMeta.join(' • ')}` : ''}
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-sky-500/15 text-sky-300 border-sky-400/30 inline-flex items-center gap-1 flex-wrap">
+                              <span>🏆 {wlSummary.rec} ({wlSummary.pct}%)</span>
+                              {wlSummary.perMeta.length > 0 && (
+                                <MegaMetaText text={`• ${wlSummary.perMeta.join(' • ')}`} iconHeightPx={10.5} />
+                              )}
                             </span>
                           )}
                         </div>
@@ -12280,8 +12295,8 @@ export default function App() {
                                 title={isActivePool ? 'Active slot/Key Wins view' : `Tap to switch detail view to ${formatLeagueDisplayLabel(metaLg)}`}
                               >
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <span className="font-extrabold text-sky-300">
-                                    {isActivePool ? '★' : '◦'} [{shortMeta}]
+                                  <span className="font-extrabold text-sky-300 inline-flex items-center">
+                                    {isActivePool ? '★' : '◦'} [<MegaMetaText text={shortMeta} iconHeightPx={10.5} />]
                                   </span>
                                   {snap ? (
                                     <span className="font-semibold">
@@ -12599,7 +12614,7 @@ export default function App() {
                                         title="Click to preview team BR in this meta"
                                       >
                                         {isLiveRot ? '🟢 ' : ''}
-                                        {labelText}
+                                        <MegaMetaText text={labelText} iconHeightPx={11} />
                                         {isPreview ? ' ★' : ''}
                                       </button>
                                     </div>
@@ -16139,7 +16154,7 @@ export default function App() {
                 {dbTelemetry.selectedLeagues.map((lg) => (
                   <div key={lg.key} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
                     <span className="text-sky-400 block text-[10px] truncate" title={lg.key}>
-                      {lg.shortLabel}
+                      <MegaMetaText text={lg.shortLabel} iconHeightPx={10.5} />
                     </span>
                     <strong className="text-white text-sm">{lg.count}</strong>
                   </div>
@@ -19090,7 +19105,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.70 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.71 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

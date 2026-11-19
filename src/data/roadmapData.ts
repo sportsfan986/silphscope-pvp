@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.71',
+    codename: 'Inline Mega Helix Icons Across League Badges, Filter Chips & Idle Overlay',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Replaces Mega league abbreviations (MGL, MUL, MML, Mega GL/UL/ML) and Mega Limited Cup prefixes with an inline 4-stop rainbow Mega Helix vector glyph across Android, Web, and the idle HUD overlay while keeping exports and dropdowns plain ASCII.',
+    icon: '🧬',
+    accentColor: '#E879F9',
+    highlights: [
+      'Bundled a crisp 42×56 evenOdd Mega Helix vector glyph with a 4-stop Mega gradient (#FF5EC4 → #E879F9 → #38BDF8 → #4ADE80) in ic_mega_helix.xml, MegaBadge.tsx, and overlay.html',
+      'Wired MegaBadgeUi.stylize() & formatCupChip() in MainActivity.kt across Team Builder pills, Record per-meta splits, multi-meta pool rows, Tier 2 tabs, Anti-Meta/IV Lab cup chips, Edit Team chips, and IV rankings strip',
+      'Wired <MegaMetaText /> in App.tsx & IvLabTab.tsx plus formatOverlayMegaHtml() in the idle HUD .idle-league-pill while preserving plain ASCII in copy/share exports, Toasts, and native <option> elements'
+    ]
+  },
+  {
     version: 'v7.70',
     codename: 'High-Res Pokémon Sprites, Unified 2B Duel Scope Icon & TOS-Safe Website Upgrade',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Introduces high-res Showdown HOME sprites in the Web Simulator Battle Arena and selective zero-bloat mini sprites across Team Builder card headers, Pokémon autocomplete dropdowns, Meta, and IV Lab (powered by Coil 2.7.0 on Android), rolls out the unified 2B Split-Arc Duel Scope icon everywhere, and launches the 100% TOS-Safe website & download landing page.',
     icon: '🖼️',
