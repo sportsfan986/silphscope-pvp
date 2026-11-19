@@ -141,21 +141,6 @@ function computeShadowEligible(name, speciesId, formLabel) {
   ) {
     return false;
   }
-  const blockedPrefixes = [
-    "zacian",
-    "zamazenta",
-    "zygarde",
-    "necrozma",
-    "keldeo",
-    "urshifu",
-    "morpeko",
-    "mimikyu",
-    "aegislash",
-    "cramorant"
-  ];
-  if (idLower === "mew" || blockedPrefixes.some((p) => idLower.startsWith(p))) {
-    return false;
-  }
   const idHyphen = idLower.replace(/-/g, "_");
   const cleanForm = String(formLabel || "").trim().toLowerCase();
   const formQualId =

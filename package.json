@@ -1,7 +1,7 @@
 {
   "name": "silphscope-pvp",
   "private": true,
-  "version": "7.73.0",
+  "version": "7.74.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -15,6 +15,7 @@
     "lint": "tsc --noEmit",
     "release:check": "node scripts/verify-release-ready.mjs",
     "hooks:install": "node scripts/verify-release-ready.mjs --install-hook",
+    "shadows:sync": "node scripts/sync-pvpoke-shadows.mjs",
     "ingest": "node scripts/ingest-telemetry.mjs --prune-remote",
     "telemetry:sync": "node scripts/ingest-telemetry.mjs --sync-only --prune-remote",
     "telemetry:report": "node scripts/ingest-telemetry.mjs --prune-remote",

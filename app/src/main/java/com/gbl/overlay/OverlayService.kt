@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.73"
-        const val APP_VERSION_CODE = 1773
+        const val APP_VERSION = "7.74"
+        const val APP_VERSION_CODE = 1774
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -2964,7 +2964,6 @@ class OverlayService : LifecycleService() {
                 val nameLower = variant.name.lowercase()
                 if (idLower == "mewtwo_armored" || nameLower.contains("armored")) return false
                 if (idLower.contains("_mega") || idLower.contains("_primal") || nameLower.startsWith("mega ") || nameLower.startsWith("primal ")) return false
-                if (idLower.startsWith("zacian") || idLower.startsWith("zamazenta") || idLower.startsWith("zygarde") || idLower.startsWith("necrozma") || idLower.startsWith("keldeo") || idLower.startsWith("urshifu") || idLower == "mew" || idLower.startsWith("morpeko") || idLower.startsWith("mimikyu") || idLower.startsWith("aegislash") || idLower.startsWith("cramorant")) return false
                 val idHyphen = idLower.replace("-", "_")
                 val formQualId = variant.formLabel.trim().lowercase()
                     .takeIf { it.isNotEmpty() && it != "base" && it != "shadow" }
@@ -2973,11 +2972,20 @@ class OverlayService : LifecycleService() {
                     .replace(Regex("^shadow\\s+"), "")
                     .replace(Regex("\\s*\\(shadow\\)$"), "")
                     .trim()
+                // Live OTA PvPoke gamemaster/rankings registry takes precedence over static unreleased guards
+                if ((idLower.isNotEmpty() && DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(idLower)) ||
+                    (idHyphen.isNotEmpty() && DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(idHyphen)) ||
+                    (formQualId != null && DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(formQualId)) ||
+                    (cleanName.isNotEmpty() && DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(cleanName))
+                ) {
+                    return true
+                }
+                if (idLower.startsWith("zacian") || idLower.startsWith("zamazenta") || idLower.startsWith("zygarde") || idLower.startsWith("necrozma") || idLower.startsWith("keldeo") || idLower.startsWith("urshifu") || idLower == "mew" || idLower.startsWith("morpeko") || idLower.startsWith("mimikyu") || idLower.startsWith("aegislash") || idLower.startsWith("cramorant")) return false
                 val staticKeys = PokemonStaticData.STATIC_RELEASED_SHADOW_KEYS
-                return (idLower.isNotEmpty() && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(idLower) || staticKeys.contains(idLower))) ||
-                    (idHyphen.isNotEmpty() && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(idHyphen) || staticKeys.contains(idHyphen))) ||
-                    (formQualId != null && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(formQualId) || staticKeys.contains(formQualId))) ||
-                    (cleanName.isNotEmpty() && (DYNAMIC_SHADOW_ELIGIBLE_KEYS.contains(cleanName) || staticKeys.contains(cleanName)))
+                return (idLower.isNotEmpty() && staticKeys.contains(idLower)) ||
+                    (idHyphen.isNotEmpty() && staticKeys.contains(idHyphen)) ||
+                    (formQualId != null && staticKeys.contains(formQualId)) ||
+                    (cleanName.isNotEmpty() && staticKeys.contains(cleanName))
             }
 
             /**
@@ -4484,6 +4492,7 @@ class OverlayService : LifecycleService() {
     internal var lastDetectedBannerMoveTimeMs: Long = 0L
     internal var lastDetectedBlockedBannerMs: Long = 0L
     internal var lastDetectedDisguiseBustedBannerMs: Long = 0L
+    @Volatile internal var lastOppStatStageVisualMs: Long = 0L
     internal var lastRawBlockedOcrSeenMs: Long = 0L
     internal var currentBlockedBurstStartMs: Long = 0L
     internal var lastRawDisguiseOcrSeenMs: Long = 0L
@@ -5359,6 +5368,7 @@ class OverlayService : LifecycleService() {
                     }
                     lastOcrStatCalloutWallMs[2] = nowMs
                     lastOcrStatCalloutSign[2] = if (eff.oppAtkDelta > 0) 1 else -1
+                    lastOppStatStageVisualMs = nowMs
                 }
                 if (eff.oppDefDelta != 0) {
                     if (!alreadyAppliedByRecentOcrCallout(3, eff.oppDefDelta)) {
@@ -5367,6 +5377,7 @@ class OverlayService : LifecycleService() {
                     }
                     lastOcrStatCalloutWallMs[3] = nowMs
                     lastOcrStatCalloutSign[3] = if (eff.oppDefDelta > 0) 1 else -1
+                    lastOppStatStageVisualMs = nowMs
                 }
             } else {
                 if (eff.selfAtkDelta != 0) {
@@ -5376,6 +5387,7 @@ class OverlayService : LifecycleService() {
                     }
                     lastOcrStatCalloutWallMs[2] = nowMs
                     lastOcrStatCalloutSign[2] = if (eff.selfAtkDelta > 0) 1 else -1
+                    lastOppStatStageVisualMs = nowMs
                 }
                 if (eff.selfDefDelta != 0) {
                     if (!alreadyAppliedByRecentOcrCallout(3, eff.selfDefDelta)) {
@@ -5384,6 +5396,7 @@ class OverlayService : LifecycleService() {
                     }
                     lastOcrStatCalloutWallMs[3] = nowMs
                     lastOcrStatCalloutSign[3] = if (eff.selfDefDelta > 0) 1 else -1
+                    lastOppStatStageVisualMs = nowMs
                 }
                 if (eff.oppAtkDelta != 0) {
                     if (!alreadyAppliedByRecentOcrCallout(0, eff.oppAtkDelta)) {
@@ -5618,6 +5631,9 @@ class OverlayService : LifecycleService() {
             val isAtkStat = hasAttack && !hasDefense
             val deltaSign = if (delta > 0) 1 else -1
             val channelIdx = (if (isUserTarget) 0 else 2) + (if (isAtkStat) 0 else 1)
+            if (!isUserTarget) {
+                lastOppStatStageVisualMs = nowMs
+            }
 
             // Mimikyu Swap-In GUI Reminder Guard:
             // When a Busted-Form Mimikyu swaps back in, Pokémon GO flashes "DEFENSE FELL!" above its HP bar as a reminder
@@ -10824,6 +10840,8 @@ class OverlayService : LifecycleService() {
                 circlesOkForAura && lockedOppRowYForAura > 0 && (currentFrameTimestampMs - lastOppSwitchFrameMs) > 1200L -> lockedOppRowYForAura
                 else -> -1
             }
+            val isRecentOppStatStageArrows = lastOppStatStageVisualMs > 0L &&
+                (currentFrameTimestampMs - lastOppStatStageVisualMs) in 0L..1600L
             val canRunVisionAura = enableAutoShadowDetect &&
                 !isWaitingForOpponent &&
                 hasBattleStarted &&
@@ -10836,7 +10854,8 @@ class OverlayService : LifecycleService() {
                 circlesOkForAura &&
                 pendingChargedAttackActor.isEmpty() &&
                 !isAttackIncomingPromptActive &&
-                !sampledTopCountdownCircleVisible
+                !sampledTopCountdownCircleVisible &&
+                !isRecentOppStatStageArrows
             if (canRunVisionAura) {
                 val isUserShadAura = uMonRawForAura.contains("Shadow", ignoreCase = true)
                 val uFastAura = uSlotAura?.fastMove?.takeIf { it.isNotBlank() }
@@ -10857,6 +10876,7 @@ class OverlayService : LifecycleService() {
                     isAttackIncomingPromptActive ||
                     isPostFaintSwitchPromptActive ||
                     sampledTopCountdownCircleVisible ||
+                    isRecentOppStatStageArrows ||
                     (currentFrameTimestampMs - oppAuraLastValidGateMs) > 400L
                 ) {
                     oppAuraHasPrevRgb = false
@@ -11817,8 +11837,14 @@ class OverlayService : LifecycleService() {
                     if (targetIdx >= 0) {
                         val curEv = battleTimelineEvents[targetIdx]
                         if (isDisguiseBustedLine) {
-                            // Keep CHARGED_ATTACK marked absorbed (shielded=true, 1% chip) while preserving refunded shield counts
+                            val hpBef = (curEv.hpBeforePct ?: 100).coerceIn(1, 100)
+                            val restoredAfterHp = max(1, hpBef - 1)
+                            // Mark CHARGED_ATTACK absorbed (shielded=true, 1% chip) even at 0 regular shields while preserving refunded shield counts
                             battleTimelineEvents[targetIdx] = curEv.copy(
+                                shielded = true,
+                                pokemonShielded = curEv.pokemonShielded ?: curEv.defenderPokemon,
+                                hpAfterPct = if (curEv.shielded == true) curEv.hpAfterPct else restoredAfterHp,
+                                hpDeltaPct = if (curEv.shielded == true) curEv.hpDeltaPct else 1,
                                 userShieldsRemaining = playerShieldsRemaining,
                                 oppShieldsRemaining = oppShieldsRemaining
                             )
@@ -12057,6 +12083,10 @@ class OverlayService : LifecycleService() {
                     for (uIdx in 0 until min(3, preset.pokemon.size)) {
                         if (uIdx == preChargeUserIdx) continue
                         val bSlot = preset.pokemon[uIdx]
+                        val bBaseNorm = normalizeOcrToken(FormResolver.extractBaseSpecies(bSlot.name))
+                        val actorMatchesBench = normActor.isEmpty() ||
+                            (bBaseNorm.length >= 3 && (normActor.contains(bBaseNorm) || bBaseNorm.contains(normActor)))
+                        if (!actorMatchesBench) continue
                         val bMeta = getPokemonMeta(bSlot.name, activeLeague, bSlot.name.contains("Shadow", ignoreCase = true))
                         val bc1 = bSlot.chargedMove1.takeIf { it.isNotBlank() } ?: bMeta.chargedMove1
                         val bc2 = bSlot.chargedMove2.takeIf { it.isNotBlank() } ?: bMeta.chargedMove2
@@ -12428,10 +12458,22 @@ class OverlayService : LifecycleService() {
                         resetSlotEnergyTracking(targetUserIdx, residualE)
                         lastEnergyMutationSource = "USER_CHARGE_BANNER_OCR"
                         recalculateAndPushBattleData()
-                    } else if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 3500L && lastChargedPromptActor == "user") {
+                    } else if (pendingChargedAttackActor.isEmpty() && lastChargedAttackLoggedActor == "user" && (nowMs - lastChargedAttackLoggedMs) <= 3500L && lastChargedPromptActor == "user") {
                         val retroDefOppIdx = lastUserChargedDefenderOppSlotIdx.takeIf { it in 0..2 } ?: resolvedOppSlotIdx.coerceIn(0, 2)
                         val retroDefOppName = detectedOpponents.getOrNull(retroDefOppIdx) ?: activeOpponentName
                         val lastUserEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "user" }
+                        if (lastUserEvIdx >= 0) {
+                            val prevEvCheck = battleTimelineEvents[lastUserEvIdx]
+                            val prevAttackerBase = prevEvCheck.activePokemon?.let { FormResolver.extractBaseSpecies(it) } ?: ""
+                            val targetUserBase = FormResolver.extractBaseSpecies(targetUserMonName)
+                            val crossSpeciesOverwrite = prevEvCheck.moveResolutionSource == "BANNER_OCR" &&
+                                prevAttackerBase.isNotEmpty() &&
+                                targetUserBase.isNotEmpty() &&
+                                !prevAttackerBase.equals(targetUserBase, ignoreCase = true)
+                            if (crossSpeciesOverwrite) {
+                                break
+                            }
+                        }
                         applyDeterministicMoveBuffsAndDisguise(
                             actor = "user",
                             moveName = moveName,
@@ -13088,6 +13130,7 @@ class OverlayService : LifecycleService() {
             enableAutoShadowDetect &&
             hasBattleStarted &&
             isCleanCombatHpWindow &&
+            (lastOppStatStageVisualMs <= 0L || (nowMs - lastOppStatStageVisualMs) > 1600L) &&
             activeOppIdx in 0..2 &&
             activeOppBase.isNotEmpty() &&
             !userManualShadowLocks.containsKey(activeOppBase)
@@ -15002,6 +15045,44 @@ class OverlayService : LifecycleService() {
                     }
                 }
                 oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, oppFastTurnsForStats - 1)
+            } else if (
+                lastPlayerSwitchTimeMs > 0L &&
+                lastPlayerSwitchTimeMs >= lastOppSwitchTimeMs &&
+                lastPlayerSwitchTimeMs >= lastChargedAttackLoggedMs &&
+                !isAllCombatHudGone &&
+                !isPostFaintSwitchPromptActive &&
+                pendingChargedAttackActor.isEmpty() &&
+                !isAttackIncomingPromptActive &&
+                (nowMs - lastPlayerSwitchTimeMs) in ((oppFastTurnsForStats * 500L + 600L)..7000L)
+            ) {
+                // v7.74: Post-cutscene user swap noisy-circle cadence fallback.
+                // When bottom circle fills are obscured after a player switch (leaving phasePlayerTurns == 0),
+                // credit physically elapsed opponent fast moves only if combat HP activity is actively confirmed
+                // (at least 1 incoming or outgoing HP drop observed since switch, capped tightly to elapsed swap time).
+                val elapsedAfterUserSwapMs = (nowMs - lastPlayerSwitchTimeMs).coerceAtLeast(0L)
+                val activeCombatConfirmed = (userOutFastMoveCount[activeOppIdx] > 0) ||
+                    (oppInZeroStageMoveCount[activeOppIdx] > 0) ||
+                    (oppRawPulseCount[activeOppIdx] > 0) ||
+                    (sampledPlayerHpPct in 1..99 && confirmedPlayerSlotHpPct[activeUserIdx] in 1..100 && sampledPlayerHpPct < confirmedPlayerSlotHpPct[activeUserIdx]) ||
+                    (sampledOppHpPct in 1..99 && confirmedOppSlotHpPct[activeOppIdx] in 1..100 && sampledOppHpPct < confirmedOppSlotHpPct[activeOppIdx])
+                if (activeCombatConfirmed) {
+                    val maxSwapPhaseOppMoves = ((elapsedAfterUserSwapMs - 450L).coerceAtLeast(0L) / (oppFastTurnsForStats * 500L)).toInt().coerceIn(0, 3)
+                    val alreadyCreditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
+                    val makeupSwapOppMoves = (maxSwapPhaseOppMoves - alreadyCreditedOppMovesInPhase).coerceAtLeast(0)
+                    if (makeupSwapOppMoves > 0) {
+                        oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + makeupSwapOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
+                        oppSlotEnergyMeter[activeOppIdx] = (oppSlotEnergyMeter[activeOppIdx] + makeupSwapOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
+                        oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + makeupSwapOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
+                        phaseOppTurns += makeupSwapOppMoves * oppFastTurnsForStats
+                        oppLastFastCreditedAtMs[activeOppIdx] = nowMs
+                        oppCreditedByOptimalTimerAtMs[activeOppIdx] = nowMs
+                        confirmedMoveOppSlotIdx = activeOppIdx
+                        confirmedMoveOppEnergy = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+                        confirmedMoveOppTurnsOnField = oppSlotTurnsOnField[activeOppIdx].coerceAtLeast(0)
+                        confirmedMovePhaseOppTurns = phaseOppTurns.coerceAtLeast(0)
+                        hpChanged = true
+                    }
+                }
             }
 
             // v7.15: Sync Meter-Based Energy (`E_meter`), Confidence (`C_meter` & `C_hp`), and A2 Normal Combat Policy
@@ -21023,6 +21104,7 @@ class OverlayService : LifecycleService() {
         oppChargeLastSettlingPlayerHp = -1
         lastDetectedBlockedBannerMs = 0L
         lastDetectedDisguiseBustedBannerMs = 0L
+        lastOppStatStageVisualMs = 0L
         confirmedUserBlockedShieldCount = 0
         confirmedOppBlockedShieldCount = 0
         lastConfirmedUserBlockedChargeMs = 0L

@@ -1484,19 +1484,70 @@ function collectFilesRecursive(dir, list = []) {
   return list;
 }
 
+function parseVersionNum(verStr) {
+  const m = String(verStr || "").match(/(\d+)\.(\d+)/);
+  if (!m) return 0;
+  return Number(m[1]) * 100 + Number(m[2]);
+}
+
+function extractBattleIdFromCachePath(filePath) {
+  const norm = path.resolve(filePath);
+  const prePrefix = path.resolve(PREPROCESSED_DIR) + path.sep;
+  if (norm.startsWith(prePrefix)) {
+    const rel = norm.slice(prePrefix.length);
+    return rel.split(path.sep)[0] || "";
+  }
+  const recPrefix = path.resolve(RECORDINGS_DIR) + path.sep;
+  if (norm.startsWith(recPrefix)) {
+    const base = path.basename(norm);
+    return base.replace(/(_video\.mp4|_deep_trace\.jsonl)$/i, "");
+  }
+  return "";
+}
+
+function loadResolvedManualBattleIds() {
+  const resolved = new Set();
+  try {
+    const digestPath = path.join(CACHE_DIR, "nightly_audit_digest.json");
+    if (!fs.existsSync(digestPath)) return resolved;
+    const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
+    for (const item of digest?.manualIssuesRetroactiveAudit || []) {
+      if (item?.battleId && item?.retroactiveAudit?.status === "RESOLVED_BY_LATEST_RELEASE") {
+        resolved.add(item.battleId);
+      }
+    }
+  } catch {}
+  return resolved;
+}
+
 function enforceLocalStorageQuota(config, state = null) {
-  const maxMb = config.storage?.maxLocalStorageMb ?? 1024;
-  const targetMb = config.storage?.pruneTargetStorageMb ?? 950;
-  const maxBytes = maxMb * 1024 * 1024;
-  const targetBytes = targetMb * 1024 * 1024;
+  const softMaxMb = config.storage?.maxLocalStorageMb ?? 6144;
+  const softTargetMb = config.storage?.pruneTargetStorageMb ?? 5632;
+  const hardMaxMb = config.storage?.hardMaxLocalStorageMb ?? 20480;
+  const hardTargetMb = config.storage?.hardPruneTargetStorageMb ?? 19456;
+  const protectRecentHours = config.storage?.protectRecentHours ?? 72;
+  const evictResolvedManualAfterDays = config.storage?.evictResolvedManualAfterDays ?? 7;
+
+  const softMaxBytes = softMaxMb * 1024 * 1024;
+  const softTargetBytes = softTargetMb * 1024 * 1024;
+  const hardMaxBytes = hardMaxMb * 1024 * 1024;
+  const hardTargetBytes = hardTargetMb * 1024 * 1024;
+  const protectRecentMs = protectRecentHours * 3600 * 1000;
+  const resolvedManualAgeMs = evictResolvedManualAfterDays * 24 * 3600 * 1000;
+  const nowMs = Date.now();
 
   const allFiles = collectFilesRecursive(CACHE_DIR);
   let totalBytes = allFiles.reduce((sum, f) => sum + f.size, 0);
-  if (totalBytes <= maxBytes) {
-    return { totalMb: Number((totalBytes / (1024 * 1024)).toFixed(2)), evictedFiles: 0 };
+  if (totalBytes <= softMaxBytes) {
+    return {
+      totalMb: Number((totalBytes / (1024 * 1024)).toFixed(2)),
+      evictedFiles: 0,
+      tier1Evicted: 0,
+      tier2HardCapEvicted: 0,
+    };
   }
 
-  // Never delete root cache metadata/briefings/logs/history, .jsonl traces, or digest.json files
+  // Never delete root cache metadata/briefings/logs/history, .jsonl traces, digest.json, or HUD overlays
   const protectedPaths = new Set([
     STATE_FILE,
     SUMMARY_FILE,
@@ -1509,49 +1560,75 @@ function enforceLocalStorageQuota(config, state = null) {
     path.join(CACHE_DIR, "daily_plan_history.json"),
     path.join(CACHE_DIR, "daily_plan.lock"),
   ]);
-  const manuallyFlaggedBattleIds = new Set(
-    Object.values(state?.dvrBundles || {})
-      .filter((b) => b && b.manuallyFlagged)
-      .map((b) => b.battleId)
-  );
+  const resolvedManualBattleIds = loadResolvedManualBattleIds();
 
-  const candidates = allFiles.filter((f) => {
-    if (protectedPaths.has(f.path)) return false;
-    if (path.dirname(f.path) === CACHE_DIR) return false;
-    if (config.storage?.protectDeepTraceJsonl !== false && f.path.endsWith(".jsonl")) return false;
-    if (config.storage?.protectDigestJson !== false && f.path.endsWith("digest.json")) return false;
-    if (f.path.endsWith("telemetry_hud.ass")) return false;
-    if (config.storage?.protectPaidAndFlaggedBundles !== false) {
-      for (const flagId of manuallyFlaggedBattleIds) {
-        if (flagId && f.path.includes(flagId)) return false;
-      }
+  const tier1SoftEvictable = [];
+  const tier2ProtectedRecentOrUnresolved = [];
+
+  for (const f of allFiles) {
+    if (protectedPaths.has(f.path)) continue;
+    if (path.dirname(f.path) === CACHE_DIR) continue;
+    if (config.storage?.protectDeepTraceJsonl !== false && f.path.endsWith(".jsonl")) continue;
+    if (config.storage?.protectDigestJson !== false && f.path.endsWith("digest.json")) continue;
+    if (f.path.endsWith("telemetry_hud.ass")) continue;
+
+    const battleId = extractBattleIdFromCachePath(f.path);
+    const bundle = battleId ? state?.dvrBundles?.[battleId] || null : null;
+    const uploadedMs = bundle?.uploadedAt ? Date.parse(bundle.uploadedAt) : 0;
+    const refMs = uploadedMs > 0 && !Number.isNaN(uploadedMs) ? uploadedMs : f.mtimeMs;
+    const ageMs = Math.max(0, nowMs - refMs);
+    const isRecent72h = ageMs <= protectRecentMs;
+    const isManual = Boolean(bundle?.manuallyFlagged);
+    const isResolvedManual = Boolean(battleId && resolvedManualBattleIds.has(battleId));
+    const isEvictableResolvedManual = isManual && isResolvedManual && ageMs > resolvedManualAgeMs;
+    const protectManual = config.storage?.protectPaidAndFlaggedBundles !== false && isManual && !isEvictableResolvedManual;
+
+    if (isRecent72h || protectManual) {
+      tier2ProtectedRecentOrUnresolved.push({ ...f, refMs });
+    } else {
+      tier1SoftEvictable.push({ ...f, refMs });
     }
-    return true;
-  });
+  }
 
-  // Sort: oldest raw .mp4 files first ( once screenshots are extracted ), then oldest keyframes
-  candidates.sort((a, b) => {
+  // Tier 1 Sort: oldest raw .mp4 files first (once screenshots are extracted), then oldest keyframes/sheets
+  tier1SoftEvictable.sort((a, b) => {
     const aIsMp4 = a.path.endsWith(".mp4") ? 0 : 1;
     const bIsMp4 = b.path.endsWith(".mp4") ? 0 : 1;
     if (config.storage?.evictOldestRawMp4FirstWhenOverQuota !== false && aIsMp4 !== bIsMp4) {
       return aIsMp4 - bIsMp4;
     }
-    return a.mtimeMs - b.mtimeMs;
+    return (a.refMs - b.refMs) || (a.mtimeMs - b.mtimeMs);
   });
 
-  let evictedFiles = 0;
-  for (const file of candidates) {
-    if (totalBytes <= targetBytes) break;
+  let tier1Evicted = 0;
+  for (const file of tier1SoftEvictable) {
+    if (totalBytes <= softTargetBytes) break;
     try {
       fs.unlinkSync(file.path);
       totalBytes -= file.size;
-      evictedFiles++;
+      tier1Evicted++;
     } catch {}
+  }
+
+  // Tier 2 Hard 20 GB Ceiling: only triggers if protected <72h / unresolved media still exceeds hardMaxBytes, deleting oldest first
+  let tier2HardCapEvicted = 0;
+  if (totalBytes > hardMaxBytes) {
+    tier2ProtectedRecentOrUnresolved.sort((a, b) => (a.refMs - b.refMs) || (a.mtimeMs - b.mtimeMs));
+    for (const file of tier2ProtectedRecentOrUnresolved) {
+      if (totalBytes <= hardTargetBytes) break;
+      try {
+        fs.unlinkSync(file.path);
+        totalBytes -= file.size;
+        tier2HardCapEvicted++;
+      } catch {}
+    }
   }
 
   return {
     totalMb: Number((totalBytes / (1024 * 1024)).toFixed(2)),
-    evictedFiles,
+    evictedFiles: tier1Evicted + tier2HardCapEvicted,
+    tier1Evicted,
+    tier2HardCapEvicted,
   };
 }
 
@@ -1911,11 +1988,11 @@ async function runOnce() {
 
     saveCacheState(state);
 
-    // 5. Enforce 1.0 GB Local Storage Cap
+    // 5. Enforce 6 GB Soft Cap (<72h & unresolved issues protected) + 20 GB Hard Ceiling (oldest-first)
     const quotaStatus = enforceLocalStorageQuota(config, state);
 
     if (SYNC_ONLY) {
-      const syncLine = `batches=+${newBatchesCount} battles=+${newBattlesCount} dvrFiles=+${newDvrFilesCount} preprocessed=+${preprocessedBundlesCount} prunedRemote=${prunedRemoteKeys} localMb=${quotaStatus.totalMb}MB evictedLocal=${quotaStatus.evictedFiles}`;
+      const syncLine = `batches=+${newBatchesCount} battles=+${newBattlesCount} dvrFiles=+${newDvrFilesCount} preprocessed=+${preprocessedBundlesCount} prunedRemote=${prunedRemoteKeys} localMb=${quotaStatus.totalMb}MB evictedLocal=${quotaStatus.evictedFiles} (tier1=${quotaStatus.tier1Evicted},hard20Gb=${quotaStatus.tier2HardCapEvicted})`;
       appendSyncLog(syncLine);
       console.log(`[SYNC-ONLY] ${syncLine}`);
       return;
@@ -1936,6 +2013,7 @@ async function runOnce() {
           severity: a.severity,
         });
         const localDiagnosis = classifyAnomalyLocally(a, r);
+        const { screenshotWebpBase64, hudThumbnailWebpBase64, ...compactAnomaly } = a || {};
         return {
           priorityBucket: prio.priorityBucket,
           compositePriorityScore: prio.compositePriorityScore,
@@ -1955,18 +2033,20 @@ async function runOnce() {
           opponentsSeenOrder: r.opponentsSeenOrder,
           userTeamSpecs: r.userTeamSpecs,
           oppTeamSpecs: r.oppTeamSpecs,
-          ...a,
+          ...compactAnomaly,
           localDiagnosis,
         };
       });
     });
 
-    // Sort all anomalies by Paid-First Priority:
+    // Sort all anomalies by Paid-First Priority, then newest appVersion, then timestamp:
     // P1 (Paid Manual: VIP > Pro > Supporter) -> P2 (Free Manual) -> P3 (Paid Auto: VIP > Pro > Supporter, HIGH > WARN) -> P4 (Free Auto: HIGH > WARN)
     allAnomalies.sort((a, b) => {
       if (b.compositePriorityScore !== a.compositePriorityScore) {
         return b.compositePriorityScore - a.compositePriorityScore;
       }
+      const vDiff = parseVersionNum(b.appVersion) - parseVersionNum(a.appVersion);
+      if (vDiff !== 0) return vDiff;
       return (b.timestampMs || 0) - (a.timestampMs || 0);
     });
 
@@ -2009,7 +2089,8 @@ async function runOnce() {
       ffmpegPath: FFMPEG_BIN,
       preprocessConfigPath: CONFIG_PATH,
       localStorageMb: quotaStatus.totalMb,
-      maxLocalStorageMb: config.storage?.maxLocalStorageMb ?? 1024,
+      maxLocalStorageMb: config.storage?.maxLocalStorageMb ?? 6144,
+      hardMaxLocalStorageMb: config.storage?.hardMaxLocalStorageMb ?? 20480,
       newlyIngestedBatches: newBatchesCount,
       newlyIngestedBattles: newBattlesCount,
       newlyIngestedSettingsLogs: newSettingsLogsCount,
@@ -2027,7 +2108,8 @@ async function runOnce() {
       battlesByAppVersion,
       anomaliesByAppVersion,
       prioritizedDvrBundles: sortedDvrBundles.slice(0, 25),
-      prioritizedAnomalies: allAnomalies.slice(0, 40),
+      prioritizedAnomalies: allAnomalies.slice(0, 250),
+      allPrioritizedAnomalies: allAnomalies,
       recentDvrBundles: sortedDvrBundles.slice(0, 15),
       recentAnomalies: allAnomalies.slice(0, 25),
     };

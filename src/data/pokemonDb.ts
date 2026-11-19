@@ -1,4 +1,6 @@
 import type { AntiMetaAltMovesetInfo } from "./teamAndMetaEngine";
+import { STATIC_RELEASED_SHADOW_KEYS } from "./shadowBaseline";
+export { STATIC_RELEASED_SHADOW_KEYS };
 
 let _evaluateDiscreteShieldBattleRatingHook:
   | ((
@@ -1170,6 +1172,40 @@ export const SUPER_MEGA_PLUS_MOVES: Record<string, string> = {
 };
 
 export const DYNAMIC_SUPER_MEGA_PLUS_MOVES: Record<string, string> = {};
+
+export const DYNAMIC_SHADOW_ELIGIBLE_KEYS = new Set<string>();
+
+export function registerDynamicShadowEligibleKey(speciesId?: string, displayName?: string): void {
+  const rawId = (speciesId || "").trim();
+  const rawName = (displayName || "").trim();
+  const idLowerRaw = rawId.toLowerCase();
+  const nameLowerRaw = rawName.toLowerCase();
+  if (
+    idLowerRaw === "mewtwo_armored" ||
+    nameLowerRaw.includes("armored") ||
+    idLowerRaw.includes("_mega") ||
+    idLowerRaw.includes("_primal") ||
+    nameLowerRaw.startsWith("mega ") ||
+    nameLowerRaw.startsWith("primal ")
+  ) {
+    return;
+  }
+  const cleanBaseId = idLowerRaw.replace(/_shadow$/, "").trim();
+  if (cleanBaseId) {
+    DYNAMIC_SHADOW_ELIGIBLE_KEYS.add(cleanBaseId);
+    if (cleanBaseId.includes("-")) {
+      DYNAMIC_SHADOW_ELIGIBLE_KEYS.add(cleanBaseId.replace(/-/g, "_"));
+    }
+  }
+  const cleanDisplay = rawName
+    .replace(/\s*\(Shadow\)\s*$/i, "")
+    .replace(/^Shadow\s+/i, "")
+    .trim()
+    .toLowerCase();
+  if (cleanDisplay) {
+    DYNAMIC_SHADOW_ELIGIBLE_KEYS.add(cleanDisplay);
+  }
+}
 
 export function resolveMegaPlusMove(name: string | undefined, league: string | undefined): string | null {
   if (!name) return null;
@@ -3494,6 +3530,78 @@ export function findPokemonByName(name: string): PokemonStats | undefined {
       );
     })
   );
+}
+
+function matchesShadowKeySet(
+  keySet: ReadonlySet<string>,
+  candidates: Array<string | null | undefined>
+): boolean {
+  for (const c of candidates) {
+    if (c && keySet.has(c)) return true;
+  }
+  return false;
+}
+
+export function isSpeciesShadowEligibleWeb(
+  name: string,
+  baseSpecies?: string,
+  speciesId?: string,
+  formLabel?: string
+): boolean {
+  const matched = !speciesId || !formLabel ? findPokemonByName(name) : undefined;
+  const resolvedId = (speciesId || matched?.speciesId || "").trim().toLowerCase();
+  const idLower = resolvedId.replace(/_shadow$/, "").trim();
+  const cleanName = (name || "")
+    .replace(/^Shadow\s+/i, "")
+    .replace(/\s*\(Shadow\)$/i, "")
+    .trim()
+    .toLowerCase();
+  if (
+    idLower === "mewtwo_armored" ||
+    cleanName.includes("armored") ||
+    idLower.includes("_mega") ||
+    idLower.includes("_primal") ||
+    cleanName.startsWith("mega ") ||
+    cleanName.startsWith("primal ")
+  ) {
+    return false;
+  }
+  const idHyphen = idLower.replace(/-/g, "_");
+  const resolvedForm = (formLabel || matched?.formLabel || "").trim().toLowerCase();
+  const formSlug =
+    resolvedForm && resolvedForm !== "base" && resolvedForm !== "shadow"
+      ? resolvedForm.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
+      : "";
+  const formQualId =
+    idHyphen && formSlug && !idHyphen.endsWith(`_${formSlug}`)
+      ? `${idHyphen}_${formSlug}`
+      : null;
+
+  const baseNorm = (baseSpecies || matched?.baseSpecies || "").trim().toLowerCase();
+  const isBaseRegionWord =
+    formSlug === "kanto" ||
+    formSlug === "johto" ||
+    formSlug === "hoenn" ||
+    formSlug === "sinnoh" ||
+    formSlug === "unova" ||
+    formSlug === "kalos" ||
+    formSlug === "alola" ||
+    formSlug === "galar" ||
+    formSlug === "hisui" ||
+    formSlug === "paldea";
+  const hasExplicitForm =
+    Boolean(formSlug && !isBaseRegionWord) ||
+    /\([^)]+\)/.test(cleanName) ||
+    /^(alolan|galarian|hisuian|paldean)\s+/i.test(cleanName) ||
+    (Boolean(idHyphen) && Boolean(baseNorm) && idHyphen !== baseNorm && idHyphen.includes("_"));
+
+  const bareBaseFallback = !hasExplicitForm && baseNorm ? baseNorm : null;
+  const candidates = [idLower, idHyphen, formQualId, cleanName, bareBaseFallback];
+
+  if (matchesShadowKeySet(DYNAMIC_SHADOW_ELIGIBLE_KEYS, candidates)) {
+    return true;
+  }
+  return matchesShadowKeySet(STATIC_RELEASED_SHADOW_KEYS, candidates);
 }
 
 export function getPvPokeStyleKeyMatchupsForPokemon(
@@ -6433,10 +6541,14 @@ export async function syncPvPokeDataAndRankings(): Promise<{
     const map = LIVE_RANKINGS_MAP[leagueKey];
     map.clear();
     list.forEach((entry, idx) => {
-      map.set(entry.speciesId.toLowerCase(), {
+      const lowerSid = entry.speciesId.toLowerCase();
+      map.set(lowerSid, {
         ...entry,
         rank: typeof entry.rank === "number" ? entry.rank : idx + 1
       });
+      if (lowerSid.endsWith("_shadow")) {
+        registerDynamicShadowEligibleKey(entry.speciesId);
+      }
     });
     const upperKey = leagueKey.toUpperCase();
     if (upperKey !== leagueKey) {
@@ -6549,6 +6661,14 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       let displayName: string = p.speciesName;
       if (displayName.endsWith(" (Shadow)")) {
         displayName = "Shadow " + displayName.replace(" (Shadow)", "").trim();
+      }
+      const gmIdLower = speciesId.trim().toLowerCase();
+      const gmHasShadow =
+        gmIdLower.endsWith("_shadow") ||
+        (Array.isArray(p.tags) &&
+          p.tags.some((t: unknown) => typeof t === "string" && t.toLowerCase() === "shadoweligible"));
+      if (gmHasShadow) {
+        registerDynamicShadowEligibleKey(speciesId, p.speciesName);
       }
       const gmDex = typeof p.dex === "number" && p.dex > 0 ? p.dex : undefined;
       if (gmDex) {

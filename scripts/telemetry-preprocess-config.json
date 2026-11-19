@@ -2,8 +2,12 @@
   "version": "1.3.0",
   "description": "Tunable rules for local CPU/ffmpeg preprocessing of 1-Battle DVR recordings and deep traces. Edit any threshold or window here to adjust what screenshots and contact sheets are saved locally.",
   "storage": {
-    "maxLocalStorageMb": 1024,
-    "pruneTargetStorageMb": 950,
+    "maxLocalStorageMb": 6144,
+    "pruneTargetStorageMb": 5632,
+    "hardMaxLocalStorageMb": 20480,
+    "hardPruneTargetStorageMb": 19456,
+    "protectRecentHours": 72,
+    "evictResolvedManualAfterDays": 7,
     "keepRawMp4Videos": true,
     "evictOldestRawMp4FirstWhenOverQuota": true,
     "protectDeepTraceJsonl": true,
@@ -104,13 +108,13 @@
     }
   },
   "nightlyModelBudget": {
-    "dailyChatModel": "gemini-pro-orchestrator",
-    "dailyChatModelDisplayName": "Orchestrator (Carbon)",
+    "dailyChatModel": "gemini-pro-orchestrator-neon",
+    "dailyChatModelDisplayName": "Orchestrator (Neon)",
     "stage0LocalCpuAndFfmpeg": "0_AI_TOKENS (100% Local Node.js + ffmpeg + detectFloatingHpBarPctV708)",
     "stage1OcrAndVideoSubagentModel": "flash",
-    "stage2SupporterAndFreeHighEffort": "carbon_low",
+    "stage2SupporterAndFreeHighEffort": "neon_low",
     "maxSupporterAndFreeHighIssuesPerDay": 3,
-    "stage3ProAndVipCriticalEffort": "carbon_medium",
-    "stage4FinalSynthesisPass": "carbon_medium_cached_digest_only_1x"
+    "stage3ProAndVipCriticalEffort": "neon_medium",
+    "stage4FinalSynthesisPass": "neon_medium_cached_digest_only_1x"
   }
 }

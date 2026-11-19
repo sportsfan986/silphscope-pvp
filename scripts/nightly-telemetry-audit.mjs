@@ -1007,7 +1007,7 @@ function buildTelegramSummaryHtmlFromDigest(digest) {
     `• Verified Fixed in <code>v7.04–v${escTg(currentVersion)}</code>: <b>${resolvedTotal}</b>\n` +
     `• Benign 1-Turn / Circle Variance: <b>${benignTotal}</b>\n` +
     `• Open Action Items: <b>${openActionItems.length}</b>\n\n` +
-    `💬 <i>Your new Antigravity chat ("📊 [${todayCentral}] Daily Telemetry Audit &amp; Plan") on Orchestrator (Carbon) is ready to review!</i>`
+    `💬 <i>Your new Antigravity chat ("📊 [${todayCentral}] Daily Telemetry Audit &amp; Plan") on Orchestrator (Neon) is ready to review!</i>`
   );
 }
 
@@ -1188,7 +1188,12 @@ async function main() {
     vm.totalAnomalies += anoms.length;
   }
 
-  for (const a of anomalyReport.prioritizedAnomalies || []) {
+  const allAuditAnomalies =
+    Array.isArray(anomalyReport.allPrioritizedAnomalies) && anomalyReport.allPrioritizedAnomalies.length > 0
+      ? anomalyReport.allPrioritizedAnomalies
+      : anomalyReport.prioritizedAnomalies || [];
+
+  for (const a of allAuditAnomalies) {
     const ver = a.appVersion || "unknown";
     if (versionMatrix[ver]) {
       const cat = a.localDiagnosis?.category || a.type || "OTHER";
@@ -1249,7 +1254,7 @@ async function main() {
   };
   const openActionItems = [];
 
-  for (const a of anomalyReport.prioritizedAnomalies || []) {
+  for (const a of allAuditAnomalies) {
     const rec = byBattleId.get(a.battleId) || null;
     const retro = evaluateRetroactiveResolution(a, rec, state, currentVersion);
     anomalyRetroSummary[retro.status] = (anomalyRetroSummary[retro.status] || 0) + 1;
@@ -2188,7 +2193,12 @@ async function main() {
     let postV736TracesScanned = 0;
     const postV736Regressions = [];
     for (const [bId, bundle] of Object.entries(state.dvrBundles || {})) {
-      const localTr = bundle?.localTracePath ? path.resolve(ROOT_DIR, bundle.localTracePath) : "";
+      const rawTracePath = bundle?.tracePath || bundle?.localTracePath || "";
+      const localTr = rawTracePath
+        ? path.isAbsolute(rawTracePath)
+          ? rawTracePath
+          : path.resolve(ROOT_DIR, rawTracePath)
+        : "";
       if (!localTr || !fs.existsSync(localTr)) continue;
       let raw = "";
       try {
@@ -2302,35 +2312,35 @@ async function main() {
     const t = String(item.userTier || "").toUpperCase();
     const isProOrVip = t === "VIP" || t === "PRO";
     if (isProOrVip) {
-      stage3ProVipMediumQueue.push({ ...item, assignedModelTier: "CARBON_MEDIUM (Pro/VIP Critical & Manual)" });
+      stage3ProVipMediumQueue.push({ ...item, assignedModelTier: "NEON_MEDIUM (Pro/VIP Critical & Manual)" });
     } else {
-      stage2SupporterFreeLowQueueAll.push({ ...item, assignedModelTier: "CARBON_LOW (Supporter/Free High & Manual)" });
+      stage2SupporterFreeLowQueueAll.push({ ...item, assignedModelTier: "NEON_LOW (Supporter/Free High & Manual)" });
     }
   }
   const stage2SupporterFreeActiveToday = stage2SupporterFreeLowQueueAll.slice(0, maxSupporterFreePerDay);
   const stage2SupporterFreeDeferredBacklog = stage2SupporterFreeLowQueueAll.slice(maxSupporterFreePerDay);
 
-  const recommendedPlanningModel = "gemini-pro-orchestrator";
+  const recommendedPlanningModel = "gemini-pro-orchestrator-neon";
 
   const modelRoutingPolicy = {
-    orchestratorModel: "gemini-pro-orchestrator (Orchestrator Carbon)",
+    orchestratorModel: "gemini-pro-orchestrator-neon (Orchestrator Neon)",
     stage0LocalEngine: "0_AI_TOKENS (100% Local Node.js + ffmpeg + PixelScannerEngine v7.08 port)",
     stage1OcrAndVideoSubagent: "flash (strictly for contact-sheet / keyframe OCR subagent calls + mechanical release CI)",
     stage2SupporterAndFreeHighTier: {
-      effort: "CARBON_LOW",
+      effort: "NEON_LOW",
       dailyCapX: maxSupporterFreePerDay,
       queuedTodayCount: stage2SupporterFreeActiveToday.length,
       deferredBacklogCount: stage2SupporterFreeDeferredBacklog.length,
       items: stage2SupporterFreeActiveToday,
     },
     stage3ProAndVipCriticalTier: {
-      effort: "CARBON_MEDIUM",
+      effort: "NEON_MEDIUM",
       queuedTodayCount: stage3ProVipMediumQueue.length,
       items: stage3ProVipMediumQueue,
     },
     stage4FinalCachedSynthesis: {
-      effort: "CARBON_MEDIUM_CACHED_DIGEST_ONLY_1X",
-      rule: "Run exactly 1 final synthesis pass over cached morning_briefing.md and Stage 2/3 findings (<8 KB text; zero raw .jsonl or images); prompt user for Carbon High only on complex combat math.",
+      effort: "NEON_MEDIUM_CACHED_DIGEST_ONLY_1X",
+      rule: "Run exactly 1 final synthesis pass over cached morning_briefing.md and Stage 2/3 findings (<8 KB text; zero raw .jsonl or images); suggest Orchestrator (Carbon) / Carbon High escalation via ask_question for high-complexity architecture or combat math overhauls per AGENTS.md Section 2.",
     },
     recommendedPlanningModel,
   };

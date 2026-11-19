@@ -3117,7 +3117,8 @@ internal fun OverlayService.scanOpponent3dShadowAura(
     }
 
     val fastLower = userFastMoveName.trim().lowercase()
-    val recentPlayerFast = (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) in 0L..2200L)
+    val recentPlayerFast = (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) in 0L..2200L) ||
+        (lastPlayerSwitchTimeMs > 0L && (nowMs - lastPlayerSwitchTimeMs) in 0L..1600L)
     val cleanPostOppEntryBeforePlayerFast = lastOppSwitchTimeMs > 0L &&
         (nowMs - lastOppSwitchTimeMs) in 120L..1650L &&
         (confirmedPhasePlayerTurns == 0 || lastConfirmedPlayerFastMoveMs < lastOppSwitchTimeMs)

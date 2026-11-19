@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.74',
+    codename: 'Combat Telemetry Fixes, Cross-Platform Dynamic Shadow Eligibility & 2-Tier Local DVR Quota',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Hardens combat OCR/energy edge cases from v7.70 telemetry, replaces Web hardcoded nonShadowBases with live PvPoke gamemaster + rankings Shadow eligibility synced across Android/Web/Worker, and upgrades local DVR telemetry caching with a 6 GB soft / 20 GB hard quota and un-truncated version audit matrices.',
+    icon: '🛡️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Fixed 0-shield Mimikyu Disguise bust accounting (shielded=true, 1% chip), post-cutscene user-swap noisy-circle cadence fallback, bench OCR cross-species overwrite guards, and 1.6s purple stat-stage/swap-in VFX shadow-aura gates',
+      'Replaced Web hardcoded nonShadowBases with live PvPoke gamemaster "shadoweligible" + rankings DYNAMIC_SHADOW_ELIGIBLE_KEYS (unlocking Shadow Corviknight & 9 other stale-blocked Shadows), gave Android OTA keys precedence, and added scripts/sync-pvpoke-shadows.mjs',
+      'Upgraded local telemetry retention to a 6 GB soft cap (<72h & unresolved issues protected) + 20 GB oldest-first hard ceiling, removed base64 bloat & top-40 truncation from anomaly digests, and fixed dvrTraceIntegrityAudit tracePath scanning'
+    ]
+  },
+  {
     version: 'v7.73',
     codename: 'Multi-Meta Mega/Primal Slot Tracking, Live Mega Auto-Detection & Standard/Mega Auto-Merge',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Unifies Standard and Mega/Primal teams with per-slot Mega designations (max 1 per team), automatic Mega form/CP resolution across multi-meta pools, live Mega/Primal OCR auto-detection with a 1-tap HUD toggle, and a one-time idempotent Standard/Mega team auto-merge.',
     icon: '🧬',

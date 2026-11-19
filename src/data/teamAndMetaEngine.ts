@@ -1,4 +1,4 @@
-import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, stripMegaOrPrimalToBaseName, resolveEffectiveMemberForLeague, type TeamPreset, type MetaPoolBrSnapshot, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
+import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, stripMegaOrPrimalToBaseName, resolveEffectiveMemberForLeague, type TeamPreset, type MetaPoolBrSnapshot, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, DYNAMIC_SHADOW_ELIGIBLE_KEYS, isSpeciesShadowEligibleWeb, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
 import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr, registerCombatSimulatorMetaHooks } from "./combatSimulator";
 
 export interface BlendedSeasonMetaDistribution {
@@ -2702,20 +2702,17 @@ export interface TeamRoleRecommendationsResult {
   currentCloserBr: number;
 }
 
-export function isShadowEligibleForTop100(name: string, baseSpecies: string): boolean {
-  const lower = name.toLowerCase();
-  const baseLower = baseSpecies.toLowerCase();
-  if (lower.startsWith("shadow ") || lower.startsWith("mega ") || lower.startsWith("primal ")) return false;
-  const nonShadowBases = new Set([
-    "zygarde", "zacian", "zamazenta", "palkia", "dialga", "giratina", "necrozma",
-    "xerneas", "yveltal", "solgaleo", "lunala", "meloetta", "keldeo", "marshadow",
-    "zarude", "rayquaza", "kyurem", "reshiram", "zekrom", "cobalion", "virizion",
-    "terrakion", "tapu", "azumarill", "clodsire", "mandibuzz", "annihilape",
-    "dunsparce", "malamar", "gastrodon", "lickilicky", "talonflame", "corviknight",
-    "wigglytuff", "clefable", "skeledirge", "greninja", "morpeko", "mimikyu",
-    "aegislash", "cramorant", "florges", "primarina", "deoxys", "urshifu"
-  ]);
-  return !nonShadowBases.has(baseLower);
+export function isShadowEligibleForTop100(
+  name: string,
+  baseSpecies: string,
+  speciesId?: string,
+  formLabel?: string
+): boolean {
+  const lower = (name || "").trim().toLowerCase();
+  if (!lower || lower.startsWith("shadow ") || lower.startsWith("mega ") || lower.startsWith("primal ")) {
+    return false;
+  }
+  return isSpeciesShadowEligibleWeb(name, baseSpecies, speciesId, formLabel);
 }
 
 let _speciesIdToDbMonMap: Map<string, (typeof POKEMON_DATABASE)[string]> | null = null;
@@ -2738,7 +2735,7 @@ function getDbMonBySpeciesIdFast(sid: string): (typeof POKEMON_DATABASE)[string]
 export function getTop100MetaCandidatesForLeague(league: string, maxCount: number = 200): TeamMember[] {
   const normLeague = normalizeLeagueName(league);
   const liveSize = LIVE_RANKINGS_MAP[normLeague]?.size || 0;
-  const cacheKey = `${normLeague}||${maxCount}||${liveSize}`;
+  const cacheKey = `${normLeague}||${maxCount}||${liveSize}||${DYNAMIC_SHADOW_ELIGIBLE_KEYS.size}`;
   const cached = TOP_META_CANDIDATES_CACHE.get(cacheKey);
   if (cached) return cached;
 
@@ -2801,7 +2798,7 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
       if (!isBf) {
         const dbEntry = POKEMON_DATABASE[name];
         const baseSp = extractBaseSpeciesKey(name, dbEntry?.speciesId, dbEntry?.baseSpecies);
-        if (isShadowEligibleForTop100(name, baseSp)) {
+        if (isShadowEligibleForTop100(name, baseSp, dbEntry?.speciesId, dbEntry?.formLabel)) {
           tryAddCandidate(`Shadow ${name}`);
         }
       }
@@ -2816,7 +2813,7 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
       if (cap >= 9000 && scaled.resolvedCp < 2600) continue;
       tryAddCandidate(mon.name);
       const baseSp = extractBaseSpeciesKey(mon.name, mon.speciesId, mon.baseSpecies);
-      if (isShadowEligibleForTop100(mon.name, baseSp)) {
+      if (isShadowEligibleForTop100(mon.name, baseSp, mon.speciesId, mon.formLabel)) {
         tryAddCandidate(`Shadow ${mon.name}`);
       }
     }
@@ -2828,7 +2825,7 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
       if (results.length >= maxCount) break;
       tryAddCandidate(mon.name);
       const baseSp = extractBaseSpeciesKey(mon.name, mon.speciesId, mon.baseSpecies);
-      if (isShadowEligibleForTop100(mon.name, baseSp)) {
+      if (isShadowEligibleForTop100(mon.name, baseSp, mon.speciesId, mon.formLabel)) {
         tryAddCandidate(`Shadow ${mon.name}`);
       }
     }

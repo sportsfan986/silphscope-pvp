@@ -1,7 +1,7 @@
 # AGENTS.md — SilphScope PvP Workspace Rules
 
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.73` (`versionCode = 1773`)  
+> **Current Version**: `v7.74` (`versionCode = 1774`)  
 > **Domains**: `silphscopepvp.com` (Web/Sim) • `dvr.silphscopepvp.com` (Cloud Vault & `/watch/:shareId`) • `api.silphscopepvp.com` (Worker API) • `dl.silphscopepvp.com` (APK)
 
 ---
@@ -17,7 +17,8 @@
 3. **Interactive `ask_question` Mandate, Approval & New-Chat Model Gate**:
    - **ALWAYS Make Questions Interactive (`ask_question` Tool Required — Zero Prose-Only Questions)**: Whenever asking the user ANY question, decision, clarification, approval, model selection, or release/versioning gate, **you MUST invoke the `ask_question` tool in that turn** with clickable options (`(Recommended)` first). **NEVER** present questions, option lists, or `"Would you like me to...?"` prompts in plain Markdown chat text alone.
    - **Post-Subagent Wakeup & Pre-Send Tool-Call Check (Plan & Execution Modes)**: After any `<SYSTEM_MESSAGE>` wakeup from `invoke_subagent` or a background task, re-check whether the turn awaits user input before finishing, and emit `ask_question` immediately without long preceding Markdown essays that risk terminating generation before the tool call. **NEVER** write *"use the interactive options below"* (or pause a discovery/gate turn) unless `ask_question` is emitted in that **exact same step**.
-   - **Orchestrator Handoff (`exit_plan_mode`)**: Whenever an execution turn stops for user input or a release gate, the `exit_plan_mode` plan **MUST** explicitly instruct the execution model to call `ask_question` with exact `questions` definitions so prose is never substituted for an interactive widget.
+   - **Orchestrator Handoff (`exit_plan_mode`)**: Whenever an execution turn stops for user input or a release gate, the `exit_plan_mode` plan **MUST** explicitly instruct the execution model to call `ask_question` with exact `questions` definitions (always setting `is_multi_select: false` or `true` explicitly on every item) so prose is never substituted for an interactive widget.
+   - **Explicit Question Requests & Host-Cancellation Fallback**: Whenever the user explicitly asks for questions (or interactive questions), **always** emit `ask_question` in that turn with explicit `is_multi_select` booleans on every question. If the host immediately aborts `ask_question` with an error (such as `user cancelled ask_question` in `<2s` inside an automation-spawned chat), **never** swallow the questions or assume the user dismissed them — immediately report the exact host error and render the full numbered questions and A/B/C options cleanly in chat.
    - Never silently implement features, refactor, or cut releases without explicit user approval (`ask_question` or a plan artifact with `RequestFeedback: true`). Whenever starting or recommending a standalone new chat for a feature, **always invoke `ask_question` to ask which model to use in that chat first**.
 4. **Rule File Size Budget**:
    - Keep `AGENTS.md` strictly under **20,000 bytes** (Antigravity truncates rule files over `24,000` bytes). Store pricing/checkout URLs in [pricing-and-checkout](.agents/skills/pricing-and-checkout/SKILL.md), telemetry/DVR runbooks in [telemetry-and-dvr-ops](.agents/skills/telemetry-and-dvr-ops/SKILL.md), and deep architecture/math specs in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
