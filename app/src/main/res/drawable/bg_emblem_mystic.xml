@@ -2,35 +2,48 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="320dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
+    android:viewportWidth="240"
+    android:viewportHeight="240">
 
-    <!-- Outer Hexagonal Ice Crystal Shield -->
+    <!-- Transparent HUD Reticle Frame -->
     <path
-        android:fillColor="#1A38BDF8"
-        android:strokeColor="#38BDF8"
-        android:strokeWidth="4.5"
-        android:pathData="M100,8 L172,46 L172,134 L100,192 L28,134 L28,46 Z" />
-
-    <!-- Inner Faceted Frost Polygon -->
+        android:fillColor="#0D0369A1"
+        android:strokeColor="#380369A1"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#60A5FA"
-        android:strokeWidth="2.5"
-        android:pathData="M100,22 L156,54 L156,126 L100,174 L44,126 L44,54 Z" />
-
-    <!-- Articuno Crown Crest (3 Ice Spires) -->
+        android:strokeColor="#780369A1"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
     <path
-        android:fillColor="#38BDF8"
-        android:pathData="M100,24 L108,48 L120,32 L114,56 L86,56 L80,32 L92,48 Z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#4D6D28D9"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
 
-    <!-- Articuno Sweeping Glacier Wings & Flowing Ribbon Tail -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M100,56 L116,70 L166,48 L152,86 L176,82 L144,110 L158,120 L122,124 L112,146 L124,166 L100,186 L76,166 L88,146 L78,124 L42,120 L56,110 L24,82 L48,86 L34,48 L84,70 Z" />
-
-    <!-- Central Diamond Ice Core -->
-    <path
-        android:fillColor="#BAE6FD"
-        android:pathData="M100,66 L116,96 L100,132 L84,96 Z" />
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.9" android:scaleY="0.9">
+        <path
+            android:fillColor="#1A38BDF8"
+            android:strokeColor="#0369A1"
+            android:strokeWidth="4.5"
+            android:pathData="M100,8 L172,46 L172,134 L100,192 L28,134 L28,46 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#60A5FA"
+            android:strokeWidth="2.5"
+            android:pathData="M100,22 L156,54 L156,126 L100,174 L44,126 L44,54 Z" />
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M100,24 L108,48 L120,32 L114,56 L86,56 L80,32 L92,48 Z" />
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M100,56 L116,70 L166,48 L152,86 L176,82 L144,110 L158,120 L122,124 L112,146 L124,166 L100,186 L76,166 L88,146 L78,124 L42,120 L56,110 L24,82 L48,86 L34,48 L84,70 Z" />
+        <path
+            android:fillColor="#BAE6FD"
+            android:pathData="M100,66 L116,96 L100,132 L84,96 Z" />
+    </group>
 </vector>

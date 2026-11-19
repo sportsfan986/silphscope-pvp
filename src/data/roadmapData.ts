@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.80',
+    codename: 'Duel Scope Midnight Black Default, 11-Theme WCAG AA+ Suite & Cross-Platform Cloud Sync',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Promotes Duel Scope Midnight Black derived from the 2B Duel Scope emblem as the universal default across Android, Live HUD, Web Simulator, Marketing Website, and Cloud Vault/Watch; adds 5 new PvP OLED themes with translucent HUD reticle & 10-theme constellation watermarks; audits all 11 retained palettes to WCAG 2.1 AA+ contrast; and syncs theme & watermark preferences across every signed-in device via Cloudflare D1 and shared cookies.',
+    icon: '⚔️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Promoted Duel Scope Midnight Black (duel_scope_midnight) as the universal default across all 5 surfaces while keeping Shiny Origin Dialga Midnight selectable and scrubbing internal codenames from public banners/titles',
+      'Designed translucent HUD viewfinder watermarks & 2B Duel Scope constellation crest featuring miniature emblems from all 10 sibling themes across Android VectorDrawables, overlay.html, Web Simulator, Marketing & Cloudflare Vault',
+      'Pruned redundant low-contrast themes with auto-migration, added 5 new PvP OLED/Void themes, and added WCAG AA contrastingInkColor() / Light-mode card, pill, badge & dialog contrast fixes everywhere',
+      'Wired bi-directional Cloudflare D1 userSettings + .silphscopepvp.com cookie theme & watermark sync across Android, HUD, Web Simulator, Marketing Website, Cloud Vault, and /watch/:shareId Replay Theater'
+    ]
+  },
+  {
     version: 'v7.77',
     codename: 'Replay-First & Auto-Logger Website Rebrand + Natural Transparency Copy',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Reorganizes silphscopepvp.com and dl.silphscopepvp.com around Battle DVR, zero-typing auto-logging (free GOBattleLog export), and ELO Anti-Meta first with optional 3-mode tactical data, replacing rigid "50% translucent" / "Ban-Proof Guarantee" jargon with clearer semi-transparent, adjustable transparency, and Read-Only Screen Capture copy.',
     icon: '🎬',
@@ -641,36 +655,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Paired QR / 4-digit calibration room linking two testing devices simultaneously',
       'Frame-by-frame ground truth comparison: Tracked Opponent E vs. Actual User E',
       'Automated delta reporting for snuck moves, catch-up latency, and debounce tuning'
-    ]
-  },
-  {
-    id: 'cross-platform-theme-persistence',
-    title: 'Unified Cross-Platform Theme Persistence (Shiny Dialga Default + User Sync)',
-    badge: 'DESIGN & SYNC',
-    status: 'In Design',
-    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-    category: 'Analytics & Team Builder',
-    icon: '🎨',
-    description: 'Ensure Shiny Origin Dialga Midnight remains the default aesthetic everywhere, while persisting custom chosen themes across the Marketing Website, Web Simulator, and personal Cloud Vault for logged-in users.',
-    keyGoals: [
-      'Shiny Origin Dialga Midnight invariant default for first load & anonymous sessions',
-      'Dynamic CSS theme variables applied consistently across Marketing site & Simulator',
-      'User theme preference synced across devices via Cloudflare D1 Vault Sync'
-    ]
-  },
-  {
-    id: 'theme-audit-cleanup-pruning',
-    title: 'Theme Audit, Contrast Cleanup, Pruning & Fun New Themes',
-    badge: 'DESIGN & ACCESSIBILITY',
-    status: 'Planned',
-    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-    category: 'Analytics & Team Builder',
-    icon: '🎨',
-    description: 'Audit every theme one-by-one across Android, Web Simulator, and Marketing Website to guarantee crisp text readability/contrast in all areas, prune redundant or low-usage themes, and propose fun new themes.',
-    keyGoals: [
-      'One-by-one contrast & readability audit across all modals, cards, badges, inputs, and HUD states',
-      'Prune redundant or low-contrast themes to keep the theme selector focused and polished',
-      'Propose and add fun new community-inspired themes while keeping Shiny Origin Dialga Midnight as default'
     ]
   }
 ];

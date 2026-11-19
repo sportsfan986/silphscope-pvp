@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.77"
-        const val APP_VERSION_CODE = 1777
+        const val APP_VERSION = "7.80"
+        const val APP_VERSION_CODE = 1780
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -135,6 +135,7 @@ class OverlayService : LifecycleService() {
         const val EXTRA_OVERLAY_SCALE_PCT = "extra_overlay_scale_pct"
         const val EXTRA_OVERLAY_TRANSPARENCY_PCT = "extra_overlay_transparency_pct"
         const val EXTRA_APP_THEME_ID = "extra_app_theme_id"
+        const val EXTRA_SHOW_THEME_WATERMARK = "extra_show_theme_watermark"
         const val EXTRA_ENABLE_4_CHARGED_MOVES = "extra_enable_4_charged_moves"
         const val EXTRA_DISABLE_BATTLE_TOASTS = "extra_disable_battle_toasts"
         const val EXTRA_SHOW_TACTICAL_RECOMMENDATIONS = "extra_show_tactical_recommendations"
@@ -201,6 +202,30 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_V702_OVERLAY_TRANSPARENCY_MIGRATED = "gbl_v702_overlay_transparency_50_migrated"
         const val PREFS_KEY_APP_THEME_ID = "gbl_app_theme_id"
         const val PREFS_KEY_SHOW_THEME_WATERMARK = "gbl_show_theme_watermark"
+        const val DEFAULT_APP_THEME_ID = "duel_scope_midnight"
+
+        fun normalizeAppThemeIdStatic(raw: String?): String {
+            val clean = raw?.trim().orEmpty()
+            return when (clean) {
+                "", "amoled_cyan", "amoled_matrix", "slate" -> DEFAULT_APP_THEME_ID
+                "instinct_light" -> "instinct_dark"
+                "valor_light" -> "valor_dark"
+                "mystic_dark" -> "mystic_light"
+                "sylveon_light" -> "sylveon_pink"
+                "duel_scope_midnight",
+                "dialga_shiny_midnight",
+                "umbreon_shiny_oled",
+                "giratina_distortion",
+                "shadow_mewtwo_violet",
+                "rayquaza_emerald_oled",
+                "mimikyu_twilight",
+                "instinct_dark",
+                "valor_dark",
+                "mystic_light",
+                "sylveon_pink" -> clean
+                else -> DEFAULT_APP_THEME_ID
+            }
+        }
         const val PREFS_KEY_LAST_SYNC_TIMESTAMP = "last_sync_timestamp"
         const val PREFS_KEY_BATTLE_LOGS = "gbl_battle_logs_v1"
         const val PREFS_KEY_AI_TRAINING_LOGS = "gbl_ai_training_logs_v1"
@@ -3983,7 +4008,8 @@ class OverlayService : LifecycleService() {
     }
     internal var overlayScalePct = 78
     internal var overlayTransparencyPct = 50
-    internal var appThemeId = "dialga_shiny_midnight"
+    internal var appThemeId = DEFAULT_APP_THEME_ID
+    internal var showThemeWatermark = true
     internal var isLogOnlyStealthMode = false
     internal var isOverlayMinimized = false
     internal var lastMinimizeTimestampMs: Long = 0L
@@ -6634,8 +6660,8 @@ class OverlayService : LifecycleService() {
         autoTeamScanEnabled = prefs.getBoolean(PREFS_KEY_AUTO_TEAM_SCAN_ENABLED, true)
         overlayScalePct = prefs.getInt("overlay_scale_pct", 78).coerceIn(50, 100)
         overlayTransparencyPct = prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50).coerceIn(0, 100)
-        val rawSavedThemeId = prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
-        appThemeId = if (rawSavedThemeId == "amoled_cyan" || rawSavedThemeId == "amoled_matrix") "dialga_shiny_midnight" else rawSavedThemeId
+        appThemeId = normalizeAppThemeIdStatic(prefs.getString(PREFS_KEY_APP_THEME_ID, DEFAULT_APP_THEME_ID))
+        showThemeWatermark = prefs.getBoolean(PREFS_KEY_SHOW_THEME_WATERMARK, true)
         syncTierThresholdsFromPrefs(prefs)
         OverlayService.syncDailyTuningAndQuestionPoolAsync(prefs, gson, forceSync = false)
 
@@ -6662,6 +6688,10 @@ class OverlayService : LifecycleService() {
                 val (ok, _) = OverlayService.syncWithCloudflareVaultBlocking(prefs, gson)
                 if (ok && lastCloudVaultSyncMutatedLocally) {
                     withContext(Dispatchers.Main) {
+                        appThemeId = normalizeAppThemeIdStatic(prefs.getString(PREFS_KEY_APP_THEME_ID, DEFAULT_APP_THEME_ID))
+                        showThemeWatermark = prefs.getBoolean(PREFS_KEY_SHOW_THEME_WATERMARK, true)
+                        applyOverlayTheme(appThemeId)
+                        applyOverlayWatermark(showThemeWatermark)
                         setupDefaultPresetsIfNeeded()
                         loadInitialDataIntoOverlay()
                     }
@@ -6680,15 +6710,18 @@ class OverlayService : LifecycleService() {
         mainToastHandler.post {
             try {
                 val density = resources.displayMetrics.density
-                val themeAccentHex = when (appThemeId) {
+                val themeAccentHex = when (normalizeAppThemeIdStatic(appThemeId)) {
+                    "duel_scope_midnight" -> "#38BDF8"
                     "dialga_shiny_midnight" -> "#2DD4BF"
-                    "instinct_dark" -> "#EAB308"
-                    "instinct_light" -> "#CA8A04"
-                    "mystic_dark" -> "#38BDF8"
+                    "umbreon_shiny_oled" -> "#38BDF8"
+                    "giratina_distortion" -> "#FB7185"
+                    "shadow_mewtwo_violet" -> "#C084FC"
+                    "rayquaza_emerald_oled" -> "#34D399"
+                    "mimikyu_twilight" -> "#FDE047"
+                    "instinct_dark" -> "#FACC15"
+                    "valor_dark" -> "#FB7185"
                     "mystic_light" -> "#0284C7"
-                    "valor_dark" -> "#F87171"
-                    "valor_light" -> "#DC2626"
-                    "sylveon_pink", "sylveon_light" -> "#EC4899"
+                    "sylveon_pink" -> "#BE185D"
                     else -> "#38BDF8"
                 }
                 val borderColor = when {
@@ -7741,12 +7774,23 @@ class OverlayService : LifecycleService() {
     }
 
     internal fun applyOverlayTheme(themeId: String) {
-        val cleaned = themeId.ifBlank { "dialga_shiny_midnight" }
-        appThemeId = if (cleaned == "amoled_cyan" || cleaned == "amoled_matrix") "dialga_shiny_midnight" else cleaned
+        appThemeId = normalizeAppThemeIdStatic(themeId)
         Handler(Looper.getMainLooper()).post {
             try {
                 overlayView?.evaluateJavascript(
                     "if (window.setOverlayTheme) setOverlayTheme('$appThemeId');",
+                    null
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
+    internal fun applyOverlayWatermark(enabled: Boolean) {
+        showThemeWatermark = enabled
+        Handler(Looper.getMainLooper()).post {
+            try {
+                overlayView?.evaluateJavascript(
+                    "if (window.setOverlayWatermark) setOverlayWatermark($enabled);",
                     null
                 )
             } catch (_: Exception) {}
@@ -7863,9 +7907,17 @@ class OverlayService : LifecycleService() {
                 applyOverlayTransparency(startTransparencyPct)
 
                 val startThemeId = intent?.getStringExtra(EXTRA_APP_THEME_ID)
-                    ?: prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight")
-                    ?: "dialga_shiny_midnight"
+                    ?: prefs.getString(PREFS_KEY_APP_THEME_ID, DEFAULT_APP_THEME_ID)
+                    ?: DEFAULT_APP_THEME_ID
+                val startWatermark = if (intent?.hasExtra(EXTRA_SHOW_THEME_WATERMARK) == true) {
+                    intent.getBooleanExtra(EXTRA_SHOW_THEME_WATERMARK, true)
+                } else if (::prefs.isInitialized) {
+                    prefs.getBoolean(PREFS_KEY_SHOW_THEME_WATERMARK, true)
+                } else {
+                    true
+                }
                 applyOverlayTheme(startThemeId)
+                applyOverlayWatermark(startWatermark)
 
                 enable4ChargedMoves = if (intent?.hasExtra(EXTRA_ENABLE_4_CHARGED_MOVES) == true) {
                     intent.getBooleanExtra(EXTRA_ENABLE_4_CHARGED_MOVES, false)
@@ -8136,7 +8188,15 @@ class OverlayService : LifecycleService() {
                 val updatedThemeId = intent?.getStringExtra(EXTRA_APP_THEME_ID)
                     ?: prefs.getString(PREFS_KEY_APP_THEME_ID, appThemeId)
                     ?: appThemeId
+                val updatedWatermark = if (intent?.hasExtra(EXTRA_SHOW_THEME_WATERMARK) == true) {
+                    intent.getBooleanExtra(EXTRA_SHOW_THEME_WATERMARK, showThemeWatermark)
+                } else if (::prefs.isInitialized) {
+                    prefs.getBoolean(PREFS_KEY_SHOW_THEME_WATERMARK, showThemeWatermark)
+                } else {
+                    showThemeWatermark
+                }
                 applyOverlayTheme(updatedThemeId)
+                applyOverlayWatermark(updatedWatermark)
 
                 recalculateAndPushBattleData()
             }
@@ -23825,6 +23885,7 @@ class OverlayService : LifecycleService() {
                 "isReplayMode" to isReplayMode,
                 "overlayTransparencyPct" to overlayTransparencyPct,
                 "appThemeId" to appThemeId,
+                "showOverlayWatermark" to showThemeWatermark,
                 "isLogOnlyStealthMode" to isLogOnlyStealthMode,
                 "isOverlayMinimized" to false,
                 "scanHzMode" to currentScanHzMode,
@@ -25879,6 +25940,7 @@ class OverlayService : LifecycleService() {
             "fastDetectTurnOffset" to fastDetectTurnOffset,
             "overlayTransparencyPct" to overlayTransparencyPct,
             "appThemeId" to appThemeId,
+            "showOverlayWatermark" to showThemeWatermark,
             "aiAdviceHudPosition" to aiAdviceHudPosition,
             "overlayHudMode" to overlayHudMode,
             "compactHudShowMatrix" to compactHudShowMatrix,
@@ -26727,6 +26789,7 @@ class OverlayService : LifecycleService() {
             Handler(Looper.getMainLooper()).post {
                 applyOverlayTransparency(overlayTransparencyPct)
                 applyOverlayTheme(appThemeId)
+                applyOverlayWatermark(showThemeWatermark)
                 overlayView?.evaluateJavascript(
                     buildCompactHudEvalJs(),
                     null

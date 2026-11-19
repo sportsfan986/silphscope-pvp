@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="320dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- Transparent HUD Reticle Frame -->
+    <path
+        android:fillColor="#0D34D399"
+        android:strokeColor="#3834D399"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7834D399"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFACC15"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
+
+    <!-- Shiny Rayquaza Obsidian Delta Emblem -->
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.75" android:scaleY="0.75">
+        <path
+            android:fillColor="#0A1A13"
+            android:strokeColor="#34D399"
+            android:strokeWidth="10"
+            android:strokeLineJoin="round"
+            android:pathData="M120,16 L218,186 L22,186 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FACC15"
+            android:strokeWidth="8"
+            android:strokeLineJoin="round"
+            android:pathData="M120,56 L178,160 L62,160 Z" />
+        <path
+            android:fillColor="#34D399"
+            android:pathData="M98,128 A22,22 0 1,0 142,128 A22,22 0 1,0 98,128 Z" />
+    </group>
+</vector>

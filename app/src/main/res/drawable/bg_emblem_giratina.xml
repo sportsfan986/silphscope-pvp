@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="320dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- Transparent HUD Reticle Frame -->
+    <path
+        android:fillColor="#0DFB7185"
+        android:strokeColor="#38FB7185"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#78FB7185"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFBBF24"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
+
+    <!-- Giratina Origin Distortion Void Crest -->
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.75" android:scaleY="0.75">
+        <path
+            android:fillColor="#160D1C"
+            android:strokeColor="#FB7185"
+            android:strokeWidth="8"
+            android:pathData="M120,18 L188,62 L176,164 L120,222 L64,164 L52,62 Z" />
+        <path
+            android:fillColor="#FB7185"
+            android:pathData="M24,48 L88,92 L72,136 L14,106 Z M216,48 L152,92 L168,136 L226,106 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FBBF24"
+            android:strokeWidth="10"
+            android:pathData="M76,78 Q120,44 164,78 M82,126 Q120,104 158,126 M92,172 Q120,154 148,172" />
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M120,66 L138,94 L120,122 L102,94 Z" />
+    </group>
+</vector>

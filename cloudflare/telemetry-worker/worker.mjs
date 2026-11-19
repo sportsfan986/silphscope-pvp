@@ -4071,6 +4071,407 @@ async function resolveUserPaidTierSummary(kv, screenName) {
   return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
 }
 
+
+const DEFAULT_WORKER_THEME_ID = 'duel_scope_midnight';
+
+const WORKER_THEME_PRESETS = {
+  duel_scope_midnight: {
+    id: 'duel_scope_midnight',
+    name: 'Duel Scope Midnight Black',
+    isLight: false,
+    bg: '#050810',
+    bgMid: '#070D19',
+    card: '#0B1526',
+    cardAlt: '#070D19',
+    cardRgb: '11, 21, 38',
+    border: '#1E293B',
+    accent: '#38BDF8',
+    accentHover: '#7DD3FC',
+    accentRgb: '56, 189, 248',
+    amber: '#FACC15',
+    amberHover: '#FDE047',
+    amberRgb: '250, 204, 21',
+    cyan: '#7DD3FC',
+    rose: '#F43F5E',
+    text: '#F8FAFC',
+    muted: '#94A3B8',
+    textDim: '#94A3B8',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'duel_scope',
+  },
+  dialga_shiny_midnight: {
+    id: 'dialga_shiny_midnight',
+    name: 'Shiny Origin Dialga Midnight',
+    isLight: false,
+    bg: '#050B16',
+    bgMid: '#081120',
+    card: '#0E1B2E',
+    cardAlt: '#081120',
+    cardRgb: '14, 27, 46',
+    border: '#19304E',
+    accent: '#2DD4BF',
+    accentHover: '#5EEAD4',
+    accentRgb: '45, 212, 191',
+    amber: '#FACC15',
+    amberHover: '#FDE047',
+    amberRgb: '250, 204, 21',
+    cyan: '#67E8F9',
+    rose: '#F43F5E',
+    text: '#ECFEFF',
+    muted: '#99F6E4',
+    textDim: '#94A3B8',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'dialga',
+  },
+  umbreon_shiny_oled: {
+    id: 'umbreon_shiny_oled',
+    name: 'Shiny Umbreon OLED',
+    isLight: false,
+    bg: '#000000',
+    bgMid: '#05080F',
+    card: '#0A0F1A',
+    cardAlt: '#05080F',
+    cardRgb: '10, 15, 26',
+    border: '#1B2A41',
+    accent: '#38BDF8',
+    accentHover: '#7DD3FC',
+    accentRgb: '56, 189, 248',
+    amber: '#FB7185',
+    amberHover: '#FDA4AF',
+    amberRgb: '251, 113, 133',
+    cyan: '#93C5FD',
+    rose: '#FB7185',
+    text: '#F1F5F9',
+    muted: '#93C5FD',
+    textDim: '#94A3B8',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'umbreon',
+  },
+  giratina_distortion: {
+    id: 'giratina_distortion',
+    name: 'Giratina Distortion Void',
+    isLight: false,
+    bg: '#09050B',
+    bgMid: '#0F0814',
+    card: '#160D1C',
+    cardAlt: '#0F0814',
+    cardRgb: '22, 13, 28',
+    border: '#3B1D4A',
+    accent: '#FB7185',
+    accentHover: '#FDA4AF',
+    accentRgb: '251, 113, 133',
+    amber: '#FBBF24',
+    amberHover: '#FDE047',
+    amberRgb: '251, 191, 36',
+    cyan: '#D8B4FE',
+    rose: '#FB7185',
+    text: '#FAF5FF',
+    muted: '#D8B4FE',
+    textDim: '#C4B5FD',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'giratina',
+  },
+  shadow_mewtwo_violet: {
+    id: 'shadow_mewtwo_violet',
+    name: 'Shadow Mewtwo Violet',
+    isLight: false,
+    bg: '#080510',
+    bgMid: '#0C0718',
+    card: '#130C24',
+    cardAlt: '#0C0718',
+    cardRgb: '19, 12, 36',
+    border: '#311B5C',
+    accent: '#C084FC',
+    accentHover: '#D8B4FE',
+    accentRgb: '192, 132, 252',
+    amber: '#38BDF8',
+    amberHover: '#7DD3FC',
+    amberRgb: '56, 189, 248',
+    cyan: '#38BDF8',
+    rose: '#FB7185',
+    text: '#F5F3FF',
+    muted: '#C4B5FD',
+    textDim: '#A78BFA',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'mewtwo',
+  },
+  rayquaza_emerald_oled: {
+    id: 'rayquaza_emerald_oled',
+    name: 'Shiny Rayquaza Obsidian',
+    isLight: false,
+    bg: '#030A07',
+    bgMid: '#06110C',
+    card: '#0A1A13',
+    cardAlt: '#06110C',
+    cardRgb: '10, 26, 19',
+    border: '#183D2C',
+    accent: '#34D399',
+    accentHover: '#6EE7B7',
+    accentRgb: '52, 211, 153',
+    amber: '#FACC15',
+    amberHover: '#FDE047',
+    amberRgb: '250, 204, 21',
+    cyan: '#6EE7B7',
+    rose: '#FB7185',
+    text: '#ECFDF5',
+    muted: '#A7F3D0',
+    textDim: '#6EE7B7',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'rayquaza',
+  },
+  mimikyu_twilight: {
+    id: 'mimikyu_twilight',
+    name: 'Mimikyu Twilight',
+    isLight: false,
+    bg: '#0B0908',
+    bgMid: '#110E0C',
+    card: '#181411',
+    cardAlt: '#110E0C',
+    cardRgb: '24, 20, 17',
+    border: '#3B3126',
+    accent: '#FDE047',
+    accentHover: '#FEF08A',
+    accentRgb: '253, 224, 71',
+    amber: '#A78BFA',
+    amberHover: '#C4B5FD',
+    amberRgb: '167, 139, 250',
+    cyan: '#C4B5FD',
+    rose: '#FB7185',
+    text: '#FEFCE8',
+    muted: '#D6CFC4',
+    textDim: '#A8A29E',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'mimikyu',
+  },
+  instinct_dark: {
+    id: 'instinct_dark',
+    name: 'Team Instinct Storm',
+    isLight: false,
+    bg: '#0F0D06',
+    bgMid: '#120F06',
+    card: '#1A1609',
+    cardAlt: '#120F06',
+    cardRgb: '26, 22, 9',
+    border: '#3D3210',
+    accent: '#FACC15',
+    accentHover: '#FDE047',
+    accentRgb: '250, 204, 21',
+    amber: '#38BDF8',
+    amberHover: '#7DD3FC',
+    amberRgb: '56, 189, 248',
+    cyan: '#38BDF8',
+    rose: '#FB7185',
+    text: '#FEFCE8',
+    muted: '#FDE047',
+    textDim: '#D6C374',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'instinct',
+  },
+  valor_dark: {
+    id: 'valor_dark',
+    name: 'Team Valor Inferno',
+    isLight: false,
+    bg: '#160709',
+    bgMid: '#1B080C',
+    card: '#240C10',
+    cardAlt: '#1B080C',
+    cardRgb: '36, 12, 16',
+    border: '#4C111B',
+    accent: '#FB7185',
+    accentHover: '#FDA4AF',
+    accentRgb: '251, 113, 133',
+    amber: '#FBBF24',
+    amberHover: '#FDE047',
+    amberRgb: '251, 191, 36',
+    cyan: '#FBBF24',
+    rose: '#FB7185',
+    text: '#FEF2F2',
+    muted: '#FCA5A5',
+    textDim: '#E2A0A0',
+    ctaText: '#050810',
+    cta2Text: '#050810',
+    wmAlpha: 0.20,
+    emblem: 'valor',
+  },
+  mystic_light: {
+    id: 'mystic_light',
+    name: 'Team Mystic Glacier',
+    isLight: true,
+    bg: '#F0F7FF',
+    bgMid: '#E0F2FE',
+    card: '#FFFFFF',
+    cardAlt: '#E0F2FE',
+    cardRgb: '255, 255, 255',
+    border: '#7DD3FC',
+    accent: '#0369A1',
+    accentHover: '#0284C7',
+    accentRgb: '3, 105, 161',
+    amber: '#6D28D9',
+    amberHover: '#7C3AED',
+    amberRgb: '109, 40, 217',
+    cyan: '#0369A1',
+    rose: '#BE123C',
+    text: '#0F172A',
+    muted: '#334155',
+    textDim: '#475569',
+    ctaText: '#FFFFFF',
+    cta2Text: '#FFFFFF',
+    wmAlpha: 0.16,
+    emblem: 'mystic',
+  },
+  sylveon_pink: {
+    id: 'sylveon_pink',
+    name: 'Sylveon Fairy Ribbon',
+    isLight: true,
+    bg: '#FFF0F6',
+    bgMid: '#FCE7F3',
+    card: '#FFFFFF',
+    cardAlt: '#FCE7F3',
+    cardRgb: '255, 255, 255',
+    border: '#F472B6',
+    accent: '#BE185D',
+    accentHover: '#9D174D',
+    accentRgb: '190, 24, 93',
+    amber: '#0369A1',
+    amberHover: '#0284C7',
+    amberRgb: '3, 105, 161',
+    cyan: '#0369A1',
+    rose: '#BE123C',
+    text: '#3B0724',
+    muted: '#701A45',
+    textDim: '#701A45',
+    ctaText: '#FFFFFF',
+    cta2Text: '#FFFFFF',
+    wmAlpha: 0.16,
+    emblem: 'sylveon',
+  },
+};
+
+function normalizeWorkerThemeId(raw) {
+  const clean = String(raw || '').trim();
+  if (!clean || clean === 'amoled_cyan' || clean === 'amoled_matrix' || clean === 'slate') {
+    return DEFAULT_WORKER_THEME_ID;
+  }
+  if (clean === 'instinct_light') return 'instinct_dark';
+  if (clean === 'valor_light') return 'valor_dark';
+  if (clean === 'mystic_dark') return 'mystic_light';
+  if (clean === 'sylveon_light') return 'sylveon_pink';
+  return WORKER_THEME_PRESETS[clean] ? clean : DEFAULT_WORKER_THEME_ID;
+}
+
+function renderWorkerWatermarkSvg(themeId, className = 'theme-watermark-svg') {
+  const t = WORKER_THEME_PRESETS[normalizeWorkerThemeId(themeId)] || WORKER_THEME_PRESETS[DEFAULT_WORKER_THEME_ID];
+  const reticle =
+    '<circle cx="120" cy="120" r="108" fill="' + t.accent + '" fill-opacity="0.06" stroke="' + t.accent + '" stroke-opacity="0.34" stroke-width="1.4" stroke-dasharray="5 5"/>' +
+    '<circle cx="120" cy="120" r="78" fill="none" stroke="' + t.amber + '" stroke-opacity="0.22" stroke-width="1.1" stroke-dasharray="3 6"/>' +
+    '<path fill="none" stroke="' + t.accent + '" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202"/>' +
+    '<path stroke="' + t.amber + '" stroke-opacity="0.35" stroke-width="1.6" stroke-linecap="round" d="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120"/>';
+
+  if (t.emblem === 'duel_scope') {
+    return '<svg viewBox="0 0 240 240" class="' + className + '">' +
+      '<defs>' +
+      '<linearGradient id="wkWmL" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#2563EB"/></linearGradient>' +
+      '<linearGradient id="wkWmR" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FACC15"/><stop offset="55%" stop-color="#F97316"/><stop offset="100%" stop-color="#EF4444"/></linearGradient>' +
+      '</defs>' +
+      reticle +
+      '<circle cx="120" cy="120" r="93" fill="none" stroke="#38BDF8" stroke-opacity="0.24" stroke-width="1.2" stroke-dasharray="4 4"/>' +
+      '<g transform="translate(120,27)"><circle r="11.5" fill="#050B16" fill-opacity="0.85" stroke="#2DD4BF" stroke-width="1.2"/><polygon points="0,-7 6,0 0,7 -6,0" fill="#2DD4BF" stroke="#FACC15" stroke-width="1.2"/></g>' +
+      '<g transform="translate(174.7,44.8)"><circle r="11.5" fill="#000000" fill-opacity="0.85" stroke="#38BDF8" stroke-width="1.2"/><circle r="5.5" fill="none" stroke="#38BDF8" stroke-width="2.1"/><circle r="1.8" fill="#FB7185"/></g>' +
+      '<g transform="translate(208.4,91.3)"><circle r="11.5" fill="#09050B" fill-opacity="0.85" stroke="#FB7185" stroke-width="1.2"/><path d="M-6,-4 L0,-1 L6,-4 L4,5 L0,2 L-4,5 Z" fill="#FB7185"/><polygon points="0,-6 2.5,-2 0,2 -2.5,-2" fill="#FBBF24"/></g>' +
+      '<g transform="translate(208.4,148.7)"><circle r="11.5" fill="#080510" fill-opacity="0.85" stroke="#C084FC" stroke-width="1.2"/><path d="M-5,4 C-6,-4 0,-7 0,-7 C0,-7 6,-4 5,4" fill="none" stroke="#C084FC" stroke-width="2.2"/><circle cx="0" cy="0" r="2.6" fill="#38BDF8"/></g>' +
+      '<g transform="translate(174.7,195.2)"><circle r="11.5" fill="#030A07" fill-opacity="0.85" stroke="#34D399" stroke-width="1.2"/><polygon points="0,-6.5 6.5,5.5 -6.5,5.5" fill="none" stroke="#34D399" stroke-width="2" stroke-linejoin="round"/><circle cx="0" cy="1.5" r="2" fill="#FACC15"/></g>' +
+      '<g transform="translate(120,213)"><circle r="11.5" fill="#0B0908" fill-opacity="0.85" stroke="#FDE047" stroke-width="1.2"/><path d="M-4,-1 L-6,-7 L-1,-3 L1,-3 L6,-7 L4,-1 L5,6 L-5,6 Z" fill="#FDE047"/><circle cx="-2" cy="1.5" r="1" fill="#0B0908"/><circle cx="2" cy="1.5" r="1" fill="#0B0908"/></g>' +
+      '<g transform="translate(65.3,195.2)"><circle r="11.5" fill="#0F0D06" fill-opacity="0.85" stroke="#FACC15" stroke-width="1.2"/><polygon points="1,-7 -4,1 0,1 -1,7 4,-1 0,-1" fill="#FACC15"/></g>' +
+      '<g transform="translate(31.6,148.7)"><circle r="11.5" fill="#160709" fill-opacity="0.85" stroke="#FB7185" stroke-width="1.2"/><path d="M0,-7 C4,-3 5,2 0,7 C-5,2 -4,-3 0,-7 Z" fill="#FB7185"/><circle cx="0" cy="2" r="2" fill="#FBBF24"/></g>' +
+      '<g transform="translate(31.6,91.3)"><circle r="11.5" fill="#060D1A" fill-opacity="0.85" stroke="#38BDF8" stroke-width="1.2"/><polygon points="0,-6.5 5.5,-3 5.5,3 0,6.5 -5.5,3 -5.5,-3" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="0" cy="0" r="2.2" fill="#6D28D9"/></g>' +
+      '<g transform="translate(65.3,44.8)"><circle r="11.5" fill="#1B0B16" fill-opacity="0.85" stroke="#F472B6" stroke-width="1.2"/><path d="M0,0 L-6,-4 L-6,4 Z M0,0 L6,-4 L6,4 Z" fill="#EC4899"/><circle cx="0" cy="0" r="2.2" fill="#38BDF8"/></g>' +
+      '<g transform="translate(55,55) scale(1.2037)">' +
+      '<circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2"/>' +
+      '<path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#wkWmL)" stroke-width="6.2" stroke-linecap="round"/>' +
+      '<path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#wkWmR)" stroke-width="6.2" stroke-linecap="round"/>' +
+      '<path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/>' +
+      '<circle cx="54" cy="19.5" r="1.6" fill="#FEF08A"/><circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8"/><circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444"/>' +
+      '<rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>' +
+      '<rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>' +
+      '<rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8"/><rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/><rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/>' +
+      '<path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round"/>' +
+      '<circle cx="76.5" cy="80.5" r="6.6" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8"/><circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF"/>' +
+      '</g></svg>';
+  }
+
+  let inner = '';
+  if (t.emblem === 'dialga') {
+    inner = '<path fill="none" stroke="#2DD4BF" stroke-width="8" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z"/>' +
+      '<path fill="none" stroke="#FACC15" stroke-width="10" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z"/>' +
+      '<path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z"/>' +
+      '<path fill="#14B8A6" stroke="#67E8F9" stroke-width="5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z"/>' +
+      '<path fill="#081224" stroke="#FACC15" stroke-width="8" d="M120,84 L152,120 L120,156 L88,120 Z"/>' +
+      '<path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z"/>';
+  } else if (t.emblem === 'umbreon') {
+    inner = '<circle cx="120" cy="120" r="88" fill="#05080F" stroke="#38BDF8" stroke-width="14"/>' +
+      '<circle cx="120" cy="120" r="56" fill="none" stroke="#38BDF8" stroke-width="9" stroke-dasharray="34 15"/>' +
+      '<path fill="#FB7185" d="M74,116 Q96,102 114,118 Q94,132 74,116 Z M166,116 Q144,102 126,118 Q146,132 166,116 Z"/>' +
+      '<circle cx="120" cy="60" r="15" fill="none" stroke="#38BDF8" stroke-width="8"/>';
+  } else if (t.emblem === 'giratina') {
+    inner = '<path fill="#160D1C" stroke="#FB7185" stroke-width="10" d="M120,18 L188,62 L176,164 L120,222 L64,164 L52,62 Z"/>' +
+      '<path fill="#FB7185" d="M24,48 L88,92 L72,136 L14,106 Z M216,48 L152,92 L168,136 L226,106 Z"/>' +
+      '<path fill="none" stroke="#FBBF24" stroke-width="10" d="M76,78 Q120,44 164,78 M82,126 Q120,104 158,126 M92,172 Q120,154 148,172"/>' +
+      '<polygon points="120,66 138,94 120,122 102,94" fill="#FBBF24"/>';
+  } else if (t.emblem === 'mewtwo') {
+    inner = '<path fill="none" stroke="#C084FC" stroke-width="13" d="M46,158 C34,104 68,46 120,34 C172,46 206,104 194,158 C184,196 146,216 120,216 C94,216 56,196 46,158 Z"/>' +
+      '<path fill="#A855F7" d="M120,44 L152,86 L136,154 L120,192 L104,154 L88,86 Z"/>' +
+      '<circle cx="120" cy="112" r="24" fill="#38BDF8" stroke="#F5F3FF" stroke-width="6"/>';
+  } else if (t.emblem === 'rayquaza') {
+    inner = '<polygon points="120,16 218,186 22,186" fill="#0A1A13" stroke="#34D399" stroke-width="12" stroke-linejoin="round"/>' +
+      '<polygon points="120,56 178,160 62,160" fill="none" stroke="#FACC15" stroke-width="9" stroke-linejoin="round"/>' +
+      '<circle cx="120" cy="128" r="20" fill="#34D399"/>';
+  } else if (t.emblem === 'mimikyu') {
+    inner = '<path fill="#181411" stroke="#FDE047" stroke-width="10" d="M84,82 L46,26 L98,58 L142,58 L194,26 L156,82 L174,178 L120,206 L66,178 Z"/>' +
+      '<path fill="none" stroke="#A78BFA" stroke-width="11" stroke-linecap="round" d="M86,112 L104,130 M104,112 L86,130 M136,112 L154,130 M154,112 L136,130"/>' +
+      '<path fill="none" stroke="#FDE047" stroke-width="9" stroke-linecap="round" d="M90,156 L105,146 L120,158 L135,146 L150,156"/>';
+  } else if (t.emblem === 'instinct') {
+    inner = '<path fill="#FACC15" d="M120,8 L224,120 L120,232 L16,120 Z M120,28 L36,120 L120,212 L204,120 Z"/>' +
+      '<path fill="#F59E0B" d="M120,40 L134,76 L172,50 L154,92 L210,70 L170,114 L222,110 L168,140 L200,164 L148,154 L164,194 L128,166 L120,216 L112,166 L76,194 L92,154 L40,164 L72,140 L18,110 L70,114 L30,70 L86,92 L68,50 L106,76 Z"/>';
+  } else if (t.emblem === 'mystic') {
+    inner = '<path fill="#0369A1" d="M120,10 L208,58 L208,162 L120,230 L32,162 L32,58 Z M120,28 L48,68 L48,154 L120,212 L192,154 L192,68 Z"/>' +
+      '<path fill="#38BDF8" d="M120,52 L136,80 L196,60 L166,112 L206,122 L154,144 L170,178 L132,160 L120,224 L108,160 L70,178 L86,144 L34,122 L74,112 L44,60 L104,80 Z"/>';
+  } else if (t.emblem === 'valor') {
+    inner = '<path fill="#FB7185" d="M120,12 C168,46 212,92 212,144 C212,190 172,226 120,232 C68,226 28,190 28,144 C28,92 72,46 120,12 Z M120,34 C82,62 48,100 48,144 C48,180 78,208 120,214 C162,208 192,180 192,144 C192,100 158,62 120,34 Z"/>' +
+      '<path fill="#FBBF24" d="M120,40 L134,68 L158,50 L148,86 L200,64 L172,108 L208,102 L168,136 L194,158 L148,154 L162,190 L128,170 L120,216 L112,170 L78,190 L92,154 L46,158 L72,136 L32,102 L68,108 L40,64 L92,86 L82,50 L106,68 Z"/>';
+  } else if (t.emblem === 'sylveon') {
+    inner = '<path fill="#0369A1" d="M96,126 C74,156 44,178 22,202 L44,210 C68,188 92,164 110,138 Z M144,126 C166,156 196,178 218,202 L196,210 C172,188 148,164 130,138 Z"/>' +
+      '<path fill="#F472B6" d="M112,106 C80,66 34,60 22,90 C10,120 44,154 112,126 Z M128,106 C160,66 206,60 218,90 C230,120 196,154 128,126 Z"/>' +
+      '<circle cx="120" cy="118" r="26" fill="#BE185D" stroke="#FFF0F6" stroke-width="8"/>' +
+      '<path fill="#0369A1" d="M120,22 L128,44 L150,52 L128,60 L120,82 L112,60 L90,52 L112,44 Z"/>';
+  }
+
+  return '<svg viewBox="0 0 240 240" class="' + className + '">' + reticle + '<g transform="translate(30,30) scale(0.75)">' + inner + '</g></svg>';
+}
+
+function buildWorkerWatermarkSvgMap() {
+  const out = {};
+  for (const k of Object.keys(WORKER_THEME_PRESETS)) {
+    out[k] = renderWorkerWatermarkSvg(k, 'theme-watermark-svg');
+  }
+  return out;
+}
+
 function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   const shareId = escapeHtml(shareInfo.shareId || '');
   const hideNamesDefault = Boolean(shareInfo.hideNames);
@@ -4102,7 +4503,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   <meta name="twitter:title" content="${pageTitle}" />
   <meta name="twitter:description" content="${pageDesc}" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#050B16" />
+  <meta id="meta-theme-color" name="theme-color" content="#050810" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
@@ -4113,19 +4514,75 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #050b16;
-      --card: #0e1b2e;
-      --card-alt: #081120;
-      --border: #19304e;
-      --accent: #2dd4bf;
-      --accent-hover: #5eead4;
-      --cyan: #67e8f9;
+      --bg: #050810;
+      --bg-mid: #070d19;
+      --card: #0b1526;
+      --card-alt: #070d19;
+      --card-rgb: 11, 21, 38;
+      --border: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --accent-rgb: 56, 189, 248;
+      --cyan: #7dd3fc;
       --amber: #facc15;
       --amber-hover: #fde047;
+      --amber-rgb: 250, 204, 21;
       --rose: #f43f5e;
-      --text: #ecfeff;
-      --muted: #99f6e4;
+      --text: #f8fafc;
+      --muted: #94a3b8;
       --text-dim: #94a3b8;
+      --cta-text: #050810;
+    }
+    html.watch-light body {
+      background-color: var(--bg);
+      color: var(--text);
+    }
+    html.watch-light .close-theater-x {
+      background: rgba(255, 255, 255, 0.94);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
+    }
+    html.watch-light .close-theater-x:hover {
+      background: var(--accent);
+      color: var(--cta-text);
+    }
+    html.watch-light .tools-drawer,
+    html.watch-light .top-bar,
+    html.watch-light .controls-bar,
+    html.watch-light .compact-customizer-bar,
+    html.watch-light .panel-box {
+      background: rgba(255, 255, 255, 0.94) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    html.watch-light button,
+    html.watch-light .btn-link,
+    html.watch-light .drawer-toggle-btn {
+      background: var(--card-alt) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    html.watch-light button.active {
+      background: var(--accent) !important;
+      color: var(--cta-text) !important;
+      border-color: var(--accent) !important;
+    }
+    html.watch-light .event-chip {
+      background: var(--card-alt) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    html.watch-light .event-chip.chip-charge { border-color: var(--accent); color: var(--accent); }
+    html.watch-light .event-chip.chip-swap { border-color: #0369a1; color: #0369a1; }
+    html.watch-light .event-chip.chip-shield { border-color: #6d28d9; color: #6d28d9; }
+    html.watch-light .event-chip.chip-faint { border-color: #be123c; color: #be123c; }
+    html.watch-light .event-chip.chip-anomaly { border-color: #b45309; color: #b45309; }
+    html.watch-light .event-chip:hover,
+    html.watch-light .event-chip.active-chip {
+      background: var(--accent) !important;
+      color: var(--cta-text) !important;
+      border-color: var(--accent) !important;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -4153,11 +4610,11 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       width: 36px;
       height: 36px;
       border-radius: 12px;
-      background: rgba(8, 17, 32, 0.9);
+      background: rgba(var(--card-rgb), 0.9);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      border: 1.5px solid #2dd4bf;
-      color: #99f6e4;
+      border: 1.5px solid var(--accent);
+      color: var(--text);
       font-size: 15px;
       font-weight: 900;
       display: ${isEmbed ? 'none' : 'inline-flex'};
@@ -4165,13 +4622,13 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       justify-content: center;
       cursor: pointer;
       text-decoration: none;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(45, 212, 191, 0.35);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(var(--accent-rgb), 0.35);
       transition: all 0.15s ease;
     }
     .close-theater-x:hover {
-      background: #0e1b2e;
-      color: #ffffff;
-      border-color: #5eead4;
+      background: var(--card);
+      color: var(--accent-hover);
+      border-color: var(--accent-hover);
       transform: scale(1.04);
     }
     button, .btn-link {
@@ -4351,9 +4808,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       padding: 4px 7px;
       font-size: 10.5px;
       font-weight: 800;
-      border-color: rgba(45, 212, 191, 0.5);
-      color: #99f6e4;
-      background: rgba(8, 17, 32, 0.95);
+      border-color: rgba(var(--accent-rgb), 0.5);
+      color: var(--muted);
+      background: var(--card-alt);
     }
     @media (max-width: 390px) {
       .playback-btns { gap: 2px; }
@@ -4366,13 +4823,13 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       align-items: center;
       gap: 4px;
       padding: 5px 6px;
-      background: rgba(8, 17, 32, 0.92);
-      border: 1px solid rgba(45, 212, 191, 0.36);
+      background: var(--card-alt);
+      border: 1px solid rgba(var(--accent-rgb), 0.36);
       border-radius: 7px;
       max-height: 78px;
       overflow-y: auto;
       scrollbar-width: thin;
-      scrollbar-color: #2dd4bf rgba(8, 17, 32, 0.6);
+      scrollbar-color: var(--accent) var(--card-alt);
     }
     .compact-customizer-bar button {
       font-size: 9.5px;
@@ -4391,14 +4848,14 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       flex-direction: column;
       gap: 6px;
       padding-top: 5px;
-      border-top: 1px solid rgba(25, 48, 78, 0.9);
+      border-top: 1px solid var(--border);
       max-height: 18dvh;
       min-height: 11dvh;
       overflow-y: auto;
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: thin;
-      scrollbar-color: #2dd4bf rgba(8, 17, 32, 0.6);
+      scrollbar-color: var(--accent) var(--card-alt);
     }
     .tools-drawer.open {
       display: flex;
@@ -4420,7 +4877,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       gap: 4px;
       width: 100%;
       padding-top: 4px;
-      border-top: 1px dashed rgba(25, 48, 78, 0.85);
+      border-top: 1px dashed var(--border);
     }
     .chips-header {
       display: flex;
@@ -4430,7 +4887,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       font-weight: 800;
       letter-spacing: 0.03em;
       text-transform: uppercase;
-      color: #5eead4;
+      color: var(--accent);
     }
     .chips-row {
       display: flex;
@@ -4446,9 +4903,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       font-weight: 700;
       padding: 2.5px 7px;
       border-radius: 999px;
-      background: rgba(8, 17, 32, 0.94);
+      background: var(--card-alt);
       border: 1px solid var(--border);
-      color: #cbd5e1;
+      color: var(--text);
       cursor: pointer;
       max-width: 100%;
       overflow: hidden;
@@ -4456,16 +4913,16 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       white-space: nowrap;
       transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
-    .event-chip.chip-charge { border-color: rgba(45, 212, 191, 0.42); color: #99f6e4; }
+    .event-chip.chip-charge { border-color: rgba(var(--accent-rgb), 0.42); color: var(--accent-hover); }
     .event-chip.chip-swap { border-color: rgba(56, 189, 248, 0.42); color: #bae6fd; }
     .event-chip.chip-shield { border-color: rgba(168, 85, 247, 0.45); color: #e9d5ff; }
     .event-chip.chip-faint { border-color: rgba(244, 63, 94, 0.45); color: #fecdd3; }
-    .event-chip.chip-anomaly { border-color: rgba(250, 204, 21, 0.5); color: #fef08a; }
+    .event-chip.chip-anomaly { border-color: rgba(var(--amber-rgb), 0.5); color: var(--amber); }
     .event-chip:hover, .event-chip.active-chip {
       border-color: var(--accent);
-      color: #ffffff;
-      background: rgba(45, 212, 191, 0.28);
-      box-shadow: 0 0 8px rgba(45, 212, 191, 0.28);
+      color: var(--text);
+      background: rgba(var(--accent-rgb), 0.28);
+      box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.28);
     }
     /* Desktop / Wide Landscape Aspect Ratios: Video stays ~98dvh tall on the left,
        and Playback + Tools + Multi-line Timeline dock into a spacious right sidebar! */
@@ -4532,10 +4989,10 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   <span id="hdr-trainer" style="display:none">@${trainerDisplay}</span>
 
   <main>
-    <div id="diag-issue-banner" style="flex-shrink:0;width:100%;max-width:960px;background:rgba(250,204,21,0.12);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:4px 10px;font-size:11px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px">
+    <div id="diag-issue-banner" style="flex-shrink:0;width:100%;max-width:960px;background:rgba(var(--amber-rgb),0.12);border:1px solid rgba(var(--amber-rgb),0.45);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--text);display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px">
       <div id="diag-issue-text">🚩 <strong>Issue:</strong> ${escapeHtml(shareInfo.userIssueNote || 'Flagged for diagnostic review')}</div>
       <div style="display:flex;align-items:center;gap:5px">
-        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="padding:2px 7px;font-size:10.5px;border-color:#facc15;color:#fde047">✏️ Edit</button>
+        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="padding:2px 7px;font-size:10.5px;border-color:var(--amber);color:var(--amber)">✏️ Edit</button>
         <button id="btn-unflag-issue" onclick="unflagCurrentIssue()" style="padding:2px 7px;font-size:10.5px">↩️ Unflag</button>
       </div>
     </div>
@@ -4552,8 +5009,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
 
       <div class="controls-bar">
         <div style="display:flex;align-items:center;gap:6px;width:100%">
-          <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;height:16px;accent-color:#2dd4bf;cursor:pointer;margin:0" oninput="scrubVideo(this.value)" />
-          <span id="time-readout" style="font-size:10.5px;font-family:monospace;font-weight:700;color:#99f6e4;min-width:74px;text-align:right">0.0s / 0.0s</span>
+          <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;height:16px;accent-color:var(--accent);cursor:pointer;margin:0" oninput="scrubVideo(this.value)" />
+          <span id="time-readout" style="font-size:10.5px;font-family:monospace;font-weight:700;color:var(--muted);min-width:74px;text-align:right">0.0s / 0.0s</span>
         </div>
         <div class="control-row">
           <div class="playback-btns">
@@ -4567,7 +5024,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           <button onclick="toggleToolsDrawer()" id="btn-tools-toggle" class="drawer-toggle-btn" title="Expand Tools & Key Events Timeline">⚙️ Tools/Timeline ▾</button>
         </div>
         <div id="compact-customizer-bar" class="compact-customizer-bar">
-          <span id="cmp-summary-label" style="font-size:9.5px;font-weight:800;color:#2dd4bf;margin-right:2px">🧩 Compact: Moves (Def)</span>
+          <span id="cmp-summary-label" style="font-size:9.5px;font-weight:800;color:var(--accent);margin-right:2px">🧩 Compact: Moves (Def)</span>
           <button type="button" id="cmp-pre-moves-def" onclick="applyReplayCompactPreset('moves_default')" title="Header (Shields/E) + Opp Moves + My Moves + Pacing + Shield Call">Moves (Def)</button>
           <button type="button" id="cmp-pre-minimal" onclick="applyReplayCompactPreset('minimal')" title="Header + 2-Line AI Coach + Pacing + Shield Call">Minimal</button>
           <button type="button" id="cmp-pre-moves" onclick="applyReplayCompactPreset('coach_moves')" title="Header + Opp Moves + 2-Line AI Coach + Pacing + Shield Call">Coach+Opp</button>
@@ -4592,9 +5049,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
             <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
             <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${(shareInfo.userTier || 'pro') !== 'free' ? 'active' : ''}">${(shareInfo.userTier || 'pro') !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield'}</button>
             <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
-            <div style="display:inline-flex;align-items:center;gap:4px;background:rgba(8,17,32,0.85);border:1px solid var(--border);border-radius:7px;padding:2px 6px">
+            <div style="display:inline-flex;align-items:center;gap:4px;background:var(--card-alt);border:1px solid var(--border);border-radius:7px;padding:2px 6px">
               <span style="font-size:9.5px;color:var(--muted);font-weight:700">HUD</span>
-              <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:52px;height:12px;accent-color:#2dd4bf;margin:0" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
+              <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:52px;height:12px;accent-color:var(--accent);margin:0" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
             </div>
             <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Hidden' : 'Names'}</button>
             <button onclick="shareCurrentReplayMoment(this)" id="btn-share-moment" title="Share Replay Link with Active HUD Config">📤 Share</button>
@@ -4605,7 +5062,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           <div class="timeline-section" id="timeline-section">
             <div class="chips-header">
               <span id="chips-count-label">⏭ Key Events Timeline</span>
-              <span style="font-size:9px;color:#94a3b8;text-transform:none;font-weight:600">Tap event to jump</span>
+              <span style="font-size:9px;color:var(--text-dim);text-transform:none;font-weight:600">Tap event to jump</span>
             </div>
             <div class="chips-row" id="event-chips"></div>
           </div>
@@ -4684,6 +5141,83 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     let selectedSpeed = 1;
     let mp4TimeCompressionRatio = 1.0;
     const initParams = new URLSearchParams(window.location.search);
+    const WATCH_THEME_PRESETS = ${safeJsonForScript(WORKER_THEME_PRESETS)};
+    const DEFAULT_WATCH_THEME_ID = 'duel_scope_midnight';
+    function readWatchCookie(name) {
+      try {
+        const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+        return m && m[1] ? decodeURIComponent(m[1]).trim() : '';
+      } catch (_) { return ''; }
+    }
+    function normalizeWatchThemeId(raw) {
+      const c = String(raw || '').trim();
+      if (!c || c === 'amoled_cyan' || c === 'amoled_matrix' || c === 'slate') return DEFAULT_WATCH_THEME_ID;
+      if (c === 'instinct_light') return 'instinct_dark';
+      if (c === 'valor_light') return 'valor_dark';
+      if (c === 'mystic_dark') return 'mystic_light';
+      if (c === 'sylveon_light') return 'sylveon_pink';
+      return WATCH_THEME_PRESETS[c] ? c : DEFAULT_WATCH_THEME_ID;
+    }
+    function resolveInitialWatchThemeState() {
+      const qpTheme = (initParams.get('theme') || '').trim();
+      const qpWm = initParams.get('wm');
+      const hasSignedSession = Boolean(
+        readWatchCookie('sspvp_vault_session') ||
+        localStorage.getItem('sspvp_vault_session') ||
+        readWatchCookie('sspvp_vault_user')
+      );
+      let tid = DEFAULT_WATCH_THEME_ID;
+      if (qpTheme) {
+        tid = normalizeWatchThemeId(qpTheme);
+      } else if (hasSignedSession) {
+        const ckT = readWatchCookie('sspvp_theme') || localStorage.getItem('gbl_app_theme_id') || '';
+        if (ckT) tid = normalizeWatchThemeId(ckT);
+      }
+      let wmOn = true;
+      if (qpWm !== null && qpWm !== '') {
+        wmOn = qpWm !== '0' && qpWm.toLowerCase() !== 'false';
+      } else if (hasSignedSession) {
+        const ckW = readWatchCookie('sspvp_watermark') || localStorage.getItem('gbl_show_theme_watermark') || '';
+        if (ckW === '0' || ckW.toLowerCase() === 'false') wmOn = false;
+      }
+      return { themeId: tid, showWatermark: wmOn };
+    }
+    const initialWatchThemeState = resolveInitialWatchThemeState();
+    let activeWatchThemeId = initialWatchThemeState.themeId;
+    let watchShowWatermark = initialWatchThemeState.showWatermark;
+    function applyWatchTheme(tid) {
+      const norm = normalizeWatchThemeId(tid);
+      const t = WATCH_THEME_PRESETS[norm] || WATCH_THEME_PRESETS[DEFAULT_WATCH_THEME_ID];
+      activeWatchThemeId = t.id;
+      const root = document.documentElement;
+      root.classList.toggle('watch-light', Boolean(t.isLight));
+      root.style.setProperty('--bg', t.bg);
+      root.style.setProperty('--bg-mid', t.bgMid || t.bg);
+      root.style.setProperty('--card', t.card);
+      root.style.setProperty('--card-alt', t.cardAlt);
+      root.style.setProperty('--card-rgb', t.cardRgb);
+      root.style.setProperty('--border', t.border);
+      root.style.setProperty('--accent', t.accent);
+      root.style.setProperty('--accent-hover', t.accentHover);
+      root.style.setProperty('--accent-rgb', t.accentRgb);
+      root.style.setProperty('--amber', t.amber);
+      root.style.setProperty('--amber-hover', t.amberHover);
+      root.style.setProperty('--amber-rgb', t.amberRgb);
+      root.style.setProperty('--cyan', t.cyan);
+      root.style.setProperty('--rose', t.rose);
+      root.style.setProperty('--text', t.text);
+      root.style.setProperty('--muted', t.muted);
+      root.style.setProperty('--text-dim', t.textDim);
+      root.style.setProperty('--cta-text', t.ctaText);
+      const mc = document.getElementById('meta-theme-color');
+      if (mc) mc.setAttribute('content', t.bg);
+      try {
+        const win = document.getElementById('hud-iframe')?.contentWindow;
+        if (win && win.setOverlayTheme) win.setOverlayTheme(activeWatchThemeId);
+        if (win && win.setOverlayWatermark) win.setOverlayWatermark(watchShowWatermark);
+      } catch (_) {}
+    }
+    applyWatchTheme(activeWatchThemeId);
     const IS_CLEAN_STAGE = initParams.get('cleanStage') === '1';
     if (IS_CLEAN_STAGE) document.documentElement.classList.add('clean-stage');
     let currentHudTransparencyPct = 50;
@@ -4828,6 +5362,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       try {
         const win = hudIframe.contentWindow;
         if (!win) return;
+        if (win.setOverlayTheme) win.setOverlayTheme(activeWatchThemeId);
+        if (win.setOverlayWatermark) win.setOverlayWatermark(watchShowWatermark);
         win.AndroidOverlay = {
           updateContentHeight(h) {
             const px = Math.max(48, Math.ceil(Number(h) || 340));
@@ -5730,7 +6266,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           isBattleActive: true,
           isReplayMode: true,
           overlayTransparencyPct: 12,
-          appThemeId: 'dialga_shiny_midnight',
+          appThemeId: activeWatchThemeId,
+          showOverlayWatermark: watchShowWatermark,
           aiAdviceHudPosition: aiAdvicePos,
           isOverlayMinimized: false,
           scanHzMode: 10,
@@ -6476,7 +7013,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         enable4ChargedMoves: false,
         fastDetectTurnOffset: 0,
         overlayTransparencyPct: currentHudTransparencyPct,
-        appThemeId: 'dialga_shiny_midnight',
+        appThemeId: activeWatchThemeId,
+        showOverlayWatermark: watchShowWatermark,
         aiAdviceHudPosition: aiAdvicePos,
         isOverlayMinimized: false,
         maxHorizonTurns,
@@ -7167,18 +7705,21 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
               const sd = payload && payload.shieldDecisionOverlay;
               const hasSd = Boolean(showShieldHud && sd && sd.visible);
               const y = hudTop ? 36 : (hasSd ? 950 : 1020);
-              ctx.fillStyle = 'rgba(5, 11, 22, 0.92)';
+              const expTheme = WATCH_THEME_PRESETS[activeWatchThemeId] || WATCH_THEME_PRESETS[DEFAULT_WATCH_THEME_ID];
+              const expHudAccent = expTheme.isLight ? (expTheme.id === 'sylveon_pink' ? '#f472b6' : '#38bdf8') : expTheme.accent;
+              const expHudAccent2 = expTheme.isLight ? (expTheme.id === 'sylveon_pink' ? '#38bdf8' : '#a78bfa') : expTheme.amber;
+              ctx.fillStyle = expTheme.id === 'sylveon_pink' ? 'rgba(27, 11, 22, 0.92)' : (expTheme.id === 'mystic_light' ? 'rgba(8, 18, 38, 0.92)' : 'rgba(' + expTheme.cardRgb + ', 0.92)');
               ctx.fillRect(12, y, 520, 110);
-              ctx.strokeStyle = '#2dd4bf';
+              ctx.strokeStyle = expHudAccent;
               ctx.lineWidth = 2;
               ctx.strokeRect(12, y, 520, 110);
-              ctx.fillStyle = '#ecfeff';
+              ctx.fillStyle = '#f8fafc';
               ctx.font = 'bold 16px sans-serif';
               ctx.fillText((f.userActiveSpecies || 'User') + ' ' + (f.userHpPct ?? '--') + '% (' + (f.userEnergy ?? 0) + 'E)  vs  ' + (f.oppActiveSpecies || 'Opp') + ' ' + (f.oppHpPct ?? '--') + '% (' + (f.oppEnergy ?? 0) + 'E)', 24, y + 32);
-              ctx.fillStyle = '#2dd4bf';
+              ctx.fillStyle = expHudAccent;
               ctx.font = 'bold 14px sans-serif';
               ctx.fillText(String(f.recommendedAction || f.moveBannerText || 'SilphScope PvP').slice(0, 62), 24, y + 66);
-              ctx.fillStyle = '#facc15';
+              ctx.fillStyle = expHudAccent2;
               ctx.font = '12px monospace';
               ctx.fillText('F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's • ✨ SilphScope Replay', 24, y + 94);
               if (hasSd) {
@@ -7219,15 +7760,16 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
 }
 
 function renderVaultDashboardPage(origin, clientIngestKey) {
+  const vaultWatermarkMap = buildWorkerWatermarkSvgMap();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SilphScope DVR • Shiny Origin Dialga Cloud Replay Vault</title>
+  <title>SilphScope DVR • Cloud Replay Vault</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#050B16" />
+  <meta id="meta-theme-color" name="theme-color" content="#050810" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
@@ -7245,24 +7787,31 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #050b16;
-      --card: #0e1b2e;
-      --card-alt: #081120;
-      --border: #19304e;
-      --accent: #2dd4bf;
-      --accent-hover: #5eead4;
-      --cyan: #67e8f9;
+      --bg: #050810;
+      --bg-mid: #070d19;
+      --card: #0b1526;
+      --card-alt: #070d19;
+      --card-rgb: 11, 21, 38;
+      --border: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --accent-rgb: 56, 189, 248;
+      --cyan: #7dd3fc;
       --amber: #facc15;
       --amber-hover: #fde047;
+      --amber-rgb: 250, 204, 21;
       --rose: #f43f5e;
-      --text: #ecfeff;
-      --muted: #99f6e4;
+      --text: #f8fafc;
+      --muted: #94a3b8;
       --text-dim: #94a3b8;
+      --cta-text: #050810;
+      --cta2-text: #050810;
+      --wm-opacity: 0.20;
     }
     * { box-sizing: border-box; }
     ::selection {
-      background: rgba(45, 212, 191, 0.3);
-      color: #ecfeff;
+      background: rgba(var(--accent-rgb), 0.3);
+      color: var(--text);
     }
     body {
       margin: 0;
@@ -7271,9 +7820,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       -moz-osx-font-smoothing: grayscale;
       background-color: var(--bg);
       background-image:
-        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%),
-        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%),
-        linear-gradient(180deg, #050B16 0%, #081120 55%, #050B16 100%);
+        radial-gradient(circle at 18% 12%, rgba(var(--accent-rgb), 0.11) 0%, transparent 42%),
+        radial-gradient(circle at 82% 18%, rgba(var(--amber-rgb), 0.08) 0%, transparent 38%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-mid) 55%, var(--bg) 100%);
       background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
@@ -7288,21 +7837,25 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       justify-content: center;
       z-index: 0;
       overflow: hidden;
-      opacity: 0.14;
+      opacity: var(--wm-opacity);
+      transition: opacity 0.25s ease;
     }
-    .dialga-watermark-svg {
+    .fixed-watermark-bg.hidden {
+      display: none !important;
+    }
+    .theme-watermark-svg, .dialga-watermark-svg {
       width: 580px;
       height: 580px;
       max-width: 90vw;
       max-height: 90vh;
     }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #050b16; }
-    ::-webkit-scrollbar-thumb { background: #19304e; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #2dd4bf; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
     header {
       padding: 12px 20px;
-      background: rgba(5, 11, 22, 0.88);
+      background: rgba(var(--card-rgb), 0.9);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
@@ -7332,11 +7885,62 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #0e1b2e;
-      border: 1.5px solid #2dd4bf;
-      box-shadow: 0 0 18px rgba(45, 212, 191, 0.28);
+      background: var(--card);
+      border: 1.5px solid var(--accent);
+      box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.28);
       flex-shrink: 0;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    html.vault-light .replay-card,
+    html.vault-light .stats-bar,
+    html.vault-light .auth-panel,
+    html.vault-light .top-controls {
+      background: rgba(255, 255, 255, 0.94) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08) !important;
+    }
+    html.vault-light input,
+    html.vault-light select,
+    html.vault-light button {
+      background: var(--card-alt);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    html.vault-light .pill-win {
+      background: rgba(var(--accent-rgb), 0.14);
+      color: var(--accent);
+      border-color: rgba(var(--accent-rgb), 0.45);
+    }
+    html.vault-light .pill-loss {
+      background: #ffe4e6;
+      color: #be123c;
+      border-color: #fda4af;
+    }
+    html.vault-light .pill-star {
+      background: rgba(var(--amber-rgb), 0.14);
+      color: var(--amber);
+      border-color: rgba(var(--amber-rgb), 0.45);
+    }
+    html.vault-light .btn-cta-download {
+      background: var(--accent) !important;
+      color: var(--cta-text) !important;
+      border-color: var(--accent) !important;
+    }
+    button.primary, .btn-cta-download {
+      background: var(--accent) !important;
+      color: var(--cta-text) !important;
+      border-color: var(--accent) !important;
+    }
+    html.vault-light .vault-btn-danger {
+      background: #ffe4e6 !important;
+      color: #be123c !important;
+      border-color: #fda4af !important;
+    }
+    html.vault-light .vault-btn-flag {
+      background: #fff1f2 !important;
+      color: #be123c !important;
+      border-color: #fda4af !important;
     }
     .dialga-crest-badge:hover {
       transform: scale(1.05);
@@ -7349,7 +7953,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       padding: 4px;
       border-radius: 12px;
       border: 1px solid var(--border);
-      background: #081120;
+      background: var(--card-alt);
       font-size: 12px;
       font-weight: 800;
       flex-wrap: wrap;
@@ -7367,15 +7971,15 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
     .nav-pill.active-pill {
       background: var(--accent);
-      color: #042f2e;
+      color: var(--cta-text);
       font-weight: 900;
     }
     .nav-pill-gold {
-      color: #fde047;
-      border: 1px solid rgba(250, 204, 21, 0.3);
+      color: var(--amber);
+      border: 1px solid rgba(var(--amber-rgb), 0.3);
     }
     .nav-pill-gold:hover {
-      background: rgba(250, 204, 21, 0.15);
+      background: rgba(var(--amber-rgb), 0.15);
       color: #fff;
     }
     .btn-cta {
@@ -7397,7 +8001,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
     .btn-cta-download {
       background: var(--accent);
-      color: #042f2e;
+      color: var(--cta-text);
       border: 1.5px solid var(--accent);
       box-shadow: 0 0 16px rgba(45, 212, 191, 0.35);
       font-weight: 900;
@@ -7408,15 +8012,15 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       box-shadow: 0 0 20px rgba(45, 212, 191, 0.5);
     }
     .btn-cta-upgrade {
-      background: rgba(250, 204, 21, 0.16);
+      background: rgba(var(--amber-rgb), 0.16);
       border: 1.5px solid var(--amber);
       color: var(--amber-hover);
       font-weight: 900;
     }
     .btn-cta-upgrade:hover {
-      background: rgba(250, 204, 21, 0.26);
+      background: rgba(var(--amber-rgb), 0.26);
       color: #fff;
-      box-shadow: 0 0 14px rgba(250, 204, 21, 0.3);
+      box-shadow: 0 0 14px rgba(var(--amber-rgb), 0.3);
     }
     .container {
       max-width: 1280px;
@@ -7442,7 +8046,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
     input, select {
-      background: #081120;
+      background: var(--card-alt);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -7460,7 +8064,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.25);
     }
     button, .btn-link {
-      background: #081120;
+      background: var(--card-alt);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -7484,7 +8088,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
     button.primary, .btn-link.primary {
       background: var(--accent);
-      color: #042f2e;
+      color: var(--cta-text);
       border-color: var(--accent);
       font-weight: 800;
       box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
@@ -7493,11 +8097,11 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       background: var(--accent-hover);
       border-color: var(--accent-hover);
       box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
-      color: #042f2e;
+      color: var(--cta-text);
     }
     button.tab-btn {
-      background: #081120;
-      color: #94a3b8;
+      background: var(--card-alt);
+      color: var(--text-dim);
       border: 1px solid var(--border);
       padding: 8px 14px;
       font-size: 12px;
@@ -7528,7 +8132,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       gap: 16px;
     }
     .replay-card {
-      background: rgba(14, 27, 46, 0.85);
+      background: rgba(var(--card-rgb), 0.88);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--border);
@@ -7542,12 +8146,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
     .replay-card:hover {
       border-color: var(--accent);
-      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55), 0 0 16px rgba(45, 212, 191, 0.2);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55), 0 0 16px rgba(var(--accent-rgb), 0.2);
       transform: translateY(-2px);
     }
     .replay-card.pinned {
-      border-color: rgba(250, 204, 21, 0.7);
-      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), 0 0 18px rgba(250, 204, 21, 0.22);
+      border-color: rgba(var(--amber-rgb), 0.7);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), 0 0 18px rgba(var(--amber-rgb), 0.22);
     }
     .pill {
       padding: 3px 10px;
@@ -7556,9 +8160,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       font-weight: 800;
     }
     .pill-win {
-      background: rgba(45, 212, 191, 0.18);
-      color: #2dd4bf;
-      border: 1px solid rgba(45, 212, 191, 0.4);
+      background: rgba(var(--accent-rgb), 0.18);
+      color: var(--accent);
+      border: 1px solid rgba(var(--accent-rgb), 0.4);
     }
     .pill-loss {
       background: rgba(244, 63, 94, 0.18);
@@ -7566,25 +8170,16 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       border: 1px solid rgba(244, 63, 94, 0.4);
     }
     .pill-star {
-      background: rgba(250, 204, 21, 0.16);
-      color: #facc15;
-      border: 1px solid rgba(250, 204, 21, 0.45);
-      box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
+      background: rgba(var(--amber-rgb), 0.16);
+      color: var(--amber);
+      border: 1px solid rgba(var(--amber-rgb), 0.45);
+      box-shadow: 0 0 10px rgba(var(--amber-rgb), 0.2);
     }
   </style>
 </head>
 <body>
-  <!-- Fixed Centered Shiny Origin Dialga Vector Watermark -->
-  <div class="fixed-watermark-bg" aria-hidden="true">
-    <svg viewBox="0 0 240 240" class="dialga-watermark-svg">
-      <path fill="none" stroke="#2DD4BF" stroke-width="3" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
-      <path fill="none" stroke="#FACC15" stroke-width="4" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
-      <path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
-      <path fill="#14B8A6" stroke="#67E8F9" stroke-width="2.5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
-      <path fill="#081224" stroke="#FACC15" stroke-width="3" d="M120,84 L152,120 L120,156 L88,120 Z" />
-      <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
-    </svg>
-  </div>
+  <!-- Fixed Centered Transparent HUD Theme Watermark -->
+  <div id="vault-watermark-bg" class="fixed-watermark-bg" aria-hidden="true">${renderWorkerWatermarkSvg(DEFAULT_WORKER_THEME_ID)}</div>
   <header>
     <div class="header-inner">
       <div class="brand">
@@ -7594,19 +8189,19 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:#fff">SilphScope <span style="color:#2dd4bf">DVR</span></span>
-              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.30</span>
+              <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:var(--text)">SilphScope <span style="color:var(--accent)">DVR</span></span>
+              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:var(--amber);border:1px solid rgba(var(--amber-rgb),0.45);background:rgba(var(--amber-rgb),0.12);padding:2px 8px;border-radius:999px">v7.30</span>
             </div>
-            <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Cloud Replay Vault</p>
+            <p style="margin:2px 0 0;font-size:11px;color:var(--muted);font-weight:500">Cloud Replay Vault</p>
           </div>
         </a>
       </div>
 
       <!-- DVR Top Banner: ONLY links to Main Site, Download APK, Live View -->
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <a href="https://silphscopepvp.com/?view=home" class="btn-cta" style="background:#081120;border:1px solid #19304e;color:#99f6e4">🏠 Main Site</a>
+        <a href="https://silphscopepvp.com/?view=home" class="btn-cta" style="background:var(--card-alt);border:1px solid var(--border);color:var(--text)">🏠 Main Site</a>
         <a href="https://dl.silphscopepvp.com" class="btn-cta btn-cta-download">📱 Download APK</a>
-        <a href="https://silphscopepvp.com/?view=live" class="btn-cta" style="background:#081120;border:1px solid rgba(6,182,212,0.4);color:#67e8f9">📡 Live View</a>
+        <a href="https://silphscopepvp.com/?view=live" class="btn-cta" style="background:var(--card-alt);border:1px solid var(--border);color:var(--accent)">📡 Live View</a>
       </div>
     </div>
   </header>
@@ -7615,14 +8210,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     <!-- Top Bar: Public Trainer Lookup + Owner Login Toggle -->
     <div class="login-card" style="justify-content:space-between;padding:12px 16px;gap:10px">
       <div style="display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center">
-        <span style="font-size:13px;font-weight:800;color:#ecfeff">👤 Trainer:</span>
+        <span style="font-size:13px;font-weight:800;color:var(--text)">👤 Trainer:</span>
         <input id="inp-user" type="text" placeholder="Enter Trainer ID (or Featured)" style="max-width:240px;padding:8px 12px;font-size:12px" onkeydown="if(event.key==='Enter')loadVault()" />
         <button class="primary" onclick="loadVault()" style="padding:8px 14px;font-size:12px">👁️ View</button>
-        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(250,204,21,0.14);border-color:rgba(250,204,21,0.45);color:#fde047;padding:8px 12px;font-size:12px">🌟 @Featured</button>
+        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(var(--amber-rgb),0.14);border-color:rgba(var(--amber-rgb),0.45);color:var(--amber);padding:8px 12px;font-size:12px">🌟 @Featured</button>
         <button onclick="copyVaultShareUrl()" title="Copy link to this trainer's DVR page" style="padding:8px 12px;font-size:12px">🔗 Share</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center" id="auth-header-controls">
-        <button id="btn-toggle-login" onclick="toggleLoginPanel()" style="border-color:#2dd4bf;color:#2dd4bf">🔐 Owner Login</button>
+        <button id="btn-toggle-login" onclick="toggleLoginPanel()" style="border-color:var(--accent);color:var(--accent)">🔐 Owner Login</button>
         <button id="btn-logout" onclick="logoutVault()" style="display:none;border-color:#f43f5e;color:#fb7185">🚪 Log Out</button>
       </div>
     </div>
@@ -7634,7 +8229,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           <button class="tab-btn active" id="tab-token" onclick="setAuthTab('token')">🔑 Username + Token</button>
           <button class="tab-btn" id="tab-password" onclick="setAuthTab('password')">🔒 Username + Password</button>
         </div>
-        <span style="font-size:11.5px;color:#99f6e4">Log in as the vault owner to view unstarred rolling battles, ⭐ Star/Pin battles, or change visibility.</span>
+        <span style="font-size:11.5px;color:var(--muted)">Log in as the vault owner to view unstarred rolling battles, ⭐ Star/Pin battles, or change visibility.</span>
       </div>
 
       <!-- Tab 1: Username + Token / Unlock Key -->
@@ -7648,13 +8243,13 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <div id="pane-password" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
         <input id="inp-password" type="password" placeholder="Vault Password for this Trainer ID" onkeydown="if(event.key==='Enter')loginWithPassword()" />
         <button class="primary" onclick="loginWithPassword()">🔓 Sign In with Password</button>
-        <span style="font-size:11px;color:#94a3b8;width:100%">Tip: First log in with your Unlock Key (or use the Android App Settings) to set your password.</span>
+        <span style="font-size:11px;color:var(--text-dim);width:100%">Tip: First log in with your Unlock Key (or use the Android App Settings) to set your password.</span>
       </div>
     </div>
 
     <!-- Set / Change Password Modal Box (Owner Only) -->
-    <div class="login-card" id="password-setup-box" style="display:none;border-color:#facc15;background:rgba(14,27,46,0.95);box-shadow:0 0 18px rgba(250,204,21,0.2)">
-      <strong style="font-size:13px;color:#fde047">🔒 Set / Update Password for @<span id="pw-target-user"></span>:</strong>
+    <div class="login-card" id="password-setup-box" style="display:none;border-color:var(--amber);background:var(--card);box-shadow:0 0 18px rgba(var(--amber-rgb),0.2)">
+      <strong style="font-size:13px;color:var(--amber)">🔒 Set / Update Password for @<span id="pw-target-user"></span>:</strong>
       <input id="inp-new-password" type="password" placeholder="New Password (min 8 characters)" style="max-width:240px" />
       <button class="primary" onclick="saveNewPassword()">💾 Save Password</button>
       <button onclick="document.getElementById('password-setup-box').style.display='none'">Cancel</button>
@@ -7697,14 +8292,77 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         }
       } catch (_) {}
     }
+    const DEFAULT_VAULT_THEME_ID = 'duel_scope_midnight';
+    const VAULT_THEME_PRESETS = ${safeJsonForScript(WORKER_THEME_PRESETS)};
+    const VAULT_WATERMARK_SVGS = ${safeJsonForScript(vaultWatermarkMap)};
+    function normalizeVaultThemeId(raw) {
+      const c = String(raw || '').trim();
+      if (!c || c === 'amoled_cyan' || c === 'amoled_matrix' || c === 'slate') return DEFAULT_VAULT_THEME_ID;
+      if (c === 'instinct_light') return 'instinct_dark';
+      if (c === 'valor_light') return 'valor_dark';
+      if (c === 'mystic_dark') return 'mystic_light';
+      if (c === 'sylveon_light') return 'sylveon_pink';
+      return VAULT_THEME_PRESETS[c] ? c : DEFAULT_VAULT_THEME_ID;
+    }
+    let activeVaultThemeId = DEFAULT_VAULT_THEME_ID;
+    let activeVaultWatermark = true;
+    function writeSharedThemeCookies(themeId, watermarkOn) {
+      try {
+        const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+        const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = 'sspvp_theme=' + encodeURIComponent(normalizeVaultThemeId(themeId)) + '; path=/; max-age=31536000; SameSite=Lax' + dom + sec;
+        document.cookie = 'sspvp_watermark=' + (watermarkOn ? '1' : '0') + '; path=/; max-age=31536000; SameSite=Lax' + dom + sec;
+      } catch (_) {}
+    }
+    function applyVaultTheme(themeId, showWatermark, persistCookie) {
+      const norm = normalizeVaultThemeId(themeId);
+      const t = VAULT_THEME_PRESETS[norm] || VAULT_THEME_PRESETS[DEFAULT_VAULT_THEME_ID];
+      const wmOn = showWatermark !== false;
+      activeVaultThemeId = t.id;
+      activeVaultWatermark = wmOn;
+      const root = document.documentElement;
+      root.classList.toggle('vault-light', Boolean(t.isLight));
+      root.style.setProperty('--bg', t.bg);
+      root.style.setProperty('--bg-mid', t.bgMid || t.bg);
+      root.style.setProperty('--card', t.card);
+      root.style.setProperty('--card-alt', t.cardAlt);
+      root.style.setProperty('--card-rgb', t.cardRgb);
+      root.style.setProperty('--border', t.border);
+      root.style.setProperty('--accent', t.accent);
+      root.style.setProperty('--accent-hover', t.accentHover);
+      root.style.setProperty('--accent-rgb', t.accentRgb);
+      root.style.setProperty('--cyan', t.cyan);
+      root.style.setProperty('--amber', t.amber);
+      root.style.setProperty('--amber-hover', t.amberHover);
+      root.style.setProperty('--amber-rgb', t.amberRgb);
+      root.style.setProperty('--rose', t.rose);
+      root.style.setProperty('--text', t.text);
+      root.style.setProperty('--muted', t.muted);
+      root.style.setProperty('--text-dim', t.textDim);
+      root.style.setProperty('--cta-text', t.ctaText);
+      root.style.setProperty('--cta2-text', t.cta2Text);
+      root.style.setProperty('--wm-opacity', String(t.wmAlpha || 0.20));
+      const mc = document.getElementById('meta-theme-color');
+      if (mc) mc.setAttribute('content', t.bg);
+      const wmEl = document.getElementById('vault-watermark-bg');
+      if (wmEl) {
+        if (wmOn && VAULT_WATERMARK_SVGS[t.id]) {
+          wmEl.innerHTML = VAULT_WATERMARK_SVGS[t.id];
+          wmEl.classList.remove('hidden');
+        } else {
+          wmEl.classList.add('hidden');
+        }
+      }
+      if (persistCookie) writeSharedThemeCookies(t.id, wmOn);
+    }
     function clearSharedCookies() {
       try {
         const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
         const sec = window.location.protocol === 'https:' ? '; Secure' : '';
-        document.cookie = 'sspvp_vault_user=; path=/; max-age=0; SameSite=Lax' + dom + sec;
-        document.cookie = 'sspvp_vault_session=; path=/; max-age=0; SameSite=Lax' + dom + sec;
-        document.cookie = 'sspvp_vault_user=; path=/; max-age=0; SameSite=Lax' + sec;
-        document.cookie = 'sspvp_vault_session=; path=/; max-age=0; SameSite=Lax' + sec;
+        ['sspvp_vault_user', 'sspvp_vault_session', 'sspvp_theme', 'sspvp_watermark'].forEach((ck) => {
+          document.cookie = ck + '=; path=/; max-age=0; SameSite=Lax' + dom + sec;
+          document.cookie = ck + '=; path=/; max-age=0; SameSite=Lax' + sec;
+        });
       } catch (_) {}
     }
     function userFromSession(tok) {
@@ -7737,6 +8395,13 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         localStorage.setItem('sspvp_vault_user', loggedInUser);
         localStorage.setItem('gbl_web_screen_name_v700', loggedInUser);
       } catch (_) {}
+      const ckTheme = readSharedCookie('sspvp_theme');
+      const ckWm = readSharedCookie('sspvp_watermark');
+      if (ckTheme || ckWm) {
+        applyVaultTheme(ckTheme || DEFAULT_VAULT_THEME_ID, ckWm !== '0' && ckWm !== 'false', false);
+      }
+    } else {
+      applyVaultTheme(DEFAULT_VAULT_THEME_ID, true, false);
     }
     const savedUser = params.get('user') || pathUser || loggedInUser || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
@@ -7800,6 +8465,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       localStorage.removeItem('sspvp_vault_key');
       localStorage.removeItem('sspvp_pending_gh_device');
       clearSharedCookies();
+      applyVaultTheme(DEFAULT_VAULT_THEME_ID, true, false);
       document.getElementById('inp-user').value = 'Featured';
       document.getElementById('inp-key').value = '';
       document.getElementById('inp-password').value = '';
@@ -7935,6 +8601,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     function renderVaultHeaderAndGrid(data) {
       currentVaultData = data;
       const isOwner = Boolean(data.isOwner);
+      if (isOwner && data.userThemeId) {
+        applyVaultTheme(data.userThemeId, data.showThemeWatermark !== false, true);
+      }
       document.getElementById('btn-logout').style.display = isOwner ? 'inline-flex' : 'none';
       document.getElementById('btn-toggle-login').textContent = isOwner ? '⚙️ Account / Login' : '🔐 Owner Login';
 
@@ -7949,12 +8618,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
         sb.innerHTML =
           '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-            '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:#2dd4bf;font-weight:800">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
-            '<div style="color:#ecfeff">☁️ Storage: <strong style="color:#2dd4bf">' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong style="color:#2dd4bf">' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong style="color:#fde047">' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong style="color:#67e8f9">' + esc(usg.publicCount || 0) + '</strong></div>' +
+            '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:var(--accent);font-weight:800">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
+            '<div style="color:var(--text)">☁️ Storage: <strong style="color:var(--accent)">' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong style="color:var(--accent)">' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong style="color:var(--amber)">' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong style="color:var(--cyan)">' + esc(usg.publicCount || 0) + '</strong></div>' +
           '</div>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid #19304e">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid var(--border)">' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-              '<span style="font-size:12px;color:#99f6e4;font-weight:700">🌐 Public Vault Visibility:</span>' +
+              '<span style="font-size:12px;color:var(--muted);font-weight:700">🌐 Public Vault Visibility:</span>' +
               '<select onchange="updateVaultVisibility(this.value)" style="min-width:265px;padding:6px 10px;font-size:12px">' +
                 '<option value="public_only"' + (vis === 'public_only' ? ' selected' : '') + '>🔒 Private (Only shows ones manually made public)</option>' +
                 '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred only</option>' +
@@ -7962,7 +8631,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
                 '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 All videos shared (Overrides per-video private)</option>' +
                 '<option value="none"' + (vis === 'none' || vis === 'private' ? ' selected' : '') + '>🚫 No videos shared without login</option>' +
               '</select>' +
-              '<span style="font-size:11px;color:#94a3b8">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
+              '<span style="font-size:11px;color:var(--text-dim)">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
             '</div>' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + '</div>' +
           '</div>';
@@ -7976,12 +8645,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
             ? '⭐+🌐 Public Vault (Starred + Public Videos)'
             : '🔒 Public Vault (Manually Shared Public Videos Only)';
         const hiddenNote = (vis !== 'all' && data.hiddenRollingCount > 0)
-          ? ' • <span style="color:#94a3b8">' + esc(data.hiddenRollingCount) + ' private battle(s) hidden (Owner-only)</span>'
+          ? ' • <span style="color:var(--text-dim)">' + esc(data.hiddenRollingCount) + ' private battle(s) hidden (Owner-only)</span>'
           : '';
         sb.innerHTML =
           '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-            '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:#fde047;font-weight:800">' + visLabel + '</span>' + hiddenNote + '</div>' +
-            '<button onclick="toggleLoginPanel()" style="padding:6px 12px;font-size:12px;border-color:#2dd4bf;color:#2dd4bf">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
+            '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:var(--amber);font-weight:800">' + visLabel + '</span>' + hiddenNote + '</div>' +
+            '<button onclick="toggleLoginPanel()" style="padding:6px 12px;font-size:12px;border-color:var(--accent);color:var(--accent)">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
           '</div>';
       }
 
@@ -7994,9 +8663,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const email = document.getElementById('inp-email').value.trim();
       if (!user) {
         document.getElementById('replays-grid').innerHTML =
-          '<div style="color:#99f6e4;padding:28px 20px;grid-column:1/-1;text-align:center;background:rgba(14,27,46,0.85);backdrop-filter:blur(10px);border:1px solid #19304e;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">' +
-            '<div style="font-size:16px;font-weight:800;color:#ecfeff;margin-bottom:8px">🔍 Enter a Trainer ID above to view their Public DVR Replay Vault</div>' +
-            '<div style="font-size:13px;color:#99f6e4">Starred replays are viewable by anyone by default, or click <strong style="color:#2dd4bf">🔐 Owner Login</strong> to sign in with your Unlock Key or Password.</div>' +
+          '<div style="color:var(--muted);padding:28px 20px;grid-column:1/-1;text-align:center;background:rgba(var(--card-rgb),0.88);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.35)">' +
+            '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:8px">🔍 Enter a Trainer ID above to view their Public DVR Replay Vault</div>' +
+            '<div style="font-size:13px;color:var(--muted)">Starred replays are viewable by anyone by default, or click <strong style="color:var(--accent)">🔐 Owner Login</strong> to sign in with your Unlock Key or Password.</div>' +
           '</div>';
         return;
       }
@@ -8017,7 +8686,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       } catch (_) {}
 
       if (!cachedVault || !Array.isArray(cachedVault.items)) {
-        grid.innerHTML = '<div style="color:#99f6e4;padding:20px;font-weight:700">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
+        grid.innerHTML = '<div style="color:var(--muted);padding:20px;font-weight:700">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
       }
 
       try {
@@ -8045,7 +8714,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           document.getElementById('stats-bar').style.display = 'none';
           document.getElementById('filter-bar').style.display = 'none';
           document.getElementById('owner-login-panel').style.display = 'flex';
-          grid.innerHTML = '<div style="color:#fda4af;padding:20px;grid-column:1/-1;background:rgba(14,27,46,0.85);border:1px solid rgba(244,63,94,0.45);border-radius:12px">' + esc(data.error || 'Failed to load vault') + '</div>';
+          grid.innerHTML = '<div style="color:var(--rose);padding:20px;grid-column:1/-1;background:rgba(var(--card-rgb),0.88);border:1px solid rgba(244,63,94,0.45);border-radius:12px">' + esc(data.error || 'Failed to load vault') + '</div>';
           return;
         }
 
@@ -8161,16 +8830,16 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
             return '<option value="' + esc(c) + '"' + (activeCup.toUpperCase() === c.toUpperCase() ? ' selected' : '') + '>' + esc(formatCupLabel(c, cpTierFilter) + ' (' + cnt + ')') + '</option>';
           }).join('');
         const tierHtml =
-          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;width:100%;padding-top:6px;border-top:1px solid #19304e">' +
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;width:100%;padding-top:6px;border-top:1px solid var(--border)">' +
             '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
-              '<span style="font-size:11px;color:#94a3b8;font-weight:700">🏆 League:</span>' +
+              '<span style="font-size:11px;color:var(--text-dim);font-weight:700">🏆 League:</span>' +
               tierBtn('ALL', 'All Leagues (' + tierCounts.ALL + ')') +
               tierBtn('GREAT', 'Great (' + tierCounts.GREAT + ')') +
               tierBtn('ULTRA', 'Ultra (' + tierCounts.ULTRA + ')') +
               tierBtn('MASTER', 'Master (' + tierCounts.MASTER + ')') +
             '</div>' +
             '<div style="display:flex;gap:6px;align-items:center">' +
-              '<span style="font-size:11px;color:#94a3b8;font-weight:700">🏅 Cup:</span>' +
+              '<span style="font-size:11px;color:var(--text-dim);font-weight:700">🏅 Cup:</span>' +
               '<select onchange="setCupFilter(this.value)" style="padding:6px 10px;font-size:12px">' + cupOptions + '</select>' +
             '</div>' +
           '</div>';
@@ -8197,7 +8866,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const emptyMsg = !isOwner
           ? 'No public replays published by @' + esc(currentVaultData.screenName) + ' under their current visibility filter. If this is your vault, click 🔐 Owner Login above to view all private battles and toggle 🌐 Public or ⭐ Star!'
           : 'No replays found in this filter view.';
-        grid.innerHTML = '<div style="color:#99f6e4;padding:24px;grid-column:1/-1;background:rgba(14,27,46,0.85);border:1px solid #19304e;border-radius:12px;text-align:center">' + emptyMsg + '</div>';
+        grid.innerHTML = '<div style="color:var(--muted);padding:24px;grid-column:1/-1;background:rgba(var(--card-rgb),0.88);border:1px solid var(--border);border-radius:12px;text-align:center">' + emptyMsg + '</div>';
         return;
       }
 
@@ -8214,48 +8883,48 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const safeShareUrlJs = escJsArg(item.shareUrl || ('/watch/' + encodeURIComponent(item.shareId || '')));
         const highlightSecNum = Number(item.highlightSec) || 0;
         const starControl = isOwner
-          ? '<button onclick="togglePin(\\'' + safeBattleIdJs + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? '#facc15' : '#19304e') + ';color:' + (item.isPinned ? '#fde047' : '#ecfeff') + ';background:' + (item.isPinned ? 'rgba(250,204,21,0.18)' : '#081120') + ';box-shadow:' + (item.isPinned ? '0 0 10px rgba(250,204,21,0.2)' : 'none') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
-          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (item.isPinned ? '#facc15' : '#19304e') + ';color:' + (item.isPinned ? '#fde047' : '#94a3b8') + ';background:' + (item.isPinned ? 'rgba(250,204,21,0.18)' : '#081120') + '">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>';
+          ? '<button onclick="togglePin(\\'' + safeBattleIdJs + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? 'var(--amber)' : 'var(--border)') + ';color:' + (item.isPinned ? 'var(--amber)' : 'var(--text)') + ';background:' + (item.isPinned ? 'rgba(var(--amber-rgb),0.18)' : 'var(--card-alt)') + ';box-shadow:' + (item.isPinned ? '0 0 10px rgba(var(--amber-rgb),0.2)' : 'none') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
+          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (item.isPinned ? 'var(--amber)' : 'var(--border)') + ';color:' + (item.isPinned ? 'var(--amber)' : 'var(--text-dim)') + ';background:' + (item.isPinned ? 'rgba(var(--amber-rgb),0.18)' : 'var(--card-alt)') + '">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>';
         const pubControl = isOwner
-          ? '<button onclick="toggleVideoPublic(\\'' + safeBattleIdJs + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#67e8f9' : '#19304e') + ';color:' + (isPub ? '#67e8f9' : '#94a3b8') + ';background:' + (isPub ? 'rgba(103,232,249,0.14)' : '#081120') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
-          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? '#67e8f9' : '#19304e') + ';color:' + (isPub || isOverriddenPublic ? '#67e8f9' : '#94a3b8') + ';background:' + (isPub || isOverriddenPublic ? 'rgba(103,232,249,0.14)' : '#081120') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
+          ? '<button onclick="toggleVideoPublic(\\'' + safeBattleIdJs + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? 'var(--accent)' : 'var(--border)') + ';color:' + (isPub ? 'var(--accent)' : 'var(--muted)') + ';background:' + (isPub ? 'rgba(var(--accent-rgb),0.14)' : 'var(--card-alt)') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
+          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? 'var(--accent)' : 'var(--border)') + ';color:' + (isPub || isOverriddenPublic ? 'var(--accent)' : 'var(--text-dim)') + ';background:' + (isPub || isOverriddenPublic ? 'rgba(var(--accent-rgb),0.14)' : 'var(--card-alt)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
         const isAdminOwner = isOwner && String(currentVaultData.screenName || '').toLowerCase() === 'sportsfan986';
         const featControl = isAdminOwner
-          ? '<button onclick="promoteToFeatured(\\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:' + (item.featuredShareId ? 'rgba(250,204,21,0.18)' : 'rgba(45,212,191,0.14)') + '" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + esc(item.featuredShareId) + ')' : '🌟 Promote to Featured') + '</button>'
+          ? '<button onclick="promoteToFeatured(\\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? 'var(--amber)' : 'var(--accent)') + ';color:' + (item.featuredShareId ? 'var(--amber)' : 'var(--accent)') + ';background:' + (item.featuredShareId ? 'rgba(var(--amber-rgb),0.18)' : 'rgba(var(--accent-rgb),0.14)') + '" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + esc(item.featuredShareId) + ')' : '🌟 Promote to Featured') + '</button>'
           : '';
         const isItemFlagged = Boolean(item.manuallyFlagged || item.userIssueNote);
         const safeIssueNoteJs = escJsArg(item.userIssueNote || '');
         const safeLeagueJs = escJsArg(cleanLg(item.league || 'GBL'));
         const safeMatchupJs = escJsArg(item.matchupSummary || '');
         const issueBannerHtml = isItemFlagged
-          ? '<div style="background:rgba(250,204,21,0.14);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:6px 9px;font-size:11.5px;color:#fef3c7;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
+          ? '<div style="background:rgba(var(--amber-rgb),0.14);border:1px solid rgba(var(--amber-rgb),0.45);border-radius:8px;padding:6px 9px;font-size:11.5px;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
               '<span>🚩 <strong>Reported Issue:</strong> ' + esc(item.userIssueNote || 'Flagged for diagnostic review') + '</span>' +
-              '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:3px 7px;font-size:11px;background:#081120;border-color:#64748b;color:#e2e8f0" title="Retract this issue report">↩️ Unflag</button>' +
+              '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:3px 7px;font-size:11px;background:var(--card-alt);border-color:var(--border);color:var(--text)" title="Retract this issue report">↩️ Unflag</button>' +
             '</div>'
           : '';
         const flagControls =
-          '<button onclick="flagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\', \\'' + safeIssueNoteJs + '\\', \\'' + safeLeagueJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (isItemFlagged ? '#facc15' : '#b91c1c') + ';color:' + (isItemFlagged ? '#fde047' : '#fca5a5') + ';background:' + (isItemFlagged ? 'rgba(250,204,21,0.14)' : 'rgba(185,28,28,0.16)') + '" title="Flag an issue on this replay or edit existing issue note">' + (isItemFlagged ? '🚩 Flagged ✓' : '🚩 Flag Issue') + '</button>' +
+          '<button class="' + (isItemFlagged ? '' : 'vault-btn-flag') + '" onclick="flagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\', \\'' + safeIssueNoteJs + '\\', \\'' + safeLeagueJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;' + (isItemFlagged ? 'border-color:var(--amber);color:var(--amber);background:rgba(var(--amber-rgb),0.14)' : 'border-color:#b91c1c;color:#fca5a5;background:rgba(185,28,28,0.16)') + '" title="Flag an issue on this replay or edit existing issue note">' + (isItemFlagged ? '🚩 Flagged ✓' : '🚩 Flag Issue') + '</button>' +
           (isItemFlagged
-            ? '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:#64748b;color:#e2e8f0;background:#081120" title="Unflag and retract this issue report">↩️ Unflag Issue</button>'
+            ? '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:var(--border);color:var(--text);background:var(--card-alt)" title="Unflag and retract this issue report">↩️ Unflag Issue</button>'
             : '');
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
             '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + esc(item.result || 'BATTLE') + ' • ' + esc(cleanLg(item.league || 'GBL')) + '</span>' +
-            '<span style="font-size:11px;color:#99f6e4">' + esc(mb) + ' MB • ' + esc(Number(item.durationSec) || 0) + 's</span>' +
+            '<span style="font-size:11px;color:var(--muted)">' + esc(mb) + ' MB • ' + esc(Number(item.durationSec) || 0) + 's</span>' +
           '</div>' +
-          '<div style="font-weight:800;font-size:14px;color:#ecfeff">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
-          '<div style="font-size:11px;color:#94a3b8">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • <span style="color:#fde047">⚡ Highlight @ ' + highlightSecNum + 's</span>' : '') + '</div>' +
+          '<div style="font-weight:800;font-size:14px;color:var(--text)">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-dim)">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • <span style="color:var(--amber)">⚡ Highlight @ ' + highlightSecNum + 's</span>' : '') + '</div>' +
           issueBannerHtml +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
-            '<button class="primary" style="padding:7px 11px;font-size:12px;flex:1;justify-content:center" onclick="openFullScreenReplay(\'' + safeShareIdJs + '\', 0)">▶️ Watch + HUD</button>' +
-            (highlightSecNum ? '<button style="background:rgba(250,204,21,0.16);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" onclick="openFullScreenReplay(\'' + safeShareIdJs + '\', ' + highlightSecNum + ')" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</button>' : '') +
+            '<button class="primary" style="padding:7px 11px;font-size:12px;flex:1;justify-content:center" onclick="openFullScreenReplay(\\'' + safeShareIdJs + '\\', 0)">▶️ Watch + HUD</button>' +
+            (highlightSecNum ? '<button style="background:rgba(var(--amber-rgb),0.16);border-color:var(--amber);color:var(--amber);padding:7px 10px;font-size:12px" onclick="openFullScreenReplay(\\'' + safeShareIdJs + '\\', ' + highlightSecNum + ')" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</button>' : '') +
             starControl +
             pubControl +
             featControl +
-            '<button onclick="shareReplayLink(\\'' + safeShareUrlJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;background:#081120;border-color:#2dd4bf;color:#99f6e4" title="Share or copy direct replay link">📤 Share</button>' +
-            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px;background:#081120;border-color:#19304e;color:#ecfeff" title="Anyone with this direct link can watch this replay">📋 Copy Link</button>' +
+            '<button onclick="shareReplayLink(\\'' + safeShareUrlJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;background:var(--card-alt);border-color:var(--accent);color:var(--accent)" title="Share or copy direct replay link">📤 Share</button>' +
+            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px;background:var(--card-alt);border-color:var(--border);color:var(--text)" title="Anyone with this direct link can watch this replay">📋 Copy Link</button>' +
             flagControls +
-            (isOwner ? '<button onclick="deleteVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;background:rgba(190,18,60,0.16);border-color:#f43f5e;color:#fda4af" title="Permanently delete this replay from your Cloud DVR Vault">🗑️ Delete</button>' : '') +
+            (isOwner ? '<button class="vault-btn-danger" onclick="deleteVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;background:rgba(190,18,60,0.16);border-color:#f43f5e;color:#fda4af" title="Permanently delete this replay from your Cloud DVR Vault">🗑️ Delete</button>' : '') +
           '</div>' +
         '</div>';
       }).join('');
@@ -8492,12 +9161,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         modal.id = 'vault-fs-replay-modal';
         modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#02060d;display:flex;flex-direction:column;overflow:hidden;';
         modal.innerHTML =
-          '<button type="button" onclick="closeFullScreenReplay()" title="Close Replay" aria-label="Close Replay" style="position:fixed;top:max(10px,env(safe-area-inset-top,10px));right:12px;z-index:10001;width:36px;height:36px;border-radius:12px;background:rgba(8,17,32,0.9);border:1.5px solid #2dd4bf;color:#99f6e4;font-size:15px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.85),0 0 14px rgba(45,212,191,0.35)">✕</button>' +
+          '<button type="button" onclick="closeFullScreenReplay()" title="Close Replay" aria-label="Close Replay" style="position:fixed;top:max(10px,env(safe-area-inset-top,10px));right:12px;z-index:10001;width:36px;height:36px;border-radius:12px;background:rgba(var(--card-rgb),0.92);border:1.5px solid var(--accent);color:var(--text);font-size:15px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.85),0 0 14px rgba(var(--accent-rgb),0.35)">✕</button>' +
           '<iframe id="vault-fs-replay-iframe" style="width:100%;height:100%;flex:1;border:none;display:block;background:#000" allow="fullscreen"></iframe>';
         document.body.appendChild(modal);
       }
       const iframe = document.getElementById('vault-fs-replay-iframe');
-      iframe.src = '/watch/' + encodeURIComponent(shareId) + '?embed=1' + (startSec > 0 ? '&t=' + Number(startSec) : '');
+      iframe.src = '/watch/' + encodeURIComponent(shareId) + '?embed=1&theme=' + encodeURIComponent(activeVaultThemeId) + '&wm=' + (activeVaultWatermark ? '1' : '0') + (startSec > 0 ? '&t=' + Number(startSec) : '');
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
@@ -8551,7 +9220,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.77');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.80');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
 
@@ -9146,7 +9815,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.77',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.80',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -9314,8 +9983,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.77',
-        releaseTitle: 'SilphScope PvP v7.77',
+        versionName: 'v7.80',
+        releaseTitle: 'SilphScope PvP v7.80',
         publishedAt: '',
         assetSizeMb: '',
       };
@@ -12572,11 +13241,38 @@ self.addEventListener('fetch', (e) => {
         }
 
         const indexUpdatedMs = computeIndexUpdatedMs(indexObj);
+        let userThemeId = DEFAULT_WORKER_THEME_ID;
+        let showThemeWatermark = true;
+        if (env.SYNC_DB && resolvedName) {
+          try {
+            const cleanD1User = sanitizeScreenName(resolvedName);
+            if (cleanD1User) {
+              const stRow = await env.SYNC_DB.prepare(
+                'SELECT settings_json FROM user_vault_state WHERE screen_name = ?1'
+              )
+                .bind(cleanD1User)
+                .first();
+              if (stRow && stRow.settings_json) {
+                const parsedSt = sanitizeVaultSettingsForD1(JSON.parse(stRow.settings_json));
+                const rawT = parsedSt['S:gbl_app_theme_id'] || parsedSt['gbl_app_theme_id'] || '';
+                if (rawT) userThemeId = normalizeWorkerThemeId(rawT);
+                const rawWm = parsedSt['B:gbl_show_theme_watermark'] ?? parsedSt['gbl_show_theme_watermark'];
+                if (rawWm !== undefined && rawWm !== '') {
+                  const lowWm = String(rawWm).trim().toLowerCase();
+                  showThemeWatermark = lowWm !== 'false' && lowWm !== '0';
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
         const devHashHdr = (request.headers.get('X-Device-Hash') || '').trim();
         const deviceIngestToken = devHashHdr ? await computeDeviceIngestToken(env, devHashHdr) : '';
         const allItems = indexObj.items || [];
 
         const baseOwnerResp = {
+          userThemeId,
+          showThemeWatermark,
           ok: true,
           isOwner: true,
           canStar: true,
@@ -13095,23 +13791,36 @@ self.addEventListener('fetch', (e) => {
       justify-content: center;
       padding: 24px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #050b16;
+      background-color: #050810;
       background-image:
-        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%),
+        radial-gradient(circle at 18% 12%, rgba(56, 189, 248, 0.11) 0%, transparent 42%),
         radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%),
-        linear-gradient(180deg, #050b16 0%, #081120 55%, #050b16 100%);
-      color: #ecfeff;
+        linear-gradient(180deg, #050810 0%, #070d19 55%, #050810 100%);
+      color: #f8fafc;
       box-sizing: border-box;
     }
+    .fixed-watermark-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 0;
+      opacity: 0.20;
+    }
+    .theme-watermark-svg { width: 520px; height: 520px; max-width: 90vw; max-height: 90vh; }
     .card {
-      background: #0e1b2e;
-      border: 1px solid #19304e;
+      position: relative;
+      z-index: 1;
+      background: #0b1526;
+      border: 1px solid #1e293b;
       border-radius: 16px;
       padding: 36px 28px;
       max-width: 520px;
       width: 100%;
       text-align: center;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 24px rgba(45, 212, 191, 0.12);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 24px rgba(56, 189, 248, 0.12);
     }
     .badge-icon {
       width: 52px;
@@ -13120,31 +13829,31 @@ self.addEventListener('fetch', (e) => {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      background: #081120;
-      border: 1.5px solid #2dd4bf;
-      box-shadow: 0 0 18px rgba(45, 212, 191, 0.3);
+      background: #070d19;
+      border: 1.5px solid #38bdf8;
+      box-shadow: 0 0 18px rgba(56, 189, 248, 0.3);
       margin-bottom: 16px;
     }
     h2 {
       margin: 0 0 10px;
       font-size: 20px;
       font-weight: 900;
-      color: #fff;
+      color: #f8fafc;
     }
-    h2 span { color: #2dd4bf; }
+    h2 span { color: #38bdf8; }
     p {
       margin: 0 0 22px;
       font-size: 13.5px;
-      color: #99f6e4;
+      color: #94a3b8;
       line-height: 1.5;
     }
     code {
       font-family: monospace;
       color: #facc15;
-      background: #081120;
+      background: #070d19;
       padding: 2px 7px;
       border-radius: 6px;
-      border: 1px solid #19304e;
+      border: 1px solid #1e293b;
     }
     .actions {
       display: flex;
@@ -13164,39 +13873,29 @@ self.addEventListener('fetch', (e) => {
       transition: all 0.15s ease;
     }
     a.btn-primary {
-      background: #2dd4bf;
-      color: #042f2e;
-      border: 1px solid #2dd4bf;
-      box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
+      background: #38bdf8;
+      color: #050810;
+      border: 1px solid #38bdf8;
+      box-shadow: 0 2px 10px rgba(56, 189, 248, 0.25);
     }
     a.btn-primary:hover {
-      background: #5eead4;
-      box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
+      background: #7dd3fc;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
     }
     a.btn-secondary {
-      background: #081120;
-      color: #ecfeff;
-      border: 1px solid #19304e;
+      background: #070d19;
+      color: #f8fafc;
+      border: 1px solid #1e293b;
     }
     a.btn-secondary:hover {
       background: #14253e;
-      border-color: #2dd4bf;
-      color: #5eead4;
+      border-color: #38bdf8;
+      color: #7dd3fc;
     }
   </style>
 </head>
 <body>
-  <!-- Fixed Centered Shiny Origin Dialga Vector Watermark -->
-  <div class="fixed-watermark-bg" aria-hidden="true">
-    <svg viewBox="0 0 240 240" class="dialga-watermark-svg">
-      <path fill="none" stroke="#2DD4BF" stroke-width="3" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
-      <path fill="none" stroke="#FACC15" stroke-width="4" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
-      <path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
-      <path fill="#14B8A6" stroke="#67E8F9" stroke-width="2.5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
-      <path fill="#081224" stroke="#FACC15" stroke-width="3" d="M120,84 L152,120 L120,156 L88,120 Z" />
-      <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
-    </svg>
-  </div>
+  <div class="fixed-watermark-bg" aria-hidden="true">${renderWorkerWatermarkSvg(DEFAULT_WORKER_THEME_ID)}</div>
   <div class="card">
     <div class="badge-icon">
       <img src="/favicon.svg" alt="SilphScope PvP" style="width:36px;height:36px;border-radius:10px;display:block" />

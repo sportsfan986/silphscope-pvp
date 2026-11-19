@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="320dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- Transparent HUD Reticle Frame -->
+    <path
+        android:fillColor="#0D38BDF8"
+        android:strokeColor="#3838BDF8"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7838BDF8"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFB7185"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
+
+    <!-- Shiny Umbreon OLED Rings & Crimson Eyes -->
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.75" android:scaleY="0.75">
+        <path
+            android:fillColor="#05080F"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="14"
+            android:pathData="M32,120 A88,88 0 1,0 208,120 A88,88 0 1,0 32,120 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="8"
+            android:pathData="M64,120 A56,56 0 1,0 176,120 A56,56 0 1,0 64,120 Z" />
+        <path
+            android:fillColor="#FB7185"
+            android:pathData="M74,116 Q96,102 114,118 Q94,132 74,116 Z M166,116 Q144,102 126,118 Q146,132 166,116 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="7"
+            android:pathData="M104,60 A16,16 0 1,0 136,60 A16,16 0 1,0 104,60 Z" />
+    </group>
+</vector>

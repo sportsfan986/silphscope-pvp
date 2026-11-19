@@ -210,7 +210,10 @@ import {
   DEFAULT_SEASONS_FALLBACK,
   type WebAppThemePalette,
   WEB_APP_THEMES,
-  renderThemeOverlayIcon
+  DEFAULT_APP_THEME_ID,
+  normalizeAppThemeId,
+  renderThemeOverlayIcon,
+  renderThemeWatermarkSvg
 } from './components/AppThemeAndModels';
 import { MetaTab } from './components/MetaTab';
 import { IvLabTab } from './components/IvLabTab';
@@ -221,7 +224,7 @@ import { TrashBinModals } from './components/TrashBinModals';
 import { DocumentationModals } from './components/DocumentationModals';
 import { MarketingWebsite, type MarketingSubpage } from './components/MarketingWebsite';
 export type { WebBattleLogEntry, WebAiTrainingLogRecord, GblSeasonInfo, WebAppThemePalette };
-export { WEB_APP_THEMES };
+export { WEB_APP_THEMES, DEFAULT_APP_THEME_ID, normalizeAppThemeId };
 export interface CompactHudConfig {
   showOppAttacks: boolean;
   showMyAttacks: boolean;
@@ -533,6 +536,27 @@ export default function App() {
         if (data.settings?.publicVisibility) {
           setWebVaultVisibility(data.settings.publicVisibility);
         }
+        try {
+          const syncRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+              'X-Trainer-Screen-Name': data.screenName || cleanName,
+              ...(data.sessionToken ? { 'X-Vault-Session': data.sessionToken } : {})
+            },
+            body: JSON.stringify({
+              screenName: data.screenName || cleanName,
+              sessionToken: data.sessionToken || '',
+              unlockKey: cleanKey,
+              sinceServerMs: 0
+            })
+          });
+          const sj = await syncRes.json().catch(() => null);
+          if (syncRes.ok && sj?.ok && sj.userSettings) {
+            applyPulledD1ThemeSettings(sj.userSettings, Number(sj.settingsUpdatedAt) || 0, true);
+          }
+        } catch {}
         setMembershipStatusMsg(
           `✅ Signed in as @${data.screenName || cleanName} (${t.toUpperCase()} Tier)${data.githubUsername ? ` • GitHub: @${data.githubUsername}` : ''}!`
         );
@@ -617,6 +641,26 @@ export default function App() {
             document.cookie = `sspvp_vault_user=${encodeURIComponent(pollData.screenName || webScreenName)}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
           }
           document.cookie = `sspvp_vault_session=${encodeURIComponent(pollData.sessionToken)}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+        } catch {}
+        try {
+          const syncRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+              'X-Trainer-Screen-Name': pollData.screenName || webScreenName,
+              'X-Vault-Session': pollData.sessionToken
+            },
+            body: JSON.stringify({
+              screenName: pollData.screenName || webScreenName,
+              sessionToken: pollData.sessionToken,
+              sinceServerMs: 0
+            })
+          });
+          const sj = await syncRes.json().catch(() => null);
+          if (syncRes.ok && sj?.ok && sj.userSettings) {
+            applyPulledD1ThemeSettings(sj.userSettings, Number(sj.settingsUpdatedAt) || 0, true);
+          }
         } catch {}
         setMembershipStatusMsg(
           `✅ Signed in via GitHub (@${pollData.githubUsername}) -> Trainer @${pollData.screenName} (${t.toUpperCase()})!`
@@ -1489,44 +1533,246 @@ export default function App() {
     } catch {}
   };
 
-  // App-Level Setting: App & Overlay Theme + Background Emblem Watermark (v3.06)
+  // Cross-subdomain theme cookies (.silphscopepvp.com) for signed-in continuity across App, Marketing & Cloud Vault
+  const readSharedThemeCookie = (name: string): string => {
+    try {
+      const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+      return m && m[1] ? decodeURIComponent(m[1]).trim() : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const writeSharedThemeCookies = (themeId: string, watermarkOn: boolean) => {
+    try {
+      const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+      const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `sspvp_theme=${encodeURIComponent(normalizeAppThemeId(themeId))}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+      document.cookie = `sspvp_watermark=${watermarkOn ? '1' : '0'}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+    } catch {}
+  };
+
+  const clearSharedThemeCookies = () => {
+    try {
+      const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+      const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+      ['sspvp_theme', 'sspvp_watermark'].forEach((ck) => {
+        document.cookie = `${ck}=; path=/; max-age=0; SameSite=Lax${dom}${sec}`;
+        document.cookie = `${ck}=; path=/; max-age=0; SameSite=Lax${sec}`;
+      });
+    } catch {}
+  };
+
+  // App-Level Setting: App & Overlay Theme + Background Emblem Watermark (Dual-Default: Duel Scope Midnight Black)
   const [appThemeId, setAppThemeId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('gbl_app_theme_id');
-      if (saved === 'amoled_cyan' || saved === 'amoled_matrix') return 'dialga_shiny_midnight';
-      if (saved === 'sylveon_light') return 'sylveon_pink';
-      if (saved && WEB_APP_THEMES.some((t) => t.id === saved)) return saved;
+      if (saved) {
+        const norm = normalizeAppThemeId(saved);
+        if (norm !== saved) localStorage.setItem('gbl_app_theme_id', norm);
+        return norm;
+      }
+      const hasSess = Boolean(localStorage.getItem('sspvp_vault_session') || readSharedThemeCookie('sspvp_vault_session'));
+      if (hasSess) {
+        const ckTheme = readSharedThemeCookie('sspvp_theme');
+        if (ckTheme) {
+          const normCk = normalizeAppThemeId(ckTheme);
+          localStorage.setItem('gbl_app_theme_id', normCk);
+          return normCk;
+        }
+      }
     } catch {}
-    return 'dialga_shiny_midnight';
+    return DEFAULT_APP_THEME_ID;
   });
-
-  const handleSetAppThemeId = (themeId: string) => {
-    setAppThemeId(themeId);
-    try {
-      localStorage.setItem('gbl_app_theme_id', themeId);
-    } catch {}
-  };
 
   const [showThemeWatermark, setShowThemeWatermark] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('gbl_show_theme_watermark');
-      return saved === null ? true : saved === 'true';
-    } catch {
-      return true;
-    }
+      if (saved !== null) return saved === 'true';
+      const hasSess = Boolean(localStorage.getItem('sspvp_vault_session') || readSharedThemeCookie('sspvp_vault_session'));
+      if (hasSess) {
+        const ckWm = readSharedThemeCookie('sspvp_watermark');
+        if (ckWm === '0' || ckWm === 'false') return false;
+      }
+    } catch {}
+    return true;
   });
 
+  const latestThemeRef = useRef<string>(appThemeId);
+  const latestWatermarkRef = useRef<boolean>(showThemeWatermark);
+  const themeSyncTimerRef = useRef<number | null>(null);
+  latestThemeRef.current = appThemeId;
+  latestWatermarkRef.current = showThemeWatermark;
+
+  const scheduleD1ThemeSettingsPush = (nextThemeId: string, nextWatermark: boolean, updatedAtMs: number) => {
+    try {
+      const cleanName = (localStorage.getItem('gbl_web_screen_name_v700') || localStorage.getItem('sspvp_vault_user') || '')
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .slice(0, 24);
+      const sess = (localStorage.getItem('sspvp_vault_session') || readSharedThemeCookie('sspvp_vault_session') || '').trim();
+      const key = (localStorage.getItem('gbl_web_unlock_key_v700') || '').trim().toUpperCase();
+      if (cleanName.length < 3 || (!sess && !key)) return;
+      writeSharedThemeCookies(nextThemeId, nextWatermark);
+      if (themeSyncTimerRef.current) window.clearTimeout(themeSyncTimerRef.current);
+      themeSyncTimerRef.current = window.setTimeout(async () => {
+        try {
+          const devId = localStorage.getItem('gbl_sync_device_id') || `web-${cleanName}`;
+          const curElo = getCurrentUserEloWeb();
+          const hdrs: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+            'X-Trainer-Screen-Name': cleanName,
+            'X-Device-Hash': devId
+          };
+          if (sess) hdrs['X-Vault-Session'] = sess;
+          if (key) hdrs['X-SilphScope-Unlock-Key'] = key;
+          const res = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+            method: 'POST',
+            headers: hdrs,
+            body: JSON.stringify({
+              screenName: cleanName,
+              deviceHash: devId,
+              sessionToken: sess,
+              unlockKey: key,
+              sinceServerMs: Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1')) || 0,
+              userSettings: {
+                'S:gbl_app_theme_id': nextThemeId,
+                'B:gbl_show_theme_watermark': nextWatermark ? 'true' : 'false',
+                [`S:${CURRENT_USER_ELO_STORAGE_KEY}`]: curElo !== null ? String(curElo) : ''
+              },
+              settingsUpdatedAt: updatedAtMs
+            })
+          });
+          const j = await res.json().catch(() => null);
+          if (res.ok && j?.ok) {
+            localStorage.setItem('gbl_d1_last_pushed_settings_ms_v1', String(updatedAtMs));
+          }
+        } catch {}
+      }, 650);
+    } catch {}
+  };
+
+  const applyPulledD1ThemeSettings = (
+    pulledSettings: Record<string, string> | null | undefined,
+    pulledSettingsUpdAt: number,
+    forceApply: boolean = false
+  ) => {
+    if (!pulledSettings || typeof pulledSettings !== 'object') return false;
+    let localSettingsUpdAt = 0;
+    try {
+      localSettingsUpdAt = Number(localStorage.getItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY)) || 0;
+    } catch {}
+    if (!forceApply && localSettingsUpdAt > 0 && pulledSettingsUpdAt <= localSettingsUpdAt) return false;
+    let changed = false;
+    let nextT = latestThemeRef.current;
+    let nextWm = latestWatermarkRef.current;
+    if (Object.prototype.hasOwnProperty.call(pulledSettings, 'S:gbl_app_theme_id')) {
+      nextT = normalizeAppThemeId(pulledSettings['S:gbl_app_theme_id']);
+      setAppThemeId(nextT);
+      try {
+        localStorage.setItem('gbl_app_theme_id', nextT);
+      } catch {}
+      changed = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(pulledSettings, 'B:gbl_show_theme_watermark')) {
+      const rawWm = String(pulledSettings['B:gbl_show_theme_watermark'] || '').trim().toLowerCase();
+      nextWm = rawWm !== 'false' && rawWm !== '0';
+      setShowThemeWatermark(nextWm);
+      try {
+        localStorage.setItem('gbl_show_theme_watermark', String(nextWm));
+      } catch {}
+      changed = true;
+    }
+    if (changed) {
+      writeSharedThemeCookies(nextT, nextWm);
+      if (pulledSettingsUpdAt > 0) {
+        try {
+          localStorage.setItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY, String(pulledSettingsUpdAt));
+        } catch {}
+      }
+    }
+    return changed;
+  };
+
+  const handleSetAppThemeId = (themeId: string) => {
+    const norm = normalizeAppThemeId(themeId);
+    const nowMs = Date.now();
+    setAppThemeId(norm);
+    try {
+      localStorage.setItem('gbl_app_theme_id', norm);
+      localStorage.setItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY, String(nowMs));
+    } catch {}
+    scheduleD1ThemeSettingsPush(norm, latestWatermarkRef.current, nowMs);
+  };
+
   const handleSetShowThemeWatermark = (show: boolean) => {
+    const nowMs = Date.now();
     setShowThemeWatermark(show);
     try {
       localStorage.setItem('gbl_show_theme_watermark', String(show));
+      localStorage.setItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY, String(nowMs));
     } catch {}
+    scheduleD1ThemeSettingsPush(latestThemeRef.current, show, nowMs);
   };
 
   const activeTheme = useMemo(
     () => WEB_APP_THEMES.find((t) => t.id === appThemeId) || WEB_APP_THEMES[0],
     [appThemeId]
   );
+
+  // Silent startup pull of synced theme & ELO settings from Cloudflare D1 when signed in
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cleanName = (localStorage.getItem('gbl_web_screen_name_v700') || localStorage.getItem('sspvp_vault_user') || '')
+          .trim()
+          .replace(/[^a-zA-Z0-9_-]/g, '')
+          .slice(0, 24);
+        const sess = (localStorage.getItem('sspvp_vault_session') || readSharedThemeCookie('sspvp_vault_session') || '').trim();
+        const key = (localStorage.getItem('gbl_web_unlock_key_v700') || '').trim().toUpperCase();
+        if (cleanName.length < 3 || (!sess && !key)) return;
+        const devId = localStorage.getItem('gbl_sync_device_id') || `web-${cleanName}`;
+        const cachedCursor = Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1')) || 0;
+        const hdrs: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName,
+          'X-Device-Hash': devId
+        };
+        if (sess) hdrs['X-Vault-Session'] = sess;
+        if (key) hdrs['X-SilphScope-Unlock-Key'] = key;
+        const res = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({
+            screenName: cleanName,
+            deviceHash: devId,
+            sessionToken: sess,
+            unlockKey: key,
+            sinceServerMs: cachedCursor
+          })
+        });
+        const j = await res.json().catch(() => null);
+        if (cancelled || !res.ok || !j?.ok) return;
+        const pulledSettings = j.userSettings && typeof j.userSettings === 'object' ? (j.userSettings as Record<string, string>) : null;
+        const pulledUpd = Number(j.settingsUpdatedAt) || 0;
+        applyPulledD1ThemeSettings(pulledSettings, pulledUpd, false);
+        if (pulledSettings && Object.prototype.hasOwnProperty.call(pulledSettings, `S:${CURRENT_USER_ELO_STORAGE_KEY}`)) {
+          const localUpd = Number(localStorage.getItem(USER_SETTINGS_UPDATED_AT_STORAGE_KEY)) || 0;
+          if (localUpd === 0 || pulledUpd > localUpd) {
+            const syncedElo = setCurrentUserEloWeb(pulledSettings[`S:${CURRENT_USER_ELO_STORAGE_KEY}`], { touchUpdatedAt: false });
+            setCurrentUserElo(syncedElo);
+            setEloHeaderDraft(syncedElo !== null ? String(syncedElo) : '');
+          }
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Provisioned Battle Log State (Page 3) + Tombstones + Seasons + 2-Device Sync
   const [deviceId] = useState<string>(() => {
@@ -7011,74 +7257,83 @@ export default function App() {
 
 
   const modeBannerWord = appCombatMode === 'show6' ? 'Show 6' : 'GBL';
+  const isWebSignedIn = Boolean(webSessionToken || readSharedThemeCookie('sspvp_vault_session'));
+  const marketingTheme = isWebSignedIn ? activeTheme : WEB_APP_THEMES[0];
+  const effectiveSurfaceTheme = siteView === 'marketing' ? marketingTheme : activeTheme;
 
   return (
     <div
-      className="theme-surface min-h-screen flex flex-col font-sans selection:bg-sky-500 selection:text-white relative overflow-x-hidden transition-colors duration-200"
+      className={
+        siteView === 'marketing'
+          ? 'min-h-screen flex flex-col font-sans relative overflow-x-hidden transition-colors duration-200'
+          : 'theme-surface min-h-screen flex flex-col font-sans selection:bg-sky-500 selection:text-white relative overflow-x-hidden transition-colors duration-200'
+      }
       style={{
-        backgroundColor: activeTheme.bgHex,
-        color: activeTheme.textPrimaryHex
+        backgroundColor: effectiveSurfaceTheme.bgHex,
+        color: effectiveSurfaceTheme.textPrimaryHex
       }}
     >
-      {/* Dynamic CSS Theme Surface, Dual-Accent & Page Transparency Overrides */}
+      {/* Dynamic CSS Theme Surface, Dual-Accent & WCAG AA Light-Mode Overrides (isolated from .marketing-surface) */}
+      {(siteView !== 'marketing' || showMembershipModal) && (
       <style>{`
         .theme-surface .bg-slate-900:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-900\\/80:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-900\\/90:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-900\\/70:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-900\\/60:not(.overlay-hud-preserve *) {
-          background-color: color-mix(in srgb, ${activeTheme.cardHex} ${showThemeWatermark && activeTheme.emblemType !== 'none' ? '74%' : '96%'}, transparent) !important;
+          background-color: color-mix(in srgb, ${effectiveSurfaceTheme.cardHex} ${showThemeWatermark ? '76%' : '96%'}, transparent) !important;
+          backdrop-filter: ${showThemeWatermark ? 'blur(2px)' : 'none'};
         }
         .theme-surface .bg-slate-950:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-950\\/70:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-950\\/80:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-950\\/60:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-950\\/90:not(.overlay-hud-preserve *) {
-          background-color: color-mix(in srgb, ${activeTheme.cardAltHex} ${showThemeWatermark && activeTheme.emblemType !== 'none' ? '68%' : '94%'}, transparent) !important;
+          background-color: color-mix(in srgb, ${effectiveSurfaceTheme.cardAltHex} ${showThemeWatermark ? '72%' : '95%'}, transparent) !important;
         }
         .theme-surface .bg-slate-800:not(.overlay-hud-preserve *),
         .theme-surface .bg-slate-800\\/60:not(.overlay-hud-preserve *) {
-          background-color: color-mix(in srgb, ${activeTheme.cardAltHex} ${showThemeWatermark && activeTheme.emblemType !== 'none' ? '76%' : '95%'}, ${activeTheme.accentSecondaryHex} 14%) !important;
-          border-color: color-mix(in srgb, ${activeTheme.borderHex} 70%, ${activeTheme.accentSecondaryHex} 30%) !important;
+          background-color: color-mix(in srgb, ${effectiveSurfaceTheme.cardAltHex} ${showThemeWatermark ? '78%' : '95%'}, ${effectiveSurfaceTheme.accentSecondaryHex} 14%) !important;
+          border-color: color-mix(in srgb, ${effectiveSurfaceTheme.borderHex} 70%, ${effectiveSurfaceTheme.accentSecondaryHex} 30%) !important;
         }
         .theme-surface .border-slate-800:not(.overlay-hud-preserve *),
         .theme-surface .border-slate-700:not(.overlay-hud-preserve *),
         .theme-surface .border-slate-800\\/80:not(.overlay-hud-preserve *),
         .theme-surface .border-slate-700\\/60:not(.overlay-hud-preserve *) {
-          border-color: ${activeTheme.borderHex} !important;
+          border-color: ${effectiveSurfaceTheme.borderHex} !important;
         }
         .theme-surface .bg-sky-500:not(.overlay-hud-preserve *),
         .theme-surface .bg-sky-600:not(.overlay-hud-preserve *),
         .theme-surface .bg-blue-600:not(.overlay-hud-preserve *) {
-          background-color: ${activeTheme.accentHex} !important;
-          color: ${activeTheme.isLight ? '#FFFFFF' : '#080C14'} !important;
+          background-color: ${effectiveSurfaceTheme.accentHex} !important;
+          color: ${effectiveSurfaceTheme.ctaTextHex} !important;
         }
         .theme-surface .bg-emerald-600:not(.overlay-hud-preserve *) {
-          background-color: ${activeTheme.accentSecondaryHex} !important;
-          color: ${activeTheme.isLight ? '#FFFFFF' : '#080C14'} !important;
+          background-color: ${effectiveSurfaceTheme.accentSecondaryHex} !important;
+          color: ${effectiveSurfaceTheme.ctaSecondaryTextHex} !important;
         }
         .theme-surface .bg-emerald-600\\/25:not(.overlay-hud-preserve *),
         .theme-surface .bg-purple-600\\/25:not(.overlay-hud-preserve *) {
-          background-color: color-mix(in srgb, ${activeTheme.accentSecondaryHex} 22%, transparent) !important;
-          border-color: color-mix(in srgb, ${activeTheme.accentSecondaryHex} 60%, transparent) !important;
-          color: ${activeTheme.accentSecondaryHex} !important;
+          background-color: color-mix(in srgb, ${effectiveSurfaceTheme.accentSecondaryHex} 20%, transparent) !important;
+          border-color: color-mix(in srgb, ${effectiveSurfaceTheme.accentSecondaryHex} 60%, transparent) !important;
+          color: ${effectiveSurfaceTheme.accentSecondaryHex} !important;
         }
         .theme-surface .bg-sky-500\\/20:not(.overlay-hud-preserve *),
         .theme-surface .bg-sky-500\\/15:not(.overlay-hud-preserve *),
         .theme-surface .bg-sky-500\\/10:not(.overlay-hud-preserve *),
         .theme-surface .bg-sky-600\\/25:not(.overlay-hud-preserve *) {
-          background-color: rgba(${activeTheme.overlayHeaderRgb}, 0.20) !important;
+          background-color: rgba(${effectiveSurfaceTheme.overlayHeaderRgb}, 0.20) !important;
         }
         .theme-surface .text-sky-400:not(.overlay-hud-preserve *),
         .theme-surface .text-sky-300:not(.overlay-hud-preserve *),
         .theme-surface .text-sky-200:not(.overlay-hud-preserve *) {
-          color: ${activeTheme.accentHex} !important;
+          color: ${effectiveSurfaceTheme.accentHex} !important;
         }
         .theme-surface .text-amber-300:not(.overlay-hud-preserve *),
         .theme-surface .text-amber-400:not(.overlay-hud-preserve *),
         .theme-surface .text-purple-200:not(.overlay-hud-preserve *),
         .theme-surface .text-purple-300:not(.overlay-hud-preserve *) {
-          color: ${activeTheme.accentSecondaryHex} !important;
+          color: ${effectiveSurfaceTheme.accentSecondaryHex} !important;
         }
         .theme-surface .border-sky-400:not(.overlay-hud-preserve *),
         .theme-surface .border-sky-500:not(.overlay-hud-preserve *),
@@ -7086,136 +7341,144 @@ export default function App() {
         .theme-surface .border-sky-400\\/50:not(.overlay-hud-preserve *),
         .theme-surface .border-sky-500\\/40:not(.overlay-hud-preserve *),
         .theme-surface .border-sky-500\\/30:not(.overlay-hud-preserve *) {
-          border-color: ${activeTheme.accentHex} !important;
+          border-color: ${effectiveSurfaceTheme.accentHex} !important;
         }
         .theme-surface input[type="range"] {
-          accent-color: ${activeTheme.accentHex} !important;
+          accent-color: ${effectiveSurfaceTheme.accentHex} !important;
         }
         ${
-          activeTheme.isLight
+          effectiveSurfaceTheme.isLight
             ? `
-        .theme-surface .text-white:not(.overlay-hud-preserve *),
-        .theme-surface .text-slate-100:not(.overlay-hud-preserve *),
-        .theme-surface .text-slate-200:not(.overlay-hud-preserve *) {
-          color: ${activeTheme.textPrimaryHex} !important;
+        .theme-surface .text-white:not(.overlay-hud-preserve *):not(.bg-sky-500):not(.bg-sky-600):not(.bg-blue-600):not(.bg-emerald-600):not(.bg-indigo-600):not(.bg-purple-500):not(.bg-purple-600):not(.bg-rose-600):not(.bg-red-600):not(.bg-teal-600):not(.bg-cyan-600):not([class*="bg-[#16222a]"]):not([class*="bg-[#2b509c]"]):not([class*="bg-[#9e2275]"]):not([class*="bg-[#3c596b]"] *),
+        .theme-surface .text-slate-100:not(.overlay-hud-preserve *):not([class*="bg-[#3c596b]"] *),
+        .theme-surface .text-slate-200:not(.overlay-hud-preserve *):not([class*="bg-[#3c596b]"] *) {
+          color: ${effectiveSurfaceTheme.textPrimaryHex} !important;
         }
         .theme-surface .text-slate-300:not(.overlay-hud-preserve *),
         .theme-surface .text-slate-400:not(.overlay-hud-preserve *),
         .theme-surface .text-slate-500:not(.overlay-hud-preserve *) {
-          color: ${activeTheme.textSecondaryHex} !important;
+          color: ${effectiveSurfaceTheme.textSecondaryHex} !important;
+        }
+        .theme-surface .text-emerald-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-emerald-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-emerald-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-green-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-green-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-green-400:not(.overlay-hud-preserve *) {
+          color: #047857 !important;
+        }
+        .theme-surface .text-teal-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-teal-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-teal-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-cyan-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-cyan-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-cyan-400:not(.overlay-hud-preserve *) {
+          color: #0F766E !important;
+        }
+        .theme-surface .text-rose-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-rose-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-rose-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-red-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-red-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-red-400:not(.overlay-hud-preserve *) {
+          color: #BE123C !important;
+        }
+        .theme-surface .text-indigo-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-indigo-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-indigo-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-violet-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-violet-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-violet-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-purple-400:not(.overlay-hud-preserve *) {
+          color: #5B21B6 !important;
+        }
+        .theme-surface .text-yellow-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-yellow-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-yellow-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-amber-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-orange-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-orange-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-orange-400:not(.overlay-hud-preserve *) {
+          color: #B45309 !important;
+        }
+        .theme-surface .text-pink-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-pink-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-pink-400:not(.overlay-hud-preserve *),
+        .theme-surface .text-fuchsia-200:not(.overlay-hud-preserve *),
+        .theme-surface .text-fuchsia-300:not(.overlay-hud-preserve *),
+        .theme-surface .text-fuchsia-400:not(.overlay-hud-preserve *) {
+          color: #9D174D !important;
+        }
+        .theme-surface .border-white\\/10:not(.overlay-hud-preserve *),
+        .theme-surface .border-white\\/15:not(.overlay-hud-preserve *),
+        .theme-surface .border-white\\/20:not(.overlay-hud-preserve *),
+        .theme-surface .border-white\\/25:not(.overlay-hud-preserve *) {
+          border-color: ${effectiveSurfaceTheme.borderHex} !important;
+        }
+        .theme-surface .bg-indigo-950\\/40,
+        .theme-surface .bg-indigo-950\\/50,
+        .theme-surface .bg-indigo-950\\/70 {
+          background-color: #EEF2FF !important;
+        }
+        .theme-surface .bg-purple-950\\/30 {
+          background-color: #FAF5FF !important;
+        }
+        .theme-surface .bg-amber-950\\/15,
+        .theme-surface .bg-amber-950 {
+          background-color: #FEF3C7 !important;
+        }
+        .theme-surface .bg-emerald-950\\/25,
+        .theme-surface .bg-emerald-950 {
+          background-color: #D1FAE5 !important;
+        }
+        .theme-surface .bg-rose-950\\/25,
+        .theme-surface .bg-rose-950 {
+          background-color: #FFE4E6 !important;
+        }
+        .theme-surface .bg-black\\/30:not(.fixed),
+        .theme-surface .bg-black\\/40:not(.fixed),
+        .theme-surface .bg-black\\/50:not(.fixed),
+        .theme-surface .bg-black\\/60:not(.fixed) {
+          background-color: color-mix(in srgb, ${effectiveSurfaceTheme.cardAltHex} 88%, transparent) !important;
+        }
+        .theme-surface .bg-indigo-600,
+        .theme-surface .bg-purple-500,
+        .theme-surface .bg-purple-600,
+        .theme-surface .bg-rose-600,
+        .theme-surface .bg-red-600,
+        .theme-surface .bg-teal-600,
+        .theme-surface .bg-cyan-600 {
+          color: #FFFFFF !important;
+        }
+        .theme-surface .bg-amber-500,
+        .theme-surface .bg-amber-400 {
+          color: #050810 !important;
+        }
+        .theme-surface select,
+        .theme-surface input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+        .theme-surface textarea {
+          background-color: ${effectiveSurfaceTheme.cardAltHex} !important;
+          color: ${effectiveSurfaceTheme.textPrimaryHex} !important;
+          border-color: ${effectiveSurfaceTheme.borderHex} !important;
+        }
+        .theme-surface option {
+          background-color: ${effectiveSurfaceTheme.cardHex};
+          color: ${effectiveSurfaceTheme.textPrimaryHex};
         }
         `
             : ''
         }
       `}</style>
+      )}
 
-      {/* Centered Non-Interactive Background Emblem Watermark (Dialga / Instinct / Mystic / Valor / Sylveon) */}
-      {showThemeWatermark && activeTheme.emblemType !== 'none' && (
+      {/* Centered Non-Interactive Transparent-HUD Watermark (App View Only) */}
+      {siteView !== 'marketing' && showThemeWatermark && (
         <div
           className="fixed inset-0 pointer-events-none flex items-center justify-center z-0 overflow-hidden"
           style={{ opacity: activeTheme.watermarkAlpha }}
           aria-hidden="true"
         >
-          {activeTheme.emblemType === 'dialga' && (
-            <svg viewBox="0 0 240 240" className="w-[440px] h-[440px]">
-              <path
-                fill="none"
-                stroke="#2DD4BF"
-                strokeWidth="4"
-                d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z"
-              />
-              <path
-                fill="none"
-                stroke="#FACC15"
-                strokeWidth="5"
-                d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z"
-              />
-              <path
-                fill="#FACC15"
-                d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z"
-              />
-              <path
-                fill="#14B8A6"
-                stroke="#67E8F9"
-                strokeWidth="3"
-                d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z"
-              />
-              <path
-                fill="#081224"
-                stroke="#FACC15"
-                strokeWidth="4"
-                d="M120,84 L152,120 L120,156 L88,120 Z"
-              />
-              <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
-            </svg>
-          )}
-          {activeTheme.emblemType === 'instinct' && (
-            <svg viewBox="0 0 240 240" className="w-[420px] h-[420px]">
-              <path fill="#FACC15" d="M120,8 L224,120 L120,232 L16,120 Z M120,24 L32,120 L120,216 L208,120 Z" />
-              <path fill="#F59E0B" d="M120,38 L196,120 L120,202 L44,120 Z M120,50 L56,120 L120,190 L184,120 Z" />
-              <path
-                fill="#FACC15"
-                d="M120,44 L132,78 L168,52 L152,92 L206,72 L168,114 L218,110 L166,138 L198,162 L148,154 L164,192 L128,166 L120,212 L112,166 L76,192 L92,154 L42,162 L74,138 L22,110 L72,114 L34,72 L88,92 L72,52 L108,78 Z"
-              />
-            </svg>
-          )}
-          {activeTheme.emblemType === 'mystic' && (
-            <svg viewBox="0 0 240 240" className="w-[420px] h-[420px]">
-              <path
-                fill="#3B82F6"
-                d="M120,10 L208,58 L208,162 L120,230 L32,162 L32,58 Z M120,26 L46,66 L46,154 L120,212 L194,154 L194,66 Z"
-              />
-              <path fill="#38BDF8" d="M120,36 L146,84 L120,132 L94,84 Z" />
-              <path
-                fill="#3B82F6"
-                d="M120,56 L134,82 L192,62 L164,112 L202,122 L152,144 L168,176 L132,160 L120,222 L108,160 L72,176 L88,144 L38,122 L76,112 L48,62 L106,82 Z"
-              />
-            </svg>
-          )}
-          {activeTheme.emblemType === 'valor' && (
-            <svg viewBox="0 0 240 240" className="w-[420px] h-[420px]">
-              <path
-                fill="#EF4444"
-                d="M120,12 C168,46 212,92 212,144 C212,190 172,226 120,232 C68,226 28,190 28,144 C28,92 72,46 120,12 Z M120,32 C82,62 46,100 46,144 C46,180 78,210 120,216 C162,210 194,180 194,144 C194,100 158,62 120,32 Z"
-              />
-              <path
-                fill="#F97316"
-                d="M120,42 L134,68 L156,52 L148,86 L198,64 L172,108 L206,102 L168,136 L192,158 L148,154 L162,188 L128,170 L120,214 L112,170 L78,188 L92,154 L48,158 L72,136 L34,102 L68,108 L42,64 L92,86 L84,52 L106,68 Z"
-              />
-            </svg>
-          )}
-          {activeTheme.emblemType === 'sylveon' && (
-            <svg viewBox="0 0 240 240" className="w-[420px] h-[420px]">
-              <path
-                fill="#EC4899"
-                d="M120,20 C175,20 220,65 220,120 C220,175 175,220 120,220 C65,220 20,175 20,120 C20,65 65,20 120,20 Z M120,32 C71,32 32,71 32,120 C32,169 71,208 120,208 C169,208 208,169 208,120 C208,71 169,32 120,32 Z"
-              />
-              <path
-                fill="#38BDF8"
-                d="M96,126 C76,154 48,176 26,198 L44,206 C66,186 90,164 108,138 Z M144,126 C164,154 192,176 214,198 L196,206 C174,186 150,164 132,138 Z"
-              />
-              <path
-                fill="#EC4899"
-                d="M104,132 C88,164 68,192 52,218 L70,222 C84,196 102,168 116,138 Z M136,132 C152,164 172,192 188,218 L170,222 C156,196 138,168 124,138 Z"
-              />
-              <path
-                fill="#EC4899"
-                d="M112,108 C84,72 42,66 30,92 C18,118 48,148 112,124 Z M128,108 C156,72 198,66 210,92 C222,118 192,148 128,124 Z"
-              />
-              <path
-                fill="#38BDF8"
-                d="M106,112 C86,88 56,84 48,100 C40,116 62,134 106,120 Z M134,112 C154,88 184,84 192,100 C200,116 178,134 134,120 Z"
-              />
-              <path
-                fill="#F472B6"
-                d="M120,96 C133,96 144,107 144,120 C144,133 133,144 120,144 C107,144 96,133 96,120 C96,107 107,96 120,96 Z"
-              />
-              <path
-                fill="#38BDF8"
-                d="M120,28 L126,46 L144,52 L126,58 L120,76 L114,58 L96,52 L114,46 Z M56,36 L60,48 L72,52 L60,56 L56,68 L52,56 L40,52 L52,48 Z M184,36 L188,48 L200,52 L188,56 L184,68 L180,56 L168,52 L180,48 Z"
-              />
-            </svg>
-          )}
+          {renderThemeWatermarkSvg(activeTheme.id, 'w-[460px] h-[460px] max-w-[90vw] max-h-[90vh]')}
         </div>
       )}
 
@@ -7242,6 +7505,30 @@ export default function App() {
           webScreenName={webScreenName}
           onChangeWebScreenName={setWebScreenName}
           webMembershipTier={webMembershipTier}
+          activeTheme={marketingTheme}
+          showThemeWatermark={isWebSignedIn ? showThemeWatermark : true}
+          isSignedIn={isWebSignedIn}
+          onApplySyncedTheme={(tid, wm) => {
+            const norm = normalizeAppThemeId(tid);
+            setAppThemeId(norm);
+            try {
+              localStorage.setItem('gbl_app_theme_id', norm);
+            } catch {}
+            if (typeof wm === 'boolean') {
+              setShowThemeWatermark(wm);
+              try {
+                localStorage.setItem('gbl_show_theme_watermark', String(wm));
+              } catch {}
+            }
+          }}
+          onVaultLogout={() => {
+            setWebSessionToken('');
+            clearSharedThemeCookies();
+          }}
+          onVaultSessionRestored={(sn, tok) => {
+            if (sn) setWebScreenName(sn);
+            if (tok) setWebSessionToken(tok);
+          }}
         />
       ) : (
         <>
@@ -7274,7 +7561,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.77 • Android Native Overlay
+                  v7.80 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -15146,7 +15433,7 @@ export default function App() {
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-white">
-                    Select Theme (Default, 2 AMOLED, 6 Pokémon GO Team Dark/Light, Sylveon Light)
+                    Select Theme (11 Curated WCAG-AA Themes • Syncs Across All Devices)
                   </label>
                   <span className="text-[11px] font-mono font-bold" style={{ color: activeTheme.accentHex }}>
                     {activeTheme.name}
@@ -15170,10 +15457,10 @@ export default function App() {
               <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <div>
                   <span className="text-xs font-bold text-white block">
-                    Show Background Emblem Watermark (Instinct / Mystic / Valor / Sylveon)
+                    Show Transparent HUD Emblem Watermark
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    Displays a subtle vector team crest or Sylveon fairy ribbon watermark behind the main app when a Team or Sylveon theme is active.
+                    Displays a translucent tactical HUD reticle &amp; theme crest watermark (including the Duel Scope multi-logo overlay emblem) behind semi-transparent app cards.
                   </span>
                 </div>
                 <button
@@ -16860,6 +17147,8 @@ export default function App() {
                       const shouldPushUserSettings = localSettingsUpdAt > lastPushedSettingsMs;
                       const outgoingUserSettings = shouldPushUserSettings
                         ? {
+                            'S:gbl_app_theme_id': appThemeId,
+                            'B:gbl_show_theme_watermark': showThemeWatermark ? 'true' : 'false',
                             [`S:${CURRENT_USER_ELO_STORAGE_KEY}`]:
                               currentUserElo !== null ? String(currentUserElo) : ''
                           }
@@ -17058,6 +17347,7 @@ export default function App() {
                             ? (syncJson.userSettings as Record<string, string>)
                             : null;
                         const pulledSettingsUpdAt = Number(syncJson?.settingsUpdatedAt) || 0;
+                        applyPulledD1ThemeSettings(pulledUserSettings, pulledSettingsUpdAt, false);
                         if (
                           pulledUserSettings &&
                           Object.prototype.hasOwnProperty.call(
@@ -19278,12 +19568,12 @@ export default function App() {
                         borderColor: activeTheme.accentHex
                       }}
                     >
-                      {showThemeWatermark && activeTheme.emblemType !== 'none' && (
+                      {showThemeWatermark && (
                         <div
                           className="absolute inset-0 pointer-events-none flex items-center justify-center z-0"
-                          style={{ opacity: activeTheme.isLight ? 0.24 : 0.20 }}
+                          style={{ opacity: activeTheme.watermarkAlpha }}
                         >
-                          {renderThemeOverlayIcon(activeTheme.id, 260)}
+                          {renderThemeWatermarkSvg(activeTheme.id, 'w-[260px] h-[260px]')}
                         </div>
                       )}
                       <div className="relative z-10 flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2 flex-wrap">
@@ -19350,9 +19640,9 @@ export default function App() {
 
                       {/* Interactive Overlay HUD Replica */}
                       <div
-                        className="relative z-10 rounded-xl border p-3 space-y-2.5 text-xs"
+                        className="overlay-hud-preserve relative z-10 rounded-xl border p-3 space-y-2.5 text-xs"
                         style={{
-                          backgroundColor: `rgba(${activeTheme.overlayBgRgb}, ${showThemeWatermark && activeTheme.emblemType !== 'none' ? 0.62 : 0.85})`,
+                          backgroundColor: `rgba(${activeTheme.overlayBgRgb}, ${showThemeWatermark ? 0.62 : 0.85})`,
                           borderColor: activeTheme.accentHex
                         }}
                       >
@@ -20282,14 +20572,14 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.77 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.80 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
 
       {/* v7.13 Membership Tiers, Unlock Key Verification & Stripe / Buy Me a Coffee Modal */}
       {showMembershipModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="theme-surface fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl max-w-3xl w-full p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div>

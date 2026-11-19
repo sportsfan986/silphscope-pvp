@@ -2,30 +2,45 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="320dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
+    android:viewportWidth="240"
+    android:viewportHeight="240">
 
-    <!-- Outer Valor Flame-Crest Circle & Shield -->
+    <!-- Transparent HUD Reticle Frame -->
     <path
-        android:fillColor="#1AF43F5E"
-        android:strokeColor="#F43F5E"
-        android:strokeWidth="4.5"
-        android:pathData="M100,10 L168,44 L184,112 L144,174 L100,192 L56,174 L16,112 L32,44 Z" />
-
-    <!-- Inner Blazing Ring -->
+        android:fillColor="#0DFB7185"
+        android:strokeColor="#38FB7185"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#FB7185"
-        android:strokeWidth="2.5"
-        android:pathData="M100,26 L154,54 L166,108 L134,158 L100,174 L66,158 L34,108 L46,54 Z" />
-
-    <!-- Moltres Fiery Plume Crown & Rising Phoenix Wings -->
+        android:strokeColor="#78FB7185"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
     <path
-        android:fillColor="#F43F5E"
-        android:pathData="M100,18 L112,44 L126,28 L120,56 L170,38 L156,74 L182,68 L152,102 L172,108 L136,126 L146,148 L114,142 L120,170 L100,184 L80,170 L86,142 L54,148 L64,126 L28,108 L48,102 L18,68 L44,74 L30,38 L80,56 L74,28 L88,44 Z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFBBF24"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
 
-    <!-- Inner Flame Core Accent -->
-    <path
-        android:fillColor="#FDE047"
-        android:pathData="M100,54 L118,88 L108,88 L116,122 L100,152 L84,122 L92,88 L82,88 Z" />
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.9" android:scaleY="0.9">
+        <path
+            android:fillColor="#1AFB7185"
+            android:strokeColor="#FB7185"
+            android:strokeWidth="4.5"
+            android:pathData="M100,10 L168,44 L184,112 L144,174 L100,192 L56,174 L16,112 L32,44 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FB7185"
+            android:strokeWidth="2.5"
+            android:pathData="M100,26 L154,54 L166,108 L134,158 L100,174 L66,158 L34,108 L46,54 Z" />
+        <path
+            android:fillColor="#F43F5E"
+            android:pathData="M100,18 L112,44 L126,28 L120,56 L170,38 L156,74 L182,68 L152,102 L172,108 L136,126 L146,148 L114,142 L120,170 L100,184 L80,170 L86,142 L54,148 L64,126 L28,108 L48,102 L18,68 L44,74 L30,38 L80,56 L74,28 L88,44 Z" />
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M100,54 L118,88 L108,88 L116,122 L100,152 L84,122 L92,88 L82,88 Z" />
+    </group>
 </vector>

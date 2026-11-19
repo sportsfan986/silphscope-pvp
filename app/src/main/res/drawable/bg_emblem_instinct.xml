@@ -2,30 +2,45 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="320dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
+    android:viewportWidth="240"
+    android:viewportHeight="240">
 
-    <!-- Outer Spiky Electric Diamond Frame -->
+    <!-- Transparent HUD Reticle Frame -->
+    <path
+        android:fillColor="#0DFACC15"
+        android:strokeColor="#38FACC15"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#FACC15"
-        android:strokeWidth="4.5"
-        android:pathData="M100,6 L132,48 L174,26 L152,68 L194,100 L152,132 L174,174 L132,152 L100,194 L68,152 L26,174 L48,132 L6,100 L48,68 L26,26 L68,48 Z" />
-
-    <!-- Inner Geometric Diamond Ring -->
+        android:strokeColor="#78FACC15"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
     <path
-        android:fillColor="#1AFACC15"
-        android:strokeColor="#EAB308"
-        android:strokeWidth="2.5"
-        android:pathData="M100,22 L162,100 L100,178 L38,100 Z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#4D38BDF8"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
 
-    <!-- Zapdos Jagged Lightning Wings & Tail -->
-    <path
-        android:fillColor="#FACC15"
-        android:pathData="M100,52 L110,34 L108,58 L138,38 L126,68 L168,50 L142,84 L184,74 L146,102 L172,108 L134,118 L150,134 L118,128 L126,158 L106,140 L100,174 L94,140 L74,158 L82,128 L50,134 L66,118 L28,108 L54,102 L16,74 L58,84 L32,50 L74,68 L62,38 L92,58 L90,34 Z" />
-
-    <!-- Central High-Voltage Lightning Bolt Cutout Accent -->
-    <path
-        android:fillColor="#FEF08A"
-        android:pathData="M105,40 L84,96 L104,96 L92,154 L122,90 L101,90 Z" />
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.9" android:scaleY="0.9">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FACC15"
+            android:strokeWidth="4.5"
+            android:pathData="M100,6 L132,48 L174,26 L152,68 L194,100 L152,132 L174,174 L132,152 L100,194 L68,152 L26,174 L48,132 L6,100 L48,68 L26,26 L68,48 Z" />
+        <path
+            android:fillColor="#1AFACC15"
+            android:strokeColor="#EAB308"
+            android:strokeWidth="2.5"
+            android:pathData="M100,22 L162,100 L100,178 L38,100 Z" />
+        <path
+            android:fillColor="#FACC15"
+            android:pathData="M100,52 L110,34 L108,58 L138,38 L126,68 L168,50 L142,84 L184,74 L146,102 L172,108 L134,118 L150,134 L118,128 L126,158 L106,140 L100,174 L94,140 L74,158 L82,128 L50,134 L66,118 L28,108 L54,102 L16,74 L58,84 L32,50 L74,68 L62,38 L92,58 L90,34 Z" />
+        <path
+            android:fillColor="#FEF08A"
+            android:pathData="M105,40 L84,96 L104,96 L92,154 L122,90 L101,90 Z" />
+    </group>
 </vector>

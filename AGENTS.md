@@ -1,7 +1,7 @@
 # AGENTS.md — SilphScope PvP Workspace Rules
 
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.77` (`versionCode = 1777`)  
+> **Current Version**: `v7.80` (`versionCode = 1780`)  
 > **Domains**: `silphscopepvp.com` (Web/Sim) • `dvr.silphscopepvp.com` (Cloud Vault & `/watch/:shareId`) • `api.silphscopepvp.com` (Worker API) • `dl.silphscopepvp.com` (APK)
 
 ---
@@ -51,7 +51,7 @@
 - **HUD Controls, Theme & Clean League Labels**:
   - Preserve `#btn-minimize-sword` single-tap (`Full HUD` ↔ `Compact HUD`), 2.0s hold (**Log-Only Stealth Mode**), and post-battle `📊 Battle Log` button in `overlay.html`.
   - Keep league/cup labels CP-suffix-free (`Great League`/`Great`/`GL`, `Ultra League`/`Ultra`/`UL`, `Master League`/`Master`/`ML`).
-  - Keep `Shiny Origin Dialga Midnight` as the default theme everywhere, and **never** include internal theme codenames (e.g., `"Origin Dialga Edition"`) in public marketing header banners.
+  - Keep `Duel Scope Midnight Black` (`duel_scope_midnight`) as the default theme everywhere (keeping `dialga_shiny_midnight` selectable), and **never** include internal theme codenames (e.g., `"Origin Dialga Edition"` or `"Duel Scope Edition"`) in public marketing header banners.
 - **Cloudflare Worker Escaping & CSP (`worker.mjs`)**:
   - Inside JS template literals (`` `...` ``) in `renderWatchSharePage` / `renderVaultDashboardPage`, **always double-escape regex backslashes** (`\\s+`, `\\*`, `\\r?\\n` — single `/\*/g` renders as `/*/g` block comments and breaks `/watch/:shareId`) and use `safeJsonForScript()`.
   - Attach `DEFAULT_CSP_HEADER` only when `isHtml === true`, preserving PvPoke/GitHub/Google Sheets `connect-src` and `*.silphscopepvp.com` `frame-src`/`frame-ancestors`.

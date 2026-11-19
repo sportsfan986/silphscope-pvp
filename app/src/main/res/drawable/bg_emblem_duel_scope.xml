@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="320dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- Transparent HUD Glass Lens & Outer Tactical Reticle -->
+    <path
+        android:fillColor="#0D38BDF8"
+        android:strokeColor="#3838BDF8"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3838BDF8"
+        android:strokeWidth="1.2"
+        android:pathData="M27,120 A93,93 0 1,0 213,120 A93,93 0 1,0 27,120 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2BFACC15"
+        android:strokeWidth="1.2"
+        android:pathData="M42,120 A78,78 0 1,0 198,120 A78,78 0 1,0 42,120 Z" />
+
+    <!-- Transparent HUD Viewfinder Corner Brackets & Crosshair Ticks -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7838BDF8"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFACC15"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,14 M120,226 L120,236 M4,120 L14,120 M226,120 L236,120" />
+
+    <!-- Orbital Constellation: 10 Sibling Theme Badges (r = 93 around 120,120) -->
+    <!-- 12:00 Origin Dialga Diamond -->
+    <group android:translateX="120" android:translateY="27">
+        <path android:fillColor="#D1050B16" android:strokeColor="#B32DD4BF" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#2DD4BF" android:strokeColor="#FACC15" android:strokeWidth="1.2" android:pathData="M0,-7 L6,0 L0,7 L-6,0 Z" />
+    </group>
+    <!-- 1:12 Shiny Umbreon Lunar Ring -->
+    <group android:translateX="174.7" android:translateY="44.8">
+        <path android:fillColor="#D1000000" android:strokeColor="#B338BDF8" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#00000000" android:strokeColor="#38BDF8" android:strokeWidth="2.1" android:pathData="M-5.5,0 A5.5,5.5 0 1,0 5.5,0 A5.5,5.5 0 1,0 -5.5,0 Z" />
+        <path android:fillColor="#FB7185" android:pathData="M-1.8,0 A1.8,1.8 0 1,0 1.8,0 A1.8,1.8 0 1,0 -1.8,0 Z" />
+    </group>
+    <!-- 2:24 Giratina Distortion Wing -->
+    <group android:translateX="208.4" android:translateY="91.3">
+        <path android:fillColor="#D109050B" android:strokeColor="#B3FB7185" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#FB7185" android:pathData="M-6,-4 L0,-1 L6,-4 L4,5 L0,2 L-4,5 Z" />
+        <path android:fillColor="#FBBF24" android:pathData="M0,-6 L2.5,-2 L0,2 L-2.5,-2 Z" />
+    </group>
+    <!-- 3:36 Shadow Mewtwo Violet Helix -->
+    <group android:translateX="208.4" android:translateY="148.7">
+        <path android:fillColor="#D1080510" android:strokeColor="#B3C084FC" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#00000000" android:strokeColor="#C084FC" android:strokeWidth="2.2" android:pathData="M-5,4 C-6,-4 0,-7 0,-7 C0,-7 6,-4 5,4" />
+        <path android:fillColor="#38BDF8" android:pathData="M-2.6,0 A2.6,2.6 0 1,0 2.6,0 A2.6,2.6 0 1,0 -2.6,0 Z" />
+    </group>
+    <!-- 4:48 Shiny Rayquaza Delta -->
+    <group android:translateX="174.7" android:translateY="195.2">
+        <path android:fillColor="#D1030A07" android:strokeColor="#B334D399" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#00000000" android:strokeColor="#34D399" android:strokeWidth="2" android:strokeLineJoin="round" android:pathData="M0,-6.5 L6.5,5.5 L-6.5,5.5 Z" />
+        <path android:fillColor="#FACC15" android:pathData="M-2,1.5 A2,2 0 1,0 2,1.5 A2,2 0 1,0 -2,1.5 Z" />
+    </group>
+    <!-- 6:00 Mimikyu Disguise Mask -->
+    <group android:translateX="120" android:translateY="213">
+        <path android:fillColor="#D10B0908" android:strokeColor="#B3FDE047" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#FDE047" android:pathData="M-4,-1 L-6,-7 L-1,-3 L1,-3 L6,-7 L4,-1 L5,6 L-5,6 Z" />
+        <path android:fillColor="#0B0908" android:pathData="M-3,1.5 A1,1 0 1,0 -1,1.5 A1,1 0 1,0 -3,1.5 Z M1,1.5 A1,1 0 1,0 3,1.5 A1,1 0 1,0 1,1.5 Z" />
+    </group>
+    <!-- 7:12 Team Instinct Lightning -->
+    <group android:translateX="65.3" android:translateY="195.2">
+        <path android:fillColor="#D10F0D06" android:strokeColor="#B3FACC15" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#FACC15" android:pathData="M1,-7 L-4,1 L0,1 L-1,7 L4,-1 L0,-1 Z" />
+    </group>
+    <!-- 8:24 Team Valor Flame -->
+    <group android:translateX="31.6" android:translateY="148.7">
+        <path android:fillColor="#D1160709" android:strokeColor="#B3FB7185" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#FB7185" android:pathData="M0,-7 C4,-3 5,2 0,7 C-5,2 -4,-3 0,-7 Z" />
+        <path android:fillColor="#FBBF24" android:pathData="M-2,2 A2,2 0 1,0 2,2 A2,2 0 1,0 -2,2 Z" />
+    </group>
+    <!-- 9:36 Team Mystic Frost Hex -->
+    <group android:translateX="31.6" android:translateY="91.3">
+        <path android:fillColor="#D1060D1A" android:strokeColor="#B338BDF8" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#00000000" android:strokeColor="#38BDF8" android:strokeWidth="2" android:pathData="M0,-6.5 L5.5,-3 L5.5,3 L0,6.5 L-5.5,3 L-5.5,-3 Z" />
+        <path android:fillColor="#6D28D9" android:pathData="M-2.2,0 A2.2,2.2 0 1,0 2.2,0 A2.2,2.2 0 1,0 -2.2,0 Z" />
+    </group>
+    <!-- 10:48 Sylveon Ribbon Bow -->
+    <group android:translateX="65.3" android:translateY="44.8">
+        <path android:fillColor="#D11B0B16" android:strokeColor="#B3F472B6" android:strokeWidth="1.2" android:pathData="M-11.5,0 A11.5,11.5 0 1,0 11.5,0 A11.5,11.5 0 1,0 -11.5,0 Z" />
+        <path android:fillColor="#EC4899" android:pathData="M0,0 L-6,-4 L-6,4 Z M0,0 L6,-4 L6,4 Z" />
+        <path android:fillColor="#38BDF8" android:pathData="M-2.2,0 A2.2,2.2 0 1,0 2.2,0 A2.2,2.2 0 1,0 -2.2,0 Z" />
+    </group>
+
+    <!-- Centerpiece: 2B Duel Scope Emblem (1.2037x scale centered at 120,120) -->
+    <group android:translateX="55" android:translateY="55" android:scaleX="1.2037" android:scaleY="1.2037">
+        <path android:fillColor="#0B1526" android:strokeColor="#1E293B" android:strokeWidth="2" android:pathData="M18,54 A36,36 0 1,0 90,54 A36,36 0 1,0 18,54 Z" />
+        <path android:fillColor="#00000000" android:strokeColor="#38BDF8" android:strokeWidth="6.2" android:strokeLineCap="round" android:pathData="M33,83.3 A36,36 0 0,1 38,21.8" />
+        <path android:fillColor="#00000000" android:strokeColor="#F97316" android:strokeWidth="6.2" android:strokeLineCap="round" android:pathData="M70,21.8 A36,36 0 0,1 77.5,81" />
+        <path android:fillColor="#00000000" android:strokeColor="#FACC15" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M47,14 L61,25 M61,14 L47,25" />
+        <path android:fillColor="#FEF08A" android:pathData="M52.4,19.5 A1.6,1.6 0 1,0 55.6,19.5 A1.6,1.6 0 1,0 52.4,19.5 Z" />
+        <path android:fillColor="#38BDF8" android:pathData="M37.9,19.5 A2.6,2.6 0 1,0 43.1,19.5 A2.6,2.6 0 1,0 37.9,19.5 Z" />
+        <path android:fillColor="#EF4444" android:pathData="M64.9,19.5 A2.6,2.6 0 1,0 70.1,19.5 A2.6,2.6 0 1,0 64.9,19.5 Z" />
+        <!-- 3x3 Tactical Matrix -->
+        <path android:fillColor="#22C55E" android:pathData="M37.6,37.6 H46.8 V46.8 H37.6 Z M49.4,37.6 H58.6 V46.8 H49.4 Z M37.6,49.4 H46.8 V58.6 H37.6 Z" />
+        <path android:fillColor="#EF4444" android:pathData="M61.2,37.6 H70.4 V46.8 H61.2 Z M49.4,49.4 H58.6 V58.6 H49.4 Z M61.2,49.4 H70.4 V58.6 H61.2 Z" />
+        <path android:fillColor="#38BDF8" android:pathData="M37.6,61.2 H46.8 V70.4 H37.6 Z" />
+        <path android:fillColor="#475569" android:pathData="M49.4,61.2 H58.6 V70.4 H49.4 Z M61.2,61.2 H70.4 V70.4 H61.2 Z" />
+        <!-- Bottom Shield + Pokeball Tag -->
+        <path android:fillColor="#0E2038" android:strokeColor="#38BDF8" android:strokeWidth="1.6" android:strokeLineJoin="round" android:pathData="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" />
+        <path android:fillColor="#DC2626" android:strokeColor="#FCA5A5" android:strokeWidth="1.8" android:pathData="M69.9,80.5 A6.6,6.6 0 1,0 83.1,80.5 A6.6,6.6 0 1,0 69.9,80.5 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M74.3,80.5 A2.2,2.2 0 1,0 78.7,80.5 A2.2,2.2 0 1,0 74.3,80.5 Z" />
+    </group>
+</vector>

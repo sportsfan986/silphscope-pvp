@@ -2,6 +2,16 @@
 
 ---
 
+## v7.80 (2026-11-19) — Duel Scope Midnight Black Default, 11-Theme WCAG AA+ Suite & Cross-Platform Cloud Sync
+*Roadmap milestone release (`v7.80`, `versionCode = 1780`) promoting the unified **Duel Scope Midnight Black** theme derived from the `2B Duel Scope` emblem across all 5 surfaces, auditing and consolidating every retained palette to WCAG 2.1 AA+ contrast, adding 5 new PvP OLED themes with translucent HUD reticle & 10-theme constellation watermarks, and syncing user theme/watermark choices via Cloudflare D1 & cross-subdomain cookies.*
+
+- **Duel Scope Midnight Black Universal Default (`AppThemeAndModels.tsx`, `MainActivity.kt`, `OverlayService.kt`, `overlay.html`, `worker.mjs`)**: Promoted `duel_scope_midnight` (`#050810` / `#0B1526` + Cyan `#38BDF8` + Gold `#FACC15`) as the default theme across Android, Live Floating HUD, Web Simulator, Marketing Website, and Cloudflare DVR Vault/Watch (`dialga_shiny_midnight` stays selectable), keeping anonymous/first-load public visitors on the clean default with zero internal theme codenames in public banners or Vault titles.
+- **Transparent-HUD Watermarks & Constellation Crest (`bg_emblem_*.xml`, `AppThemeAndModels.tsx`, `overlay.html`, `worker.mjs`)**: Upgraded all 11 theme emblems with translucent HUD viewfinder corner brackets & scope rings, and crafted the central `2B Duel Scope` constellation watermark surrounded by miniature crests from all 10 sibling themes.
+- **11-Theme WCAG AA+ Audit, Pruning & 5 New PvP Themes (`MainActivity.kt`, `App.tsx`, `MarketingWebsite.tsx`, `TaskerIntegration.kt`)**: Added *Shiny Umbreon OLED*, *Giratina Distortion Void*, *Shadow Mewtwo Violet*, *Shiny Rayquaza Obsidian*, and *Mimikyu Twilight*; pruned redundant palettes (`slate`, `instinct_light`, `valor_light`, `mystic_dark`, legacy `amoled_*`, `sylveon_light`) with automatic migration; fixed `mystic_light`, `sylveon_pink`, Android dynamic `contrastingInkColor(...)` buttons/toggles/Meta/IV Lab contrast, and Cloudflare Vault/Watch light-mode cards/pills.
+- **Cross-Platform Persistence via Cloudflare D1 (`App.tsx`, `MarketingWebsite.tsx`, `MainActivity.kt`, `OverlayService.kt`, `worker.mjs`)**: Synced `S:gbl_app_theme_id` and `B:gbl_show_theme_watermark` bi-directionally across Android/HUD, Web Simulator, Marketing site, and Cloudflare `/vault` + `/watch/:shareId` via Cloudflare D1 `userSettings`, `/v1/replays/list`, and `.silphscopepvp.com` cookies (`sspvp_theme`, `sspvp_watermark`) with clean logout revert.
+
+---
+
 ## v7.77 (2026-11-19) — Replay-First & Auto-Logger Website Rebrand + Natural Transparency Copy
 
 - **Replay-First & Auto-Logger Landing Hierarchy (`MarketingWebsite.tsx`, `index.html`, `manifest.json`, `manifest.webmanifest`, `worker.mjs`)**: Reordered `silphscopepvp.com` and `dl.silphscopepvp.com` around **1. Hardware Battle DVR & Zero-Typing Auto-Logging** (promoting the `@Featured` Interactive Browser Replay Theater alongside **Log-Only Stealth Mode** and calm Read-Only Screen-Capture architecture right below the Hero), **2. ELO-Adaptive Meta & Anti-Meta Team Builder + Free 1-Click GOBattleLog Export**, and **3. Optional Real-Time Tactical Data (3 Opt-In Modes: Log-Only Stealth, Compact Reference Default, Full Practice HUD)**.

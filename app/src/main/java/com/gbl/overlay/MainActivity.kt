@@ -245,6 +245,15 @@ class MainActivity : AppCompatActivity() {
     private var lastResumeCloudSyncMs: Long = 0L
     private var currentActivePage: String = "teams"
     private var isUpdatingThemeSpinner = false
+    private var isUpdatingThemeWatermarkSwitch = false
+
+    private fun contrastingInkColor(bgColor: Int): Int {
+        return if (androidx.core.graphics.ColorUtils.calculateLuminance(bgColor) > 0.179) {
+            0xFF050810.toInt()
+        } else {
+            0xFFFFFFFF.toInt()
+        }
+    }
     private var selectedMetaTabScope: String = "SEASON"
     private var isMetaSettingsDrawerExpanded: Boolean = false
     private var isUpdatingMetaLeagueSpinner: Boolean = false
@@ -266,12 +275,31 @@ class MainActivity : AppCompatActivity() {
     private val APP_THEME_COLLECTION: List<AppThemePalette> by lazy {
         listOf(
             AppThemePalette(
+                id = "duel_scope_midnight",
+                label = "⚔️ Duel Scope Midnight Black (Default)",
+                description = "Universal Default • True OLED Midnight (#050810) with Left Duel Arc Cyan (#38BDF8), Solar Gold (#FACC15) & Constellation Watermark",
+                isLight = false,
+                bgColor = 0xFF050810.toInt(),
+                navBarColor = 0xFF03050B.toInt(),
+                surfaceColor = 0xFF0B1526.toInt(),
+                innerCardColor = 0xFF070D19.toInt(),
+                elevatedColor = 0xFF1E293B.toInt(),
+                primaryTextColor = 0xFFF8FAFC.toInt(),
+                secondaryTextColor = 0xFF94A3B8.toInt(),
+                accentColor = 0xFF38BDF8.toInt(),
+                secondaryAccentColor = 0xFFFACC15.toInt(),
+                buttonAccentColor = 0xFF38BDF8.toInt(),
+                secondaryButtonColor = 0xFF1E293B.toInt(),
+                overlayBorderColor = 0xFF38BDF8.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_duel_scope
+            ),
+            AppThemePalette(
                 id = "dialga_shiny_midnight",
                 label = "✨ Shiny Origin Dialga Midnight (Dark)",
-                description = "Shiny Origin Dialga Midnight ✨ — Deep temporal void with luminous shiny teal (#2DD4BF) & astral ring gold (#FACC15) accents.",
+                description = "Shiny Origin Forme Dialga ✨ • Deep temporal void (#050B16) with Luminous Teal (#2DD4BF), Astral Gold (#FACC15) & Origin HUD Reticle",
                 isLight = false,
                 bgColor = 0xFF050B16.toInt(),
-                navBarColor = 0xFF02060D.toInt(),
+                navBarColor = 0xFF030812.toInt(),
                 surfaceColor = 0xFF0E1B2E.toInt(),
                 innerCardColor = 0xFF081120.toInt(),
                 elevatedColor = 0xFF19304E.toInt(),
@@ -279,162 +307,181 @@ class MainActivity : AppCompatActivity() {
                 secondaryTextColor = 0xFF99F6E4.toInt(),
                 accentColor = 0xFF2DD4BF.toInt(),
                 secondaryAccentColor = 0xFFFACC15.toInt(),
-                buttonAccentColor = 0xFF0D9488.toInt(),
-                secondaryButtonColor = 0xFFCA8A04.toInt(),
+                buttonAccentColor = 0xFF2DD4BF.toInt(),
+                secondaryButtonColor = 0xFF19304E.toInt(),
                 overlayBorderColor = 0xFF2DD4BF.toInt(),
                 emblemDrawableRes = R.drawable.bg_emblem_dialga
             ),
             AppThemePalette(
+                id = "umbreon_shiny_oled",
+                label = "🌙 Shiny Umbreon OLED (Dark)",
+                description = "Pure #000000 OLED Black with Shiny Umbreon Electric-Cyan Rings (#38BDF8), Crimson Highlights (#FB7185) & Lunar HUD Reticle",
+                isLight = false,
+                bgColor = 0xFF000000.toInt(),
+                navBarColor = 0xFF000000.toInt(),
+                surfaceColor = 0xFF0A0F1A.toInt(),
+                innerCardColor = 0xFF05080F.toInt(),
+                elevatedColor = 0xFF1B2A41.toInt(),
+                primaryTextColor = 0xFFF1F5F9.toInt(),
+                secondaryTextColor = 0xFF93C5FD.toInt(),
+                accentColor = 0xFF38BDF8.toInt(),
+                secondaryAccentColor = 0xFFFB7185.toInt(),
+                buttonAccentColor = 0xFF38BDF8.toInt(),
+                secondaryButtonColor = 0xFF1B2A41.toInt(),
+                overlayBorderColor = 0xFF38BDF8.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_umbreon
+            ),
+            AppThemePalette(
+                id = "giratina_distortion",
+                label = "👁️ Giratina Distortion Void (Dark)",
+                description = "Origin Distortion World • Ultraviolet Obsidian (#09050B) with Distortion Crimson (#FB7185), Sovereign Gold (#FBBF24) & Wing Reticle",
+                isLight = false,
+                bgColor = 0xFF09050B.toInt(),
+                navBarColor = 0xFF050207.toInt(),
+                surfaceColor = 0xFF160D1C.toInt(),
+                innerCardColor = 0xFF0F0814.toInt(),
+                elevatedColor = 0xFF3B1D4A.toInt(),
+                primaryTextColor = 0xFFFAF5FF.toInt(),
+                secondaryTextColor = 0xFFD8B4FE.toInt(),
+                accentColor = 0xFFFB7185.toInt(),
+                secondaryAccentColor = 0xFFFBBF24.toInt(),
+                buttonAccentColor = 0xFFFB7185.toInt(),
+                secondaryButtonColor = 0xFF3B1D4A.toInt(),
+                overlayBorderColor = 0xFFFB7185.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_giratina
+            ),
+            AppThemePalette(
+                id = "shadow_mewtwo_violet",
+                label = "🔮 Shadow Mewtwo Violet (Dark)",
+                description = "Shadow Aura Violet • Deep Psychic Void (#080510) with Shadow Violet (#C084FC), Psystrike Cyan (#38BDF8) & Psychic Helix Reticle",
+                isLight = false,
+                bgColor = 0xFF080510.toInt(),
+                navBarColor = 0xFF040209.toInt(),
+                surfaceColor = 0xFF130C24.toInt(),
+                innerCardColor = 0xFF0C0718.toInt(),
+                elevatedColor = 0xFF311B5C.toInt(),
+                primaryTextColor = 0xFFF5F3FF.toInt(),
+                secondaryTextColor = 0xFFC4B5FD.toInt(),
+                accentColor = 0xFFC084FC.toInt(),
+                secondaryAccentColor = 0xFF38BDF8.toInt(),
+                buttonAccentColor = 0xFFC084FC.toInt(),
+                secondaryButtonColor = 0xFF311B5C.toInt(),
+                overlayBorderColor = 0xFFC084FC.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_mewtwo
+            ),
+            AppThemePalette(
+                id = "rayquaza_emerald_oled",
+                label = "🐉 Shiny Rayquaza Obsidian (Dark)",
+                description = "Black Mega Scales • Deep Emerald OLED (#030A07) with Luminous Emerald (#34D399), Delta Gold (#FACC15) & Sky-Delta Reticle",
+                isLight = false,
+                bgColor = 0xFF030A07.toInt(),
+                navBarColor = 0xFF020604.toInt(),
+                surfaceColor = 0xFF0A1A13.toInt(),
+                innerCardColor = 0xFF06110C.toInt(),
+                elevatedColor = 0xFF183D2C.toInt(),
+                primaryTextColor = 0xFFECFDF5.toInt(),
+                secondaryTextColor = 0xFFA7F3D0.toInt(),
+                accentColor = 0xFF34D399.toInt(),
+                secondaryAccentColor = 0xFFFACC15.toInt(),
+                buttonAccentColor = 0xFF34D399.toInt(),
+                secondaryButtonColor = 0xFF183D2C.toInt(),
+                overlayBorderColor = 0xFF34D399.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_rayquaza
+            ),
+            AppThemePalette(
+                id = "mimikyu_twilight",
+                label = "🎭 Mimikyu Twilight (Dark)",
+                description = "Disguise Twilight • Warm Charcoal (#0B0908) with Ragged Gold (#FDE047), Spectral Lavender (#A78BFA) & Disguise Reticle",
+                isLight = false,
+                bgColor = 0xFF0B0908.toInt(),
+                navBarColor = 0xFF060504.toInt(),
+                surfaceColor = 0xFF181411.toInt(),
+                innerCardColor = 0xFF110E0C.toInt(),
+                elevatedColor = 0xFF3B3126.toInt(),
+                primaryTextColor = 0xFFFEFCE8.toInt(),
+                secondaryTextColor = 0xFFD6CFC4.toInt(),
+                accentColor = 0xFFFDE047.toInt(),
+                secondaryAccentColor = 0xFFA78BFA.toInt(),
+                buttonAccentColor = 0xFFFDE047.toInt(),
+                secondaryButtonColor = 0xFF3B3126.toInt(),
+                overlayBorderColor = 0xFFFDE047.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_mimikyu
+            ),
+            AppThemePalette(
                 id = "instinct_dark",
                 label = "⚡ Team Instinct Storm (Dark)",
-                description = "Team Instinct Storm (Dark) ⚡ — Obsidian storm-cloud dark mode with Zapdos lightning gold & electric plasma cyan-amber accents.",
+                description = "Pokémon GO Instinct • Thunder Charcoal (#0F0D06) with Zapdos Lightning Gold (#FACC15), Storm Cyan (#38BDF8) & HUD Crest",
                 isLight = false,
-                bgColor = 0xFF0E0B03.toInt(),
-                navBarColor = 0xFF070501.toInt(),
-                surfaceColor = 0xFF1F1908.toInt(),
-                innerCardColor = 0xFF141005.toInt(),
-                elevatedColor = 0xFF362B0E.toInt(),
+                bgColor = 0xFF0F0D06.toInt(),
+                navBarColor = 0xFF080703.toInt(),
+                surfaceColor = 0xFF1A1609.toInt(),
+                innerCardColor = 0xFF120F06.toInt(),
+                elevatedColor = 0xFF3D3210.toInt(),
                 primaryTextColor = 0xFFFEFCE8.toInt(),
                 secondaryTextColor = 0xFFFDE047.toInt(),
                 accentColor = 0xFFFACC15.toInt(),
                 secondaryAccentColor = 0xFF38BDF8.toInt(),
-                buttonAccentColor = 0xFFCA8A04.toInt(),
-                secondaryButtonColor = 0xFFD97706.toInt(),
+                buttonAccentColor = 0xFFFACC15.toInt(),
+                secondaryButtonColor = 0xFF3D3210.toInt(),
                 overlayBorderColor = 0xFFFACC15.toInt(),
                 emblemDrawableRes = R.drawable.bg_emblem_instinct
-            ),
-            AppThemePalette(
-                id = "instinct_light",
-                label = "⚡ Team Instinct Spark (Light)",
-                description = "Team Instinct Spark (Light) ⚡ — Warm solar-gold daylight theme with Zapdos crest watermark & electric sky-cobalt accents.",
-                isLight = true,
-                bgColor = 0xFFFEFCE8.toInt(),
-                navBarColor = 0xFFFEF08A.toInt(),
-                surfaceColor = 0xFFFFFFFF.toInt(),
-                innerCardColor = 0xFFFEF9C3.toInt(),
-                elevatedColor = 0xFFFDE047.toInt(),
-                primaryTextColor = 0xFF1C1917.toInt(),
-                secondaryTextColor = 0xFF713F12.toInt(),
-                accentColor = 0xFFB45309.toInt(),
-                secondaryAccentColor = 0xFF0284C7.toInt(),
-                buttonAccentColor = 0xFFD97706.toInt(),
-                secondaryButtonColor = 0xFF0284C7.toInt(),
-                overlayBorderColor = 0xFFFACC15.toInt(),
-                emblemDrawableRes = R.drawable.bg_emblem_instinct
-            ),
-            AppThemePalette(
-                id = "mystic_dark",
-                label = "❄️ Team Mystic Blizzard (Dark)",
-                description = "Team Mystic Blizzard (Dark) ❄️ — Deep midnight glacier navy with Articuno ice-crystal blue & aurora violet accents.",
-                isLight = false,
-                bgColor = 0xFF060E20.toInt(),
-                navBarColor = 0xFF030712.toInt(),
-                surfaceColor = 0xFF102040.toInt(),
-                innerCardColor = 0xFF09142B.toInt(),
-                elevatedColor = 0xFF1E3A6E.toInt(),
-                primaryTextColor = 0xFFF0F9FF.toInt(),
-                secondaryTextColor = 0xFF93C5FD.toInt(),
-                accentColor = 0xFF38BDF8.toInt(),
-                secondaryAccentColor = 0xFFC084FC.toInt(),
-                buttonAccentColor = 0xFF0284C7.toInt(),
-                secondaryButtonColor = 0xFF6366F1.toInt(),
-                overlayBorderColor = 0xFF38BDF8.toInt(),
-                emblemDrawableRes = R.drawable.bg_emblem_mystic
-            ),
-            AppThemePalette(
-                id = "mystic_light",
-                label = "❄️ Team Mystic Glacier (Light)",
-                description = "Team Mystic Glacier (Light) ❄️ — Crisp arctic ice-blue daylight theme with Articuno crest & royal aurora indigo accents.",
-                isLight = true,
-                bgColor = 0xFFF0F9FF.toInt(),
-                navBarColor = 0xFFDBEAFE.toInt(),
-                surfaceColor = 0xFFFFFFFF.toInt(),
-                innerCardColor = 0xFFE0F2FE.toInt(),
-                elevatedColor = 0xFFBAE6FD.toInt(),
-                primaryTextColor = 0xFF0F172A.toInt(),
-                secondaryTextColor = 0xFF1E40AF.toInt(),
-                accentColor = 0xFF0284C7.toInt(),
-                secondaryAccentColor = 0xFF7C3AED.toInt(),
-                buttonAccentColor = 0xFF0369A1.toInt(),
-                secondaryButtonColor = 0xFF4F46E5.toInt(),
-                overlayBorderColor = 0xFF38BDF8.toInt(),
-                emblemDrawableRes = R.drawable.bg_emblem_mystic
             ),
             AppThemePalette(
                 id = "valor_dark",
                 label = "🔥 Team Valor Inferno (Dark)",
-                description = "Team Valor Inferno (Dark) 🔥 — Volcanic ember dark mode with Moltres crimson-flame & molten phoenix gold accents.",
+                description = "Pokémon GO Valor • Smoldering Obsidian (#160709) with Moltres Rose-Crimson (#FB7185), Phoenix Gold (#FBBF24) & HUD Crest",
                 isLight = false,
-                bgColor = 0xFF16070B.toInt(),
-                navBarColor = 0xFF0B0305.toInt(),
-                surfaceColor = 0xFF290E16.toInt(),
-                innerCardColor = 0xFF1B090E.toInt(),
-                elevatedColor = 0xFF471725.toInt(),
-                primaryTextColor = 0xFFFFF1F2.toInt(),
-                secondaryTextColor = 0xFFFDA4AF.toInt(),
-                accentColor = 0xFFF43F5E.toInt(),
+                bgColor = 0xFF160709.toInt(),
+                navBarColor = 0xFF0D0405.toInt(),
+                surfaceColor = 0xFF240C10.toInt(),
+                innerCardColor = 0xFF1B080C.toInt(),
+                elevatedColor = 0xFF4C111B.toInt(),
+                primaryTextColor = 0xFFFEF2F2.toInt(),
+                secondaryTextColor = 0xFFFCA5A5.toInt(),
+                accentColor = 0xFFFB7185.toInt(),
                 secondaryAccentColor = 0xFFFBBF24.toInt(),
-                buttonAccentColor = 0xFFE11D48.toInt(),
-                secondaryButtonColor = 0xFFD97706.toInt(),
-                overlayBorderColor = 0xFFF43F5E.toInt(),
-                emblemDrawableRes = R.drawable.bg_emblem_valor
-            ),
-            AppThemePalette(
-                id = "valor_light",
-                label = "🔥 Team Valor Dawn (Light)",
-                description = "Team Valor Dawn (Light) 🔥 — Warm rose-ivory daylight theme with crimson Moltres crest & solar phoenix amber accents.",
-                isLight = true,
-                bgColor = 0xFFFFF1F2.toInt(),
-                navBarColor = 0xFFFFE4E6.toInt(),
-                surfaceColor = 0xFFFFFFFF.toInt(),
-                innerCardColor = 0xFFFFE4E6.toInt(),
-                elevatedColor = 0xFFFECDD3.toInt(),
-                primaryTextColor = 0xFF1F090D.toInt(),
-                secondaryTextColor = 0xFF9F1239.toInt(),
-                accentColor = 0xFFE11D48.toInt(),
-                secondaryAccentColor = 0xFFD97706.toInt(),
-                buttonAccentColor = 0xFFF43F5E.toInt(),
-                secondaryButtonColor = 0xFFB45309.toInt(),
+                buttonAccentColor = 0xFFFB7185.toInt(),
+                secondaryButtonColor = 0xFF4C111B.toInt(),
                 overlayBorderColor = 0xFFFB7185.toInt(),
                 emblemDrawableRes = R.drawable.bg_emblem_valor
             ),
             AppThemePalette(
-                id = "sylveon_pink",
-                label = "🎀 Sylveon Fairy Ribbon (Light Pink & Pastel Blue)",
-                description = "Sylveon Fairy Ribbon 🎀 — Soft fairy-blush pink paired with Sylveon's distinctive pastel sky-blue (#38BDF8 / #60A5FA) & ribbon watermark.",
+                id = "mystic_light",
+                label = "❄️ Team Mystic Glacier (Light)",
+                description = "Pokémon GO Mystic Daylight • Crisp Ice White (#F0F7FF) with WCAG-AA Glacier Cobalt (#0369A1), Royal Indigo (#6D28D9) & Frost HUD Reticle",
                 isLight = true,
-                bgColor = 0xFFFDF2F8.toInt(),
+                bgColor = 0xFFF0F7FF.toInt(),
+                navBarColor = 0xFFE0F2FE.toInt(),
+                surfaceColor = 0xFFFFFFFF.toInt(),
+                innerCardColor = 0xFFE0F2FE.toInt(),
+                elevatedColor = 0xFFBAE6FD.toInt(),
+                primaryTextColor = 0xFF0F172A.toInt(),
+                secondaryTextColor = 0xFF334155.toInt(),
+                accentColor = 0xFF0369A1.toInt(),
+                secondaryAccentColor = 0xFF6D28D9.toInt(),
+                buttonAccentColor = 0xFF0369A1.toInt(),
+                secondaryButtonColor = 0xFF6D28D9.toInt(),
+                overlayBorderColor = 0xFF7DD3FC.toInt(),
+                emblemDrawableRes = R.drawable.bg_emblem_mystic
+            ),
+            AppThemePalette(
+                id = "sylveon_pink",
+                label = "🎀 Sylveon Fairy Ribbon (Light)",
+                description = "Sylveon Daylight • Pastel Blush (#FFF0F6) with WCAG-AA Deep Berry Rose (#BE185D), Deep Sky Cobalt (#0369A1) & Ribbon HUD Reticle",
+                isLight = true,
+                bgColor = 0xFFFFF0F6.toInt(),
                 navBarColor = 0xFFFCE7F3.toInt(),
                 surfaceColor = 0xFFFFFFFF.toInt(),
                 innerCardColor = 0xFFFCE7F3.toInt(),
-                elevatedColor = 0xFFE0F2FE.toInt(),
-                primaryTextColor = 0xFF3B0726.toInt(),
-                secondaryTextColor = 0xFF9D174D.toInt(),
-                accentColor = 0xFFDB2777.toInt(),
-                secondaryAccentColor = 0xFF0284C7.toInt(),
-                buttonAccentColor = 0xFFEC4899.toInt(),
-                secondaryButtonColor = 0xFF38BDF8.toInt(),
+                elevatedColor = 0xFFFBCFE8.toInt(),
+                primaryTextColor = 0xFF3B0724.toInt(),
+                secondaryTextColor = 0xFF701A45.toInt(),
+                accentColor = 0xFFBE185D.toInt(),
+                secondaryAccentColor = 0xFF0369A1.toInt(),
+                buttonAccentColor = 0xFFBE185D.toInt(),
+                secondaryButtonColor = 0xFF0369A1.toInt(),
                 overlayBorderColor = 0xFFF472B6.toInt(),
                 emblemDrawableRes = R.drawable.bg_emblem_sylveon
-            ),
-            AppThemePalette(
-                id = "slate",
-                label = "🛡️ SilphScope Slate (Default Generic)",
-                description = "SilphScope Slate (Default Generic) — Deep slate canvas with sky-cyan & tactical amber accents.",
-                isLight = false,
-                bgColor = 0xFF0F172A.toInt(),
-                navBarColor = 0xFF020617.toInt(),
-                surfaceColor = 0xFF1E293B.toInt(),
-                innerCardColor = 0xFF0F172A.toInt(),
-                elevatedColor = 0xFF334155.toInt(),
-                primaryTextColor = 0xFFF8FAFC.toInt(),
-                secondaryTextColor = 0xFF94A3B8.toInt(),
-                accentColor = 0xFF38BDF8.toInt(),
-                secondaryAccentColor = 0xFFF59E0B.toInt(),
-                buttonAccentColor = 0xFF0284C7.toInt(),
-                secondaryButtonColor = 0xFF4F46E5.toInt(),
-                overlayBorderColor = 0xFF38BDF8.toInt(),
-                emblemDrawableRes = null
             )
         )
     }
@@ -670,10 +717,10 @@ class MainActivity : AppCompatActivity() {
             if (isOverlayRunning) {
                 btnToggleOverlay.text = "Stop Battle Overlay"
                 btnToggleOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                btnToggleOverlay.setTextColor(0xFFFFFFFF.toInt())
+                btnToggleOverlay.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
                 if (OverlayService.activeLogOnlyStealthMode) {
                     statusText.text = "Status: $modeLabel Log-Only Stealth Active"
-                    statusText.setTextColor(0xFFF59E0B.toInt())
+                    statusText.setTextColor(if (theme.isLight) 0xFFB45309.toInt() else 0xFFF59E0B.toInt())
                 } else {
                     statusText.text = "Status: $modeLabel Overlay Active"
                     statusText.setTextColor(theme.secondaryAccentColor)
@@ -681,9 +728,9 @@ class MainActivity : AppCompatActivity() {
             } else {
                 btnToggleOverlay.text = "Start Battle Overlay"
                 btnToggleOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnToggleOverlay.setTextColor(0xFFFFFFFF.toInt())
+                btnToggleOverlay.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 statusText.text = "Status: $modeLabel Idle"
-                statusText.setTextColor(if (show6) 0xFFFBBF24.toInt() else theme.accentColor)
+                statusText.setTextColor(if (show6) (if (theme.isLight) 0xFFB45309.toInt() else 0xFFFBBF24.toInt()) else theme.accentColor)
             }
         }
         if (::prefs.isInitialized) {
@@ -781,11 +828,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getActiveAppTheme(): AppThemePalette {
-        val rawId = prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
-        val mappedId = when (rawId) {
-            "amoled_cyan", "amoled_matrix" -> "dialga_shiny_midnight"
-            else -> rawId
-        }
+        val rawId = prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, OverlayService.DEFAULT_APP_THEME_ID)
+        val mappedId = OverlayService.normalizeAppThemeIdStatic(rawId)
         return APP_THEME_COLLECTION.find { it.id == mappedId } ?: APP_THEME_COLLECTION.first()
     }
 
@@ -836,7 +880,7 @@ class MainActivity : AppCompatActivity() {
         val activeBg = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
         val inactiveBg = android.content.res.ColorStateList.valueOf(withAlpha(theme.surfaceColor, surfaceAlpha))
         val helpDefaultBg = android.content.res.ColorStateList.valueOf(withAlpha(theme.elevatedColor, surfaceAlpha))
-        val activeText = 0xFFFFFFFF.toInt()
+        val activeText = contrastingInkColor(theme.buttonAccentColor)
         val inactiveText = theme.secondaryTextColor
 
         btnNavTeams.backgroundTintList = if (page == "teams") activeBg else inactiveBg
@@ -928,11 +972,11 @@ class MainActivity : AppCompatActivity() {
 
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
                 btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btn.setTextColor(0xFFFFFFFF.toInt())
+                btn.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             }
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.let { btn ->
                 btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                btn.setTextColor(0xFFFFFFFF.toInt())
+                btn.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
             }
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.let { btn ->
                 btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
@@ -1010,10 +1054,10 @@ class MainActivity : AppCompatActivity() {
             val innerAlpha = if (hasWatermark) 0x9C else 0xFF
             val elevatedAlpha = if (hasWatermark) 0xB8 else 0xFF
             when (rgb) {
-                0x020617 -> view.setBackgroundColor(withAlpha(theme.navBarColor, navAlpha))
-                0x0F172A, 0x111827, 0x0B1325 -> view.setBackgroundColor(withAlpha(theme.innerCardColor, innerAlpha))
-                0x1E293B -> view.setBackgroundColor(withAlpha(theme.surfaceColor, surfaceAlpha))
-                0x334155, 0x475569 -> view.setBackgroundColor(withAlpha(theme.elevatedColor, elevatedAlpha))
+                0x020617, 0x03050B, 0x030812 -> view.setBackgroundColor(withAlpha(theme.navBarColor, navAlpha))
+                0x0F172A, 0x111827, 0x0B1325, 0x050810, 0x050B16, 0x070D19, 0x081120 -> view.setBackgroundColor(withAlpha(theme.innerCardColor, innerAlpha))
+                0x1E293B, 0x0B1526, 0x0E1B2E -> view.setBackgroundColor(withAlpha(theme.surfaceColor, surfaceAlpha))
+                0x334155, 0x475569, 0x19304E -> view.setBackgroundColor(withAlpha(theme.elevatedColor, elevatedAlpha))
                 0x2563EB, 0x0284C7, 0x38BDF8 -> view.setBackgroundColor(theme.accentColor)
             }
         }
@@ -1048,20 +1092,21 @@ class MainActivity : AppCompatActivity() {
             when (origTint and 0x00FFFFFF) {
                 0x0369A1, 0x059669, 0x10B981, 0xF59E0B, 0xD97706 -> {
                     view.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                    view.setTextColor(0xFFFFFFFF.toInt())
+                    view.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
                 }
                 0x334155, 0x475569, 0x64748B -> {
                     view.backgroundTintList = android.content.res.ColorStateList.valueOf(withAlpha(theme.elevatedColor, elevAlpha))
                     when (origText and 0x00FFFFFF) {
-                        0x38BDF8, 0x7DD3FC -> view.setTextColor(theme.accentColor)
-                        0xFCD34D, 0xFBBF24, 0xF59E0B -> view.setTextColor(theme.secondaryAccentColor)
+                        0x38BDF8, 0x7DD3FC, 0x67E8F9, 0x99F6E4 -> view.setTextColor(theme.accentColor)
+                        0xFCD34D, 0xFBBF24, 0xF59E0B, 0xFDE047 -> view.setTextColor(theme.secondaryAccentColor)
+                        0xCBD5E1, 0x94A3B8, 0x64748B -> view.setTextColor(theme.secondaryTextColor)
                         else -> view.setTextColor(theme.primaryTextColor)
                     }
                 }
                 0x1E293B, 0x0F172A -> {
                     view.backgroundTintList = android.content.res.ColorStateList.valueOf(withAlpha(theme.surfaceColor, elevAlpha))
                     when (origText and 0x00FFFFFF) {
-                        0x38BDF8, 0x7DD3FC -> view.setTextColor(theme.accentColor)
+                        0x38BDF8, 0x7DD3FC, 0x67E8F9, 0x99F6E4 -> view.setTextColor(theme.accentColor)
                         0xCBD5E1, 0x94A3B8, 0x64748B -> view.setTextColor(theme.secondaryTextColor)
                         else -> view.setTextColor(theme.primaryTextColor)
                     }
@@ -1071,21 +1116,29 @@ class MainActivity : AppCompatActivity() {
                 }
                 else -> {
                     view.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                    view.setTextColor(0xFFFFFFFF.toInt())
+                    view.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 }
             }
         } else if (view is TextView) {
             val origText = (view.getTag(R.id.iv_theme_watermark_bg) as? Int) ?: view.currentTextColor.also {
                 view.setTag(R.id.iv_theme_watermark_bg, it)
             }
-            when (origText and 0x00FFFFFF) {
-                0xF8FAFC, 0xFFFFFF, 0xE2E8F0 -> view.setTextColor(theme.primaryTextColor)
+            val origRgb = origText and 0x00FFFFFF
+            when (origRgb) {
+                0xF8FAFC, 0xFFFFFF, 0xE2E8F0, 0xF1F5F9 -> view.setTextColor(theme.primaryTextColor)
                 0xCBD5E1, 0x94A3B8, 0x64748B -> view.setTextColor(theme.secondaryTextColor)
-                0x38BDF8, 0x7DD3FC, 0x0284C7, 0x2563EB -> view.setTextColor(theme.accentColor)
-                0xF59E0B, 0xFBBF24, 0xFCD34D, 0x34D399, 0xC084FC -> view.setTextColor(theme.secondaryAccentColor)
+                0x38BDF8, 0x7DD3FC, 0x67E8F9, 0x99F6E4, 0xBAE6FD, 0x0284C7, 0x2563EB -> view.setTextColor(theme.accentColor)
+                0xF59E0B, 0xFBBF24, 0xFCD34D, 0xFDE047, 0xFEF08A, 0x34D399, 0xC084FC, 0xD8B4FE, 0xF9A8D4 -> view.setTextColor(theme.secondaryAccentColor)
+                else -> if (theme.isLight) {
+                    when (origRgb) {
+                        0x4ADE80, 0x22C55E, 0x86EFAC, 0xBBF7D0 -> view.setTextColor(0xFF15803D.toInt())
+                        0xF87171, 0xFB7185, 0xFDA4AF, 0xFECACA -> view.setTextColor(0xFFBE123C.toInt())
+                        0xFDBA74, 0xFB923C -> view.setTextColor(0xFFB45309.toInt())
+                    }
+                }
             }
             if (view is EditText) {
-                view.setHintTextColor(withAlpha(theme.secondaryTextColor, 0x99))
+                view.setHintTextColor(withAlpha(theme.secondaryTextColor, 0xAA))
             }
         }
 
@@ -1182,21 +1235,23 @@ class MainActivity : AppCompatActivity() {
 
         // Top Bar & Teams Page Buttons
         syncOverlayRunningUiState()
+        val primaryBtnInk = contrastingInkColor(theme.buttonAccentColor)
+        val secondaryBtnInk = contrastingInkColor(theme.secondaryButtonColor)
         if (::btnDonate.isInitialized) {
             btnDonate.backgroundTintList = secondaryBtnTint
-            btnDonate.setTextColor(0xFFFFFFFF.toInt())
+            btnDonate.setTextColor(secondaryBtnInk)
         }
         if (::btnAddPreset.isInitialized) {
             btnAddPreset.backgroundTintList = primaryBtnTint
-            btnAddPreset.setTextColor(0xFFFFFFFF.toInt())
+            btnAddPreset.setTextColor(primaryBtnInk)
         }
         if (::btnToggleAntiMetaBuilder.isInitialized) {
             btnToggleAntiMetaBuilder.backgroundTintList = secondaryBtnTint
-            btnToggleAntiMetaBuilder.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleAntiMetaBuilder.setTextColor(secondaryBtnInk)
         }
         if (::btnGenerateAntiMetaTeams.isInitialized) {
             btnGenerateAntiMetaTeams.backgroundTintList = primaryBtnTint
-            btnGenerateAntiMetaTeams.setTextColor(0xFFFFFFFF.toInt())
+            btnGenerateAntiMetaTeams.setTextColor(primaryBtnInk)
         }
         if (::btnTrashTeams.isInitialized) {
             btnTrashTeams.backgroundTintList = elevatedBtnTint
@@ -1206,11 +1261,11 @@ class MainActivity : AppCompatActivity() {
         // Battle Log Page Buttons (+Log, Sync, Trash, Clear, Copy GBL, Share)
         if (::btnLogManualBattle.isInitialized) {
             btnLogManualBattle.backgroundTintList = primaryBtnTint
-            btnLogManualBattle.setTextColor(0xFFFFFFFF.toInt())
+            btnLogManualBattle.setTextColor(primaryBtnInk)
         }
         if (::btnSyncBattleLog.isInitialized) {
             btnSyncBattleLog.backgroundTintList = secondaryBtnTint
-            btnSyncBattleLog.setTextColor(0xFFFFFFFF.toInt())
+            btnSyncBattleLog.setTextColor(secondaryBtnInk)
         }
         if (::btnTrashBattleLog.isInitialized) {
             btnTrashBattleLog.backgroundTintList = elevatedBtnTint
@@ -1226,13 +1281,13 @@ class MainActivity : AppCompatActivity() {
         }
         if (::btnShareBattleLog.isInitialized) {
             btnShareBattleLog.backgroundTintList = secondaryBtnTint
-            btnShareBattleLog.setTextColor(0xFFFFFFFF.toInt())
+            btnShareBattleLog.setTextColor(secondaryBtnInk)
         }
 
         // Settings Page Buttons (Save Thresholds, Restore Defaults, 3 Sync Buttons, Sync PvPoke, Reparse, Tasker)
         if (::btnSaveTierThresholds.isInitialized) {
             btnSaveTierThresholds.backgroundTintList = primaryBtnTint
-            btnSaveTierThresholds.setTextColor(0xFFFFFFFF.toInt())
+            btnSaveTierThresholds.setTextColor(primaryBtnInk)
         }
         if (::btnRestoreTierThresholds.isInitialized) {
             btnRestoreTierThresholds.backgroundTintList = elevatedBtnTint
@@ -1249,7 +1304,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (::btnSyncDevicesSettings.isInitialized) {
             btnSyncDevicesSettings.backgroundTintList = primaryBtnTint
-            btnSyncDevicesSettings.setTextColor(0xFFFFFFFF.toInt())
+            btnSyncDevicesSettings.setTextColor(primaryBtnInk)
         }
         if (::btnSyncBundleSettings.isInitialized) {
             btnSyncBundleSettings.backgroundTintList = elevatedBtnTint
@@ -1257,19 +1312,19 @@ class MainActivity : AppCompatActivity() {
         }
         if (::btnDownloadDb.isInitialized) {
             btnDownloadDb.backgroundTintList = secondaryBtnTint
-            btnDownloadDb.setTextColor(0xFFFFFFFF.toInt())
+            btnDownloadDb.setTextColor(secondaryBtnInk)
         }
         findViewById<Button>(R.id.btn_copy_tasker_start)?.let {
             it.backgroundTintList = primaryBtnTint
-            it.setTextColor(0xFFFFFFFF.toInt())
+            it.setTextColor(primaryBtnInk)
         }
         findViewById<Button>(R.id.btn_copy_tasker_battle_log)?.let {
             it.backgroundTintList = secondaryBtnTint
-            it.setTextColor(0xFFFFFFFF.toInt())
+            it.setTextColor(secondaryBtnInk)
         }
         findViewById<Button>(R.id.btn_help_page_metric_guide)?.let {
             it.backgroundTintList = secondaryBtnTint
-            it.setTextColor(0xFFFFFFFF.toInt())
+            it.setTextColor(secondaryBtnInk)
         }
 
         if (::btnToggleOppCountBasis.isInitialized) updateOppCountBasisUi()
@@ -1300,6 +1355,7 @@ class MainActivity : AppCompatActivity() {
             val updateIntent = Intent(this, OverlayService::class.java).apply {
                 action = OverlayService.ACTION_UPDATE_SETTINGS
                 putExtra(OverlayService.EXTRA_APP_THEME_ID, theme.id)
+                putExtra(OverlayService.EXTRA_SHOW_THEME_WATERMARK, showWatermark)
             }
             startService(updateIntent)
         }
@@ -1669,22 +1725,33 @@ class MainActivity : AppCompatActivity() {
         val activeTheme = getActiveAppTheme()
         val themeIdx = APP_THEME_COLLECTION.indexOfFirst { it.id == activeTheme.id }.takeIf { it >= 0 } ?: 0
         spinnerAppTheme.setSelection(themeIdx, false)
+        isUpdatingThemeWatermarkSwitch = true
         switchShowThemeWatermark.isChecked = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, true)
+        isUpdatingThemeWatermarkSwitch = false
         isUpdatingThemeSpinner = false
 
         spinnerAppTheme.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 if (isUpdatingThemeSpinner) return
                 val chosen = APP_THEME_COLLECTION.getOrElse(position) { APP_THEME_COLLECTION.first() }
-                prefs.edit().putString(OverlayService.PREFS_KEY_APP_THEME_ID, chosen.id).apply()
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_APP_THEME_ID, chosen.id)
+                    .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                    .apply()
                 applyCurrentAppTheme(notifyOverlay = true)
+                triggerTwoDeviceCloudSync(silent = true)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         switchShowThemeWatermark.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, isChecked).apply()
-            applyCurrentAppTheme(notifyOverlay = false)
+            if (isUpdatingThemeWatermarkSwitch) return@setOnCheckedChangeListener
+            prefs.edit()
+                .putBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, isChecked)
+                .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                .apply()
+            applyCurrentAppTheme(notifyOverlay = true)
+            triggerTwoDeviceCloudSync(silent = true)
         }
 
         btnUndoBannerAction.setOnClickListener {
@@ -3383,19 +3450,19 @@ class MainActivity : AppCompatActivity() {
             !hasValidId -> {
                 btnGithubLoginSettings.text = "👤 Choose Custom Trainer ID for Cloud Vault Sync"
                 btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                btnGithubLoginSettings.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
                 textSyncStatus.text = "⚪ Choose a custom Trainer ID above to activate SilphScope Cloudflare D1 Vault Sync across devices"
             }
             requiresPassword -> {
                 btnGithubLoginSettings.text = "🔑 Sign In with Vault Password (@$screenName)"
                 btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
-                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                btnGithubLoginSettings.setTextColor(contrastingInkColor(0xFFD97706.toInt()))
                 textSyncStatus.text = "🔒 @$screenName's Cloud Vault is password-protected • Tap above to enter your Vault Password and sync devices"
             }
             hasPassword && hasSession -> {
                 btnGithubLoginSettings.text = "🔒 Cloud Vault Secured: @$screenName (Tap to Manage)"
                 btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                btnGithubLoginSettings.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 textSyncStatus.text = "🟢 Cloudflare D1 Delta Sync Active (@$screenName) • Password Protected • Last: $lastStr • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size}"
             }
             hasPassword -> {
@@ -3413,7 +3480,7 @@ class MainActivity : AppCompatActivity() {
             else -> {
                 btnGithubLoginSettings.text = "🔐 Set Custom ID & Vault Password for Multi-Device Sync"
                 btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                btnGithubLoginSettings.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
                 textSyncStatus.text = "🎲 Using Random ID ($screenName) • Set a custom Trainer ID & Vault Password (or tap to sign in to an existing vault) to sync across devices"
             }
         }
@@ -3439,11 +3506,11 @@ class MainActivity : AppCompatActivity() {
         if (enabled) {
             btnToggleAutoUploadAiLogs.text = "🤖 Auto-Upload: ON"
             btnToggleAutoUploadAiLogs.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleAutoUploadAiLogs.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleAutoUploadAiLogs.setTextColor(contrastingInkColor(theme.buttonAccentColor))
         } else {
             btnToggleAutoUploadAiLogs.text = "🤖 Auto-Upload: OFF"
             btnToggleAutoUploadAiLogs.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-            btnToggleAutoUploadAiLogs.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleAutoUploadAiLogs.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
         }
 
         val statePrefix = when {
@@ -3485,7 +3552,7 @@ class MainActivity : AppCompatActivity() {
             if (allowMobileUpload) {
                 btnArmOneBattleDvrNow.text = "📶 Mobile Data Upload: ON"
                 btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
+                btnArmOneBattleDvrNow.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             } else {
                 btnArmOneBattleDvrNow.text = "📡 Mobile Data Upload: OFF (Wi-Fi)"
                 btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
@@ -3817,7 +3884,7 @@ class MainActivity : AppCompatActivity() {
                 textSize = 10.5f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                setTextColor(0xFFFFFFFF.toInt())
+                setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 setOnClickListener {
                     val entered = keyInput.text?.toString()?.trim().orEmpty()
                     val enteredEmail = emailInput.text?.toString()?.trim().orEmpty()
@@ -4829,6 +4896,18 @@ class MainActivity : AppCompatActivity() {
                 updateAiTelemetryStatusUi()
                 setupOrUpdateReplayVaultSettingsUi()
                 if (mutated) {
+                    val syncedTheme = getActiveAppTheme()
+                    val syncedIdx = APP_THEME_COLLECTION.indexOfFirst { it.id == syncedTheme.id }.takeIf { it >= 0 } ?: 0
+                    isUpdatingThemeSpinner = true
+                    if (::spinnerAppTheme.isInitialized && spinnerAppTheme.selectedItemPosition != syncedIdx) {
+                        spinnerAppTheme.setSelection(syncedIdx, false)
+                    }
+                    isUpdatingThemeSpinner = false
+                    isUpdatingThemeWatermarkSwitch = true
+                    if (::switchShowThemeWatermark.isInitialized) {
+                        switchShowThemeWatermark.isChecked = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, true)
+                    }
+                    isUpdatingThemeWatermarkSwitch = false
                     applyCurrentAppTheme(notifyOverlay = true)
                     refreshPresetsUi()
                     refreshPresetsAndBattleLogsIfVisible()
@@ -6812,7 +6891,7 @@ class MainActivity : AppCompatActivity() {
         for ((count, btn) in pairs) {
             val isSelected = (samples == count)
             btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
-            btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            btn.setTextColor(if (isSelected) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
         }
 
         if (::btnDebounceTol0.isInitialized) {
@@ -6825,7 +6904,7 @@ class MainActivity : AppCompatActivity() {
             for ((t, btn) in tolPairs) {
                 val isSelected = (tol == t)
                 btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
-                btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+                btn.setTextColor(if (isSelected) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
             }
         }
 
@@ -6903,7 +6982,7 @@ class MainActivity : AppCompatActivity() {
         for ((count, btn) in pairs) {
             val isSelected = (samples == count)
             btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
-            btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            btn.setTextColor(if (isSelected) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
         }
 
         if (::btnProactiveLead0.isInitialized &&
@@ -6920,7 +6999,7 @@ class MainActivity : AppCompatActivity() {
             for ((ms, btn) in leadPairs) {
                 val isSelected = (leadMs == ms)
                 btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
-                btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+                btn.setTextColor(if (isSelected) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
             }
         }
 
@@ -6942,7 +7021,7 @@ class MainActivity : AppCompatActivity() {
             if (toastsOn) {
                 btnToggleEnergyUpdateToasts.text = "Toasts On"
                 btnToggleEnergyUpdateToasts.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                btnToggleEnergyUpdateToasts.setTextColor(0xFFFFFFFF.toInt())
+                btnToggleEnergyUpdateToasts.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
                 textEnergyUpdateToastsDesc.text = "Active (👑 Admin): Persistent top-left pill showing ⚡ U: [M:%|H:%] • O: [M:%|H:%] dual-source energy & confidence"
             } else {
                 btnToggleEnergyUpdateToasts.text = "Toasts Off"
@@ -7871,7 +7950,7 @@ class MainActivity : AppCompatActivity() {
                 text = "☑️ Multi-Select Battles to Reassign League / Cup"
                 isAllCaps = false
                 textSize = 11.5f
-                setTextColor(0xFFFFFFFF.toInt())
+                setTextColor(contrastingInkColor(activeTheme.secondaryButtonColor))
                 backgroundTintList = android.content.res.ColorStateList.valueOf(activeTheme.secondaryButtonColor)
                 setOnClickListener {
                     isBattleLogMultiSelectMode = true
@@ -7924,10 +8003,9 @@ class MainActivity : AppCompatActivity() {
                 text = "🏷️ Move (${selectedBattleLogIds.size})"
                 isAllCaps = false
                 textSize = 10.5f
-                setTextColor(0xFFFFFFFF.toInt())
-                backgroundTintList = android.content.res.ColorStateList.valueOf(
-                    if (selectedBattleLogIds.isNotEmpty()) activeTheme.buttonAccentColor else 0xFF475569.toInt()
-                )
+                val moveBg = if (selectedBattleLogIds.isNotEmpty()) activeTheme.buttonAccentColor else 0xFF475569.toInt()
+                setTextColor(contrastingInkColor(moveBg))
+                backgroundTintList = android.content.res.ColorStateList.valueOf(moveBg)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f).apply {
                     marginEnd = (4 * density).toInt()
                 }
@@ -8006,9 +8084,9 @@ class MainActivity : AppCompatActivity() {
                     else -> "Lead: Neutral"
                 }
                 val leadColor = when (leadUp) {
-                    "FAVORABLE" -> 0xFF4ADE80.toInt()
-                    "NEGATIVE" -> 0xFFF87171.toInt()
-                    else -> 0xFFCBD5E1.toInt()
+                    "FAVORABLE" -> if (activeTheme.isLight) 0xFF15803D.toInt() else 0xFF4ADE80.toInt()
+                    "NEGATIVE" -> if (activeTheme.isLight) 0xFFBE123C.toInt() else 0xFFF87171.toInt()
+                    else -> activeTheme.secondaryTextColor
                 }
 
                 val entryLeadKey = normalizeDailyLeadKey(entry.opponents.firstOrNull())
@@ -8023,8 +8101,8 @@ class MainActivity : AppCompatActivity() {
                         background = android.graphics.drawable.GradientDrawable().apply {
                             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                             cornerRadius = 8f * density
-                            setColor(0xFF0F172A.toInt())
-                            setStroke((2f * density).toInt().coerceAtLeast(2), 0xFF38BDF8.toInt())
+                            setColor(activeTheme.innerCardColor)
+                            setStroke((2f * density).toInt().coerceAtLeast(2), activeTheme.accentColor)
                         }
                     } else if (isRepeatDailyLead) {
                         val surfaceAlpha = if (hasWatermark) 0xBF else 0xF5
@@ -10019,8 +10097,9 @@ class MainActivity : AppCompatActivity() {
             textOppCountBasisDesc.text = "Default: Counts & 50e/Xf relative to My Fast Moves"
         }
         if (::prefs.isInitialized) {
-            btnToggleOppCountBasis.backgroundTintList = android.content.res.ColorStateList.valueOf(getActiveAppTheme().buttonAccentColor)
-            btnToggleOppCountBasis.setTextColor(0xFFFFFFFF.toInt())
+            val activeBtnBg = getActiveAppTheme().buttonAccentColor
+            btnToggleOppCountBasis.backgroundTintList = android.content.res.ColorStateList.valueOf(activeBtnBg)
+            btnToggleOppCountBasis.setTextColor(contrastingInkColor(activeBtnBg))
         }
     }
 
@@ -10034,8 +10113,9 @@ class MainActivity : AppCompatActivity() {
             textOppChargedMovesDesc.text = "Default: 3 Charged Moves (Official + Top Usage)"
         }
         if (::prefs.isInitialized) {
-            btnToggleOppChargedMoves.backgroundTintList = android.content.res.ColorStateList.valueOf(getActiveAppTheme().buttonAccentColor)
-            btnToggleOppChargedMoves.setTextColor(0xFFFFFFFF.toInt())
+            val activeBtnBg = getActiveAppTheme().buttonAccentColor
+            btnToggleOppChargedMoves.backgroundTintList = android.content.res.ColorStateList.valueOf(activeBtnBg)
+            btnToggleOppChargedMoves.setTextColor(contrastingInkColor(activeBtnBg))
         }
     }
 
@@ -10050,7 +10130,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             btnToggleBattleToasts.text = "Toasts On"
             btnToggleBattleToasts.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleBattleToasts.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleBattleToasts.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textBattleToastsDesc.text = "Default: Popups shown for Battle Start/Stop, Switches & Logs"
         }
     }
@@ -10061,7 +10141,7 @@ class MainActivity : AppCompatActivity() {
         if (showRecs) {
             btnToggleTacticalRec.text = "Recs On"
             btnToggleTacticalRec.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleTacticalRec.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleTacticalRec.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textTacticalRecDesc.text = "Default: Shows 2-Line 4-Pillar AI Tactical Coach & Backline Prediction in Overlay"
         } else {
             btnToggleTacticalRec.text = "Recs Off"
@@ -10081,12 +10161,12 @@ class MainActivity : AppCompatActivity() {
         if (pos.equals("top", ignoreCase = true)) {
             btnCycleAiAdviceHudPos.text = "Top"
             btnCycleAiAdviceHudPos.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-            btnCycleAiAdviceHudPos.setTextColor(0xFFFFFFFF.toInt())
+            btnCycleAiAdviceHudPos.setTextColor(contrastingInkColor(theme.secondaryButtonColor))
             textAiAdviceHudPosDesc.text = "Active: Top (Classic Position — Between Header & Toolbar)"
         } else {
             btnCycleAiAdviceHudPos.text = "Bottom (Def)"
             btnCycleAiAdviceHudPos.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnCycleAiAdviceHudPos.setTextColor(0xFFFFFFFF.toInt())
+            btnCycleAiAdviceHudPos.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textAiAdviceHudPosDesc.text = "Default: Bottom (Below My Attacks for Maximum Mid-Battle Visibility)"
         }
     }
@@ -10101,12 +10181,12 @@ class MainActivity : AppCompatActivity() {
         if (mode.equals("compact", ignoreCase = true)) {
             btnToggleOverlayHudMode.text = "Compact HUD (Def)"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleOverlayHudMode.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textOverlayHudModeDesc.text = "Default: Compact HUD (Header [Shields/E] + Move Counts + Shield Card, AI Coach OFF • Tap emblem for Full HUD • Hold 2s for Stealth)"
         } else {
             btnToggleOverlayHudMode.text = "Full HUD"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-            btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleOverlayHudMode.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
             textOverlayHudModeDesc.text = "Active: Full HUD (3x3 Matrix + Move Counts + 2-Line AI Coach • Tap emblem for Compact HUD • Hold 2s for Stealth)"
         }
     }
@@ -10163,7 +10243,7 @@ class MainActivity : AppCompatActivity() {
             btn.text = label
             if (active) {
                 btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btn.setTextColor(0xFFFFFFFF.toInt())
+                btn.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             } else {
                 btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
                 btn.setTextColor(theme.primaryTextColor)
@@ -10243,7 +10323,7 @@ class MainActivity : AppCompatActivity() {
         } else if (showShieldHud) {
             btnToggleShieldDecisionOverlay.text = "Shield HUD On"
             btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleShieldDecisionOverlay.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleShieldDecisionOverlay.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textShieldDecisionOverlayDesc.text = "Default: Red/Orange/Yellow/Green KO & HP summary above Attack incoming! (Auto-hides <= 5s)"
         } else {
             btnToggleShieldDecisionOverlay.text = "Shield HUD Off"
@@ -10260,7 +10340,7 @@ class MainActivity : AppCompatActivity() {
         if (enabled) {
             btnToggleHpTracking.text = "HP On"
             btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleHpTracking.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleHpTracking.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textHpTrackingDesc.text = "Default: Enabled (Live 2D floating HP bar scanning & 2-sample ±2% upward self-correction)"
         } else {
             btnToggleHpTracking.text = "HP Off"
@@ -10277,7 +10357,7 @@ class MainActivity : AppCompatActivity() {
         if (enabled) {
             btnToggleEnergyTracking.text = "Energy On"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleEnergyTracking.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textEnergyTrackingDesc.text = "Default: Enabled (Slowest Charge Move Meter Debounce & Direct Snap)"
         } else {
             btnToggleEnergyTracking.text = "Energy Off"
@@ -10298,7 +10378,7 @@ class MainActivity : AppCompatActivity() {
             "highest_contrast" -> {
                 btnCycleChargeCirclePriority.text = "Highest Contrast"
                 btnCycleChargeCirclePriority.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleChargeCirclePriority.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleChargeCirclePriority.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textChargeCirclePriorityDesc.text = "Active: Highest Contrast (Always prioritizes move with better 1–18 scanner contrast rank; e.g. Fairy #3 over Normal #17)"
             }
             "highest_energy" -> {
@@ -10310,7 +10390,7 @@ class MainActivity : AppCompatActivity() {
             else -> {
                 btnCycleChargeCirclePriority.text = "Smart Hybrid"
                 btnCycleChargeCirclePriority.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnCycleChargeCirclePriority.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleChargeCirclePriority.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 textChargeCirclePriorityDesc.text = "Default: Smart Hybrid (Tracks higher-E move in Tiers S/A #1–10; promotes higher-contrast move when higher-E is Tier B/C #11–18 like Normal/Steel/Ghost)"
             }
         }
@@ -10326,7 +10406,7 @@ class MainActivity : AppCompatActivity() {
         if (!batterySaver) {
             btnToggleVisionBatterySaver.text = "High-Perf 15Hz"
             btnToggleVisionBatterySaver.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleVisionBatterySaver.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleVisionBatterySaver.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textVisionBatterySaverDesc.text = "Default: High-Perf 15Hz HP + 150ms Burst / 500ms Steady OCR (Fastest swap, shield & 3-2-1 lead lock)"
         } else {
             btnToggleVisionBatterySaver.text = "Battery Saver"
@@ -10346,7 +10426,7 @@ class MainActivity : AppCompatActivity() {
         if (enabled) {
             btnToggleAutoShadowDetect.text = "Shadow Auto On"
             btnToggleAutoShadowDetect.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleAutoShadowDetect.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleAutoShadowDetect.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textAutoShadowDetectDesc.text = "Default: Enabled (3D HSV aura + fast/charged ΔHP verification & Best-Guess IV BP/Bulk; shares sensitivity below)"
         } else {
             btnToggleAutoShadowDetect.text = "Shadow Auto Off"
@@ -10366,7 +10446,7 @@ class MainActivity : AppCompatActivity() {
         if (enabled) {
             btnToggleAltFastMoveDetect.text = "Alt Detect On"
             btnToggleAltFastMoveDetect.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleAltFastMoveDetect.setTextColor(0xFFFFFFFF.toInt())
+            btnToggleAltFastMoveDetect.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textAltFastMoveDetectDesc.text = "Default: Enabled (Auto-switches opponent fast move when floating HP bar damage diverges from standard fast move)"
         } else {
             btnToggleAltFastMoveDetect.text = "Alt Detect Off"
@@ -10384,25 +10464,25 @@ class MainActivity : AppCompatActivity() {
             0 -> {
                 btnCycleFastDetectOffset.text = "+0 Turns"
                 btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleFastDetectOffset.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textFastDetectOffsetDesc.text = "Active: +0 Turns (Samples immediately on damage-registration turn)"
             }
             1 -> {
                 btnCycleFastDetectOffset.text = "+1 Turn (Def)"
                 btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleFastDetectOffset.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 textFastDetectOffsetDesc.text = "Default: +1 Turn (Waits 1 extra turn for HP bar drain animation to settle)"
             }
             2 -> {
                 btnCycleFastDetectOffset.text = "+2 Turns"
                 btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleFastDetectOffset.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textFastDetectOffsetDesc.text = "Active: +2 Turns Delay (Samples 2 turns after damage-registration turn)"
             }
             else -> {
                 btnCycleFastDetectOffset.text = "+3 Turns"
                 btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleFastDetectOffset.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textFastDetectOffsetDesc.text = "Active: +3 Turns Delay (Maximum settling buffer for 4–5t fast moves)"
             }
         }
@@ -10419,7 +10499,7 @@ class MainActivity : AppCompatActivity() {
             "balanced" -> {
                 btnCycleAltFastStrictness.text = "Balanced (8t)"
                 btnCycleAltFastStrictness.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleAltFastStrictness.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleAltFastStrictness.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textAltFastStrictnessDesc.text = "Active: Balanced (Requires ≥8t, ≥2 completed cycles & ≥9% HP drop)"
             }
             "aggressive" -> {
@@ -10431,7 +10511,7 @@ class MainActivity : AppCompatActivity() {
             else -> {
                 btnCycleAltFastStrictness.text = "Strict (Def)"
                 btnCycleAltFastStrictness.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnCycleAltFastStrictness.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleAltFastStrictness.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 textAltFastStrictnessDesc.text = "Default: Strict (Requires ≥10t, ≥3 cycles & ≥12% HP drop; blocks Hidden Power false overrides)"
             }
         }
@@ -10448,7 +10528,7 @@ class MainActivity : AppCompatActivity() {
             10 -> {
                 btnCycleShieldChipTol.text = "±10% HP"
                 btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleShieldChipTol.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleShieldChipTol.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textShieldChipTolDesc.text = "Active: ±10% HP (Wide tolerance for heavy fast moves like Incinerate/Volt Switch before zoom)"
             }
             3 -> {
@@ -10460,13 +10540,13 @@ class MainActivity : AppCompatActivity() {
             6 -> {
                 btnCycleShieldChipTol.text = "±6% HP"
                 btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleShieldChipTol.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleShieldChipTol.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textShieldChipTolDesc.text = "Active: ±6% HP (Balanced chip tolerance for 2–3 turn fast moves)"
             }
             else -> {
                 btnCycleShieldChipTol.text = "±8% HP (Def)"
                 btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnCycleShieldChipTol.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleShieldChipTol.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 textShieldChipTolDesc.text = "Default: ±8% HP (Catches shielded charged moves when 1 pre-zoom fast move chips 4–8% HP)"
             }
         }
@@ -10483,7 +10563,7 @@ class MainActivity : AppCompatActivity() {
             5000 -> {
                 btnCycleSwapRollbackWindow.text = "5.0s"
                 btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleSwapRollbackWindow.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleSwapRollbackWindow.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textSwapRollbackWindowDesc.text = "Active: 5.0s Window (Extended post-throw swap OCR rollback window)"
             }
             0 -> {
@@ -10495,13 +10575,13 @@ class MainActivity : AppCompatActivity() {
             3000 -> {
                 btnCycleSwapRollbackWindow.text = "3.0s"
                 btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
-                btnCycleSwapRollbackWindow.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleSwapRollbackWindow.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
                 textSwapRollbackWindowDesc.text = "Active: 3.0s Window (Tighter post-throw swap OCR rollback window)"
             }
             else -> {
                 btnCycleSwapRollbackWindow.text = "4.0s (Def)"
                 btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnCycleSwapRollbackWindow.setTextColor(0xFFFFFFFF.toInt())
+                btnCycleSwapRollbackWindow.setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 textSwapRollbackWindowDesc.text = "Default: 4.0s (Refunds old slot & re-attributes energy/move if swap OCR arrives within 4.0s after throw)"
             }
         }
@@ -10709,7 +10789,8 @@ class MainActivity : AppCompatActivity() {
             )
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
-            putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
+            putExtra(OverlayService.EXTRA_APP_THEME_ID, OverlayService.normalizeAppThemeIdStatic(prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, OverlayService.DEFAULT_APP_THEME_ID)))
+                putExtra(OverlayService.EXTRA_SHOW_THEME_WATERMARK, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, true))
         }
 
         try {
@@ -17131,7 +17212,7 @@ class MainActivity : AppCompatActivity() {
             for ((scopeKey, btn) in pairs) {
                 val active = selectedMetaTabScope == scopeKey
                 btn?.backgroundTintList = if (active) activeTint else inactiveTint
-                btn?.setTextColor(if (active) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+                btn?.setTextColor(if (active) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
             }
         }
 
@@ -17182,7 +17263,7 @@ class MainActivity : AppCompatActivity() {
             for ((targetLambda, btn) in decayButtons) {
                 val selected = kotlin.math.abs(decayLambda - targetLambda) < 0.008f
                 btn?.backgroundTintList = if (selected) activeTint else inactiveTint
-                btn?.setTextColor(if (selected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+                btn?.setTextColor(if (selected) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
             }
 
             // 3. GBL Blind 3 Only: Limited Cup Same-CP Standard League Blend % (0..75 in steps of 5 -> progress 0..15, default 50% start fade & Fast 0.10 decay)
@@ -17207,7 +17288,7 @@ class MainActivity : AppCompatActivity() {
             for ((targetLimDecay, btn) in limDecayButtons) {
                 val selected = kotlin.math.abs(limDecay - targetLimDecay) < 0.015f
                 btn?.backgroundTintList = if (selected) activeSecTint else inactiveTint
-                btn?.setTextColor(if (selected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+                btn?.setTextColor(if (selected) contrastingInkColor(theme.secondaryButtonColor) else theme.secondaryTextColor)
             }
         }
 
@@ -17789,7 +17870,7 @@ class MainActivity : AppCompatActivity() {
             val theme = getActiveAppTheme()
             if (isBestBuddy) {
                 btnBestBuddy.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.accentColor)
-                btnBestBuddy.setTextColor(android.graphics.Color.WHITE)
+                btnBestBuddy.setTextColor(contrastingInkColor(theme.accentColor))
             } else {
                 btnBestBuddy.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
                 btnBestBuddy.setTextColor(theme.secondaryTextColor)
@@ -18049,7 +18130,7 @@ class MainActivity : AppCompatActivity() {
             minHeight = 0
             minimumHeight = 0
             backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(contrastingInkColor(theme.secondaryButtonColor))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 ivDp(28)
@@ -18065,7 +18146,7 @@ class MainActivity : AppCompatActivity() {
             minHeight = 0
             minimumHeight = 0
             backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(contrastingInkColor(theme.buttonAccentColor))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 ivDp(28)
@@ -18491,12 +18572,12 @@ class MainActivity : AppCompatActivity() {
         btnSubMatrix.backgroundTintList = android.content.res.ColorStateList.valueOf(
             if (ivLabActiveSubTab == "matrix") theme.buttonAccentColor else theme.elevatedColor
         )
-        btnSubMatrix.setTextColor(if (ivLabActiveSubTab == "matrix") android.graphics.Color.WHITE else theme.secondaryTextColor)
+        btnSubMatrix.setTextColor(if (ivLabActiveSubTab == "matrix") contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
 
         btnSubBuilt.backgroundTintList = android.content.res.ColorStateList.valueOf(
             if (ivLabActiveSubTab == "built") theme.buttonAccentColor else theme.elevatedColor
         )
-        btnSubBuilt.setTextColor(if (ivLabActiveSubTab == "built") android.graphics.Color.WHITE else theme.secondaryTextColor)
+        btnSubBuilt.setTextColor(if (ivLabActiveSubTab == "built") contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
 
         btnSubMatrix.setOnClickListener {
             if (ivLabActiveSubTab != "matrix") {
@@ -18603,7 +18684,7 @@ class MainActivity : AppCompatActivity() {
             isAllCaps = false
             setTypeface(null, android.graphics.Typeface.BOLD)
             backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(contrastingInkColor(theme.buttonAccentColor))
             setPadding(ivDp(12), ivDp(6), ivDp(12), ivDp(6))
             minWidth = 0
             minimumWidth = 0
@@ -18640,7 +18721,7 @@ class MainActivity : AppCompatActivity() {
                     textSize = 10.5f
                     isAllCaps = false
                     backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                    setTextColor(android.graphics.Color.WHITE)
+                    setTextColor(contrastingInkColor(theme.secondaryButtonColor))
                     setPadding(ivDp(8), ivDp(2), ivDp(8), ivDp(2))
                     minWidth = 0
                     minimumWidth = 0
@@ -18730,7 +18811,7 @@ class MainActivity : AppCompatActivity() {
                 backgroundTintList = android.content.res.ColorStateList.valueOf(
                     if (isTierSelected) theme.buttonAccentColor else theme.elevatedColor
                 )
-                setTextColor(if (isTierSelected) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setTextColor(if (isTierSelected) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
                 setPadding(ivDp(12), ivDp(3), ivDp(12), ivDp(3))
                 minWidth = 0
                 minimumWidth = 0
@@ -18867,7 +18948,7 @@ class MainActivity : AppCompatActivity() {
                 backgroundTintList = android.content.res.ColorStateList.valueOf(
                     if (active) theme.buttonAccentColor else theme.elevatedColor
                 )
-                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setTextColor(if (active) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
                 setPadding(ivDp(8), ivDp(4), ivDp(8), ivDp(4))
                 minHeight = 0
                 minimumHeight = 0
@@ -18911,7 +18992,7 @@ class MainActivity : AppCompatActivity() {
                 backgroundTintList = android.content.res.ColorStateList.valueOf(
                     if (active) theme.accentColor else theme.elevatedColor
                 )
-                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setTextColor(if (active) contrastingInkColor(theme.accentColor) else theme.secondaryTextColor)
                 setPadding(ivDp(4), ivDp(4), ivDp(4), ivDp(4))
                 minWidth = 0
                 minimumWidth = 0
@@ -18952,7 +19033,7 @@ class MainActivity : AppCompatActivity() {
                 backgroundTintList = android.content.res.ColorStateList.valueOf(
                     if (active) theme.secondaryAccentColor else theme.elevatedColor
                 )
-                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setTextColor(if (active) contrastingInkColor(theme.secondaryAccentColor) else theme.secondaryTextColor)
                 setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
                 minWidth = 0
                 minimumWidth = 0
@@ -19252,7 +19333,7 @@ class MainActivity : AppCompatActivity() {
             isEnabled = !ivLabIsRunning
             setTypeface(null, android.graphics.Typeface.BOLD)
             backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(contrastingInkColor(theme.buttonAccentColor))
             layoutParams = LinearLayout.LayoutParams(0, ivDp(42), 1.4f)
             setOnClickListener {
                 val targetLeagues = ivLabSelectedLeagues.toList()
@@ -19549,7 +19630,7 @@ class MainActivity : AppCompatActivity() {
                         textSize = 10.5f
                         isAllCaps = false
                         backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                        setTextColor(android.graphics.Color.WHITE)
+                        setTextColor(contrastingInkColor(theme.buttonAccentColor))
                         setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
                         minWidth = 0
                         minimumWidth = 0
@@ -19772,7 +19853,7 @@ class MainActivity : AppCompatActivity() {
                                 backgroundTintList = android.content.res.ColorStateList.valueOf(
                                     if (selected) theme.secondaryAccentColor else theme.surfaceColor
                                 )
-                                setTextColor(if (selected) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                                setTextColor(if (selected) contrastingInkColor(theme.secondaryAccentColor) else theme.secondaryTextColor)
                                 setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
                                 minWidth = 0
                                 minimumWidth = 0
@@ -20073,7 +20154,7 @@ class MainActivity : AppCompatActivity() {
             isAllCaps = false
             setTypeface(null, android.graphics.Typeface.BOLD)
             backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(contrastingInkColor(theme.buttonAccentColor))
             setPadding(ivDp(10), ivDp(6), ivDp(10), ivDp(6))
             minWidth = 0
             minimumWidth = 0
@@ -20107,7 +20188,7 @@ class MainActivity : AppCompatActivity() {
                 backgroundTintList = android.content.res.ColorStateList.valueOf(
                     if (active) theme.buttonAccentColor else theme.elevatedColor
                 )
-                setTextColor(if (active) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                setTextColor(if (active) contrastingInkColor(theme.buttonAccentColor) else theme.secondaryTextColor)
                 setPadding(ivDp(4), ivDp(2), ivDp(4), ivDp(2))
                 minWidth = 0
                 minimumWidth = 0
@@ -20235,7 +20316,7 @@ class MainActivity : AppCompatActivity() {
                 textSize = 10.5f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                setTextColor(android.graphics.Color.WHITE)
+                setTextColor(contrastingInkColor(theme.buttonAccentColor))
                 setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
                 minWidth = 0
                 minimumWidth = 0

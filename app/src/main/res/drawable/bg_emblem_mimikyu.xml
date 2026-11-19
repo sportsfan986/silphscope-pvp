@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="320dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- Transparent HUD Reticle Frame -->
+    <path
+        android:fillColor="#0DFDE047"
+        android:strokeColor="#38FDE047"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#78FDE047"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DA78BFA"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
+
+    <!-- Mimikyu Twilight Disguise Crest -->
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.75" android:scaleY="0.75">
+        <path
+            android:fillColor="#181411"
+            android:strokeColor="#FDE047"
+            android:strokeWidth="8"
+            android:pathData="M84,82 L46,26 L98,58 L142,58 L194,26 L156,82 L174,178 L120,206 L66,178 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#A78BFA"
+            android:strokeWidth="10"
+            android:strokeLineCap="round"
+            android:pathData="M86,112 L104,130 M104,112 L86,130 M136,112 L154,130 M154,112 L136,130" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FDE047"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M90,156 L105,146 L120,158 L135,146 L150,156" />
+    </group>
+</vector>

@@ -20,10 +20,10 @@
             --subpanel-bg-alpha: 0.325;
             --row-bg-alpha: 0.725;
             --panel-blur: 3px;
-            --panel-bg-rgb: 5, 11, 22;
-            --panel-border-rgb: 45, 212, 191;
-            --header-accent-rgb: 45, 212, 191;
-            --header-accent-hex: #2dd4bf;
+            --panel-bg-rgb: 5, 8, 16;
+            --panel-border-rgb: 56, 189, 248;
+            --header-accent-rgb: 56, 189, 248;
+            --header-accent-hex: #38bdf8;
             --secondary-accent-rgb: 250, 204, 21;
             --secondary-accent-hex: #facc15;
         }
@@ -2341,20 +2341,32 @@
             } catch (e) {}
         }
 
+        const DEFAULT_OVERLAY_THEME_ID = "duel_scope_midnight";
         const OVERLAY_THEME_PRESETS = {
-            "dialga_shiny_midnight": { bgRgb: "5, 11, 22",   borderRgb: "45, 212, 191",  accentRgb: "45, 212, 191",  accentHex: "#2dd4bf", accent2Rgb: "250, 204, 21", accent2Hex: "#facc15", emblem: "dialga" },
-            "instinct_dark":         { bgRgb: "18, 14, 4",   borderRgb: "250, 204, 21",  accentRgb: "250, 204, 21",  accentHex: "#facc15", accent2Rgb: "56, 189, 248", accent2Hex: "#38bdf8", emblem: "instinct" },
-            "instinct_light":        { bgRgb: "22, 17, 5",   borderRgb: "250, 204, 21",  accentRgb: "250, 204, 21",  accentHex: "#facc15", accent2Rgb: "56, 189, 248", accent2Hex: "#38bdf8", emblem: "instinct" },
-            "mystic_dark":           { bgRgb: "6, 14, 34",   borderRgb: "56, 189, 248",  accentRgb: "56, 189, 248",  accentHex: "#38bdf8", accent2Rgb: "192, 132, 252", accent2Hex: "#c084fc", emblem: "mystic" },
+            "duel_scope_midnight":   { bgRgb: "5, 8, 16",    borderRgb: "56, 189, 248",  accentRgb: "56, 189, 248",  accentHex: "#38bdf8", accent2Rgb: "250, 204, 21",  accent2Hex: "#facc15", emblem: "duel_scope" },
+            "dialga_shiny_midnight": { bgRgb: "5, 11, 22",   borderRgb: "45, 212, 191",  accentRgb: "45, 212, 191",  accentHex: "#2dd4bf", accent2Rgb: "250, 204, 21",  accent2Hex: "#facc15", emblem: "dialga" },
+            "umbreon_shiny_oled":    { bgRgb: "2, 5, 10",    borderRgb: "56, 189, 248",  accentRgb: "56, 189, 248",  accentHex: "#38bdf8", accent2Rgb: "251, 113, 133", accent2Hex: "#fb7185", emblem: "umbreon" },
+            "giratina_distortion":   { bgRgb: "12, 6, 16",   borderRgb: "251, 113, 133", accentRgb: "251, 113, 133", accentHex: "#fb7185", accent2Rgb: "251, 191, 36",  accent2Hex: "#fbbf24", emblem: "giratina" },
+            "shadow_mewtwo_violet":  { bgRgb: "10, 6, 20",   borderRgb: "192, 132, 252", accentRgb: "192, 132, 252", accentHex: "#c084fc", accent2Rgb: "56, 189, 248",  accent2Hex: "#38bdf8", emblem: "mewtwo" },
+            "rayquaza_emerald_oled": { bgRgb: "4, 14, 10",   borderRgb: "52, 211, 153",  accentRgb: "52, 211, 153",  accentHex: "#34d399", accent2Rgb: "250, 204, 21",  accent2Hex: "#facc15", emblem: "rayquaza" },
+            "mimikyu_twilight":      { bgRgb: "14, 11, 9",   borderRgb: "253, 224, 71",  accentRgb: "253, 224, 71",  accentHex: "#fde047", accent2Rgb: "167, 139, 250", accent2Hex: "#a78bfa", emblem: "mimikyu" },
+            "instinct_dark":         { bgRgb: "18, 14, 4",   borderRgb: "250, 204, 21",  accentRgb: "250, 204, 21",  accentHex: "#facc15", accent2Rgb: "56, 189, 248",  accent2Hex: "#38bdf8", emblem: "instinct" },
+            "valor_dark":            { bgRgb: "24, 7, 12",   borderRgb: "251, 113, 133", accentRgb: "251, 113, 133", accentHex: "#fb7185", accent2Rgb: "251, 191, 36",  accent2Hex: "#fbbf24", emblem: "valor" },
             "mystic_light":          { bgRgb: "8, 18, 38",   borderRgb: "56, 189, 248",  accentRgb: "56, 189, 248",  accentHex: "#38bdf8", accent2Rgb: "167, 139, 250", accent2Hex: "#a78bfa", emblem: "mystic" },
-            "valor_dark":            { bgRgb: "24, 7, 12",   borderRgb: "244, 63, 94",   accentRgb: "244, 63, 94",   accentHex: "#f43f5e", accent2Rgb: "251, 191, 36",  accent2Hex: "#fbbf24", emblem: "valor" },
-            "valor_light":           { bgRgb: "26, 8, 14",   borderRgb: "251, 113, 133", accentRgb: "251, 113, 133", accentHex: "#fb7185", accent2Rgb: "251, 191, 36",  accent2Hex: "#fbbf24", emblem: "valor" },
-            "sylveon_pink":          { bgRgb: "27, 11, 22",  borderRgb: "244, 114, 182", accentRgb: "244, 114, 182", accentHex: "#f472b6", accent2Rgb: "56, 189, 248",  accent2Hex: "#38bdf8", emblem: "sylveon" },
-            "sylveon_light":         { bgRgb: "27, 11, 22",  borderRgb: "244, 114, 182", accentRgb: "244, 114, 182", accentHex: "#f472b6", accent2Rgb: "56, 189, 248",  accent2Hex: "#38bdf8", emblem: "sylveon" },
-            "slate":                 { bgRgb: "10, 14, 22",  borderRgb: "56, 189, 248",  accentRgb: "56, 189, 248",  accentHex: "#38bdf8", accent2Rgb: "245, 158, 11",  accent2Hex: "#f59e0b", emblem: "slate" }
+            "sylveon_pink":          { bgRgb: "27, 11, 22",  borderRgb: "244, 114, 182", accentRgb: "244, 114, 182", accentHex: "#f472b6", accent2Rgb: "56, 189, 248",  accent2Hex: "#38bdf8", emblem: "sylveon" }
         };
 
-        let activeOverlayThemeId = "dialga_shiny_midnight";
+        function normalizeOverlayThemeId(rawId) {
+            const clean = String(rawId || "").trim();
+            if (!clean || clean === "amoled_cyan" || clean === "amoled_matrix" || clean === "slate") return DEFAULT_OVERLAY_THEME_ID;
+            if (clean === "instinct_light") return "instinct_dark";
+            if (clean === "valor_light") return "valor_dark";
+            if (clean === "mystic_dark") return "mystic_light";
+            if (clean === "sylveon_light") return "sylveon_pink";
+            return OVERLAY_THEME_PRESETS[clean] ? clean : DEFAULT_OVERLAY_THEME_ID;
+        }
+
+        let activeOverlayThemeId = DEFAULT_OVERLAY_THEME_ID;
         let showOverlayWatermark = window.location.search.indexOf("replay=1") !== -1;
 
         function getUnifiedSilphScopeIconSvg(sizePx) {
@@ -2425,62 +2437,127 @@
             return out;
         }
 
-        function getOverlayThemeIconSvg(themeId, sizePx) {
-            const mappedId = (themeId === "amoled_cyan" || themeId === "amoled_matrix") ? "dialga_shiny_midnight" : themeId;
-            const t = OVERLAY_THEME_PRESETS[mappedId] || OVERLAY_THEME_PRESETS["dialga_shiny_midnight"];
+        function getOverlayThemeInnerPaths(emblem) {
+            if (emblem === "dialga") {
+                return '<path fill="none" stroke="#2DD4BF" stroke-width="10" d="M120,12 L196,44 L228,120 L196,196 L120,228 L44,196 L12,120 L44,44 Z"/>' +
+                    '<path fill="none" stroke="#FACC15" stroke-width="11" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z"/>' +
+                    '<path fill="#FACC15" d="M62,76 L18,48 L48,94 Z M178,76 L222,48 L192,94 Z M54,120 L10,120 L54,134 Z M186,120 L230,120 L186,134 Z M62,164 L22,192 L54,146 Z M178,164 L218,192 L186,146 Z"/>' +
+                    '<path fill="#14B8A6" stroke="#67E8F9" stroke-width="6" d="M120,16 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z"/>' +
+                    '<path fill="#081224" stroke="#FACC15" stroke-width="9" d="M120,84 L152,120 L120,156 L88,120 Z"/>' +
+                    '<path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z"/>';
+            }
+            if (emblem === "umbreon") {
+                return '<circle cx="120" cy="120" r="88" fill="#05080F" stroke="#38BDF8" stroke-width="16"/>' +
+                    '<circle cx="120" cy="120" r="56" fill="none" stroke="#38BDF8" stroke-width="9" stroke-dasharray="34 15"/>' +
+                    '<path fill="#FB7185" d="M74,116 Q96,102 114,118 Q94,132 74,116 Z M166,116 Q144,102 126,118 Q146,132 166,116 Z"/>' +
+                    '<circle cx="120" cy="60" r="15" fill="none" stroke="#38BDF8" stroke-width="8"/>';
+            }
+            if (emblem === "giratina") {
+                return '<path fill="#160D1C" stroke="#FB7185" stroke-width="10" d="M120,18 L188,62 L176,164 L120,222 L64,164 L52,62 Z"/>' +
+                    '<path fill="#FB7185" d="M24,48 L88,92 L72,136 L14,106 Z M216,48 L152,92 L168,136 L226,106 Z"/>' +
+                    '<path fill="none" stroke="#FBBF24" stroke-width="11" d="M76,78 Q120,44 164,78 M82,126 Q120,104 158,126 M92,172 Q120,154 148,172"/>' +
+                    '<polygon points="120,66 138,94 120,122 102,94" fill="#FBBF24"/>';
+            }
+            if (emblem === "mewtwo") {
+                return '<path fill="none" stroke="#C084FC" stroke-width="13" d="M46,158 C34,104 68,46 120,34 C172,46 206,104 194,158 C184,196 146,216 120,216 C94,216 56,196 46,158 Z"/>' +
+                    '<path fill="#A855F7" d="M120,44 L152,86 L136,154 L120,192 L104,154 L88,86 Z"/>' +
+                    '<circle cx="120" cy="112" r="24" fill="#38BDF8" stroke="#F5F3FF" stroke-width="6"/>';
+            }
+            if (emblem === "rayquaza") {
+                return '<polygon points="120,16 218,186 22,186" fill="#0A1A13" stroke="#34D399" stroke-width="12" stroke-linejoin="round"/>' +
+                    '<polygon points="120,56 178,160 62,160" fill="none" stroke="#FACC15" stroke-width="9" stroke-linejoin="round"/>' +
+                    '<circle cx="120" cy="128" r="20" fill="#34D399"/>';
+            }
+            if (emblem === "mimikyu") {
+                return '<path fill="#181411" stroke="#FDE047" stroke-width="10" d="M84,82 L46,26 L98,58 L142,58 L194,26 L156,82 L174,178 L120,206 L66,178 Z"/>' +
+                    '<path fill="none" stroke="#A78BFA" stroke-width="11" stroke-linecap="round" d="M86,112 L104,130 M104,112 L86,130 M136,112 L154,130 M154,112 L136,130"/>' +
+                    '<path fill="none" stroke="#FDE047" stroke-width="9" stroke-linecap="round" d="M90,156 L105,146 L120,158 L135,146 L150,156"/>';
+            }
+            if (emblem === "instinct") {
+                return '<path fill="#FACC15" d="M120,8 L224,120 L120,232 L16,120 Z M120,28 L36,120 L120,212 L204,120 Z"/>' +
+                    '<path fill="#F59E0B" d="M120,40 L134,76 L172,50 L154,92 L210,70 L170,114 L222,110 L168,140 L200,164 L148,154 L164,194 L128,166 L120,216 L112,166 L76,194 L92,154 L40,164 L72,140 L18,110 L70,114 L30,70 L86,92 L68,50 L106,76 Z"/>';
+            }
+            if (emblem === "mystic") {
+                return '<path fill="#38BDF8" d="M120,10 L208,58 L208,162 L120,230 L32,162 L32,58 Z M120,28 L48,68 L48,154 L120,212 L192,154 L192,68 Z"/>' +
+                    '<path fill="#60A5FA" d="M120,52 L136,80 L196,60 L166,112 L206,122 L154,144 L170,178 L132,160 L120,224 L108,160 L70,178 L86,144 L34,122 L74,112 L44,60 L104,80 Z"/>';
+            }
+            if (emblem === "valor") {
+                return '<path fill="#FB7185" d="M120,12 C168,46 212,92 212,144 C212,190 172,226 120,232 C68,226 28,190 28,144 C28,92 72,46 120,12 Z M120,34 C82,62 48,100 48,144 C48,180 78,208 120,214 C162,208 192,180 192,144 C192,100 158,62 120,34 Z"/>' +
+                    '<path fill="#FBBF24" d="M120,40 L134,68 L158,50 L148,86 L200,64 L172,108 L208,102 L168,136 L194,158 L148,154 L162,190 L128,170 L120,216 L112,170 L78,190 L92,154 L46,158 L72,136 L32,102 L68,108 L40,64 L92,86 L82,50 L106,68 Z"/>';
+            }
+            if (emblem === "sylveon") {
+                return '<path fill="#38BDF8" d="M96,126 C74,156 44,178 22,202 L44,210 C68,188 92,164 110,138 Z M144,126 C166,156 196,178 218,202 L196,210 C172,188 148,164 130,138 Z"/>' +
+                    '<path fill="#F472B6" d="M112,106 C80,66 34,60 22,90 C10,120 44,154 112,126 Z M128,106 C160,66 206,60 218,90 C230,120 196,154 128,126 Z"/>' +
+                    '<circle cx="120" cy="118" r="26" fill="#EC4899" stroke="#FDF2F8" stroke-width="8"/>' +
+                    '<path fill="#38BDF8" d="M120,22 L128,44 L150,52 L128,60 L120,82 L112,60 L90,52 L112,44 Z"/>';
+            }
+            return "";
+        }
+
+        function getOverlayThemeIconSvg(themeId, sizePx, forWatermark) {
+            const mappedId = normalizeOverlayThemeId(themeId);
+            const t = OVERLAY_THEME_PRESETS[mappedId] || OVERLAY_THEME_PRESETS[DEFAULT_OVERLAY_THEME_ID];
             const s = sizePx || 13;
             const styleStr = `width:${s}px;height:${s}px;display:inline-block;vertical-align:middle;flex-shrink:0;`;
-            if (t.emblem === "dialga") {
-                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">
-                    <path fill="none" stroke="#2DD4BF" stroke-width="10" d="M120,12 L196,44 L228,120 L196,196 L120,228 L44,196 L12,120 L44,44 Z"/>
-                    <path fill="none" stroke="#FACC15" stroke-width="11" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z"/>
-                    <path fill="#FACC15" d="M62,76 L18,48 L48,94 Z M178,76 L222,48 L192,94 Z M54,120 L10,120 L54,134 Z M186,120 L230,120 L186,134 Z M62,164 L22,192 L54,146 Z M178,164 L218,192 L186,146 Z"/>
-                    <path fill="#14B8A6" stroke="#67E8F9" stroke-width="6" d="M120,16 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z"/>
-                    <path fill="#081224" stroke="#FACC15" stroke-width="9" d="M120,84 L152,120 L120,156 L88,120 Z"/>
-                    <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z"/>
+
+            if (forWatermark) {
+                const reticle =
+                    `<circle cx="120" cy="120" r="108" fill="${t.accentHex}" fill-opacity="0.06" stroke="${t.accentHex}" stroke-opacity="0.34" stroke-width="1.4" stroke-dasharray="5 5"/>` +
+                    `<circle cx="120" cy="120" r="78" fill="none" stroke="${t.accent2Hex}" stroke-opacity="0.22" stroke-width="1.1" stroke-dasharray="3 6"/>` +
+                    `<path fill="none" stroke="${t.accentHex}" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202"/>` +
+                    `<path stroke="${t.accent2Hex}" stroke-opacity="0.35" stroke-width="1.6" stroke-linecap="round" d="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120"/>`;
+                if (t.emblem === "duel_scope") {
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">
+                        <defs>
+                            <linearGradient id="ovWmL" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#2563EB"/></linearGradient>
+                            <linearGradient id="ovWmR" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FACC15"/><stop offset="55%" stop-color="#F97316"/><stop offset="100%" stop-color="#EF4444"/></linearGradient>
+                        </defs>
+                        ${reticle}
+                        <circle cx="120" cy="120" r="93" fill="none" stroke="#38BDF8" stroke-opacity="0.24" stroke-width="1.2" stroke-dasharray="4 4"/>
+                        <g transform="translate(120,27)"><circle r="11.5" fill="#050B16" fill-opacity="0.85" stroke="#2DD4BF" stroke-width="1.2"/><polygon points="0,-7 6,0 0,7 -6,0" fill="#2DD4BF" stroke="#FACC15" stroke-width="1.2"/></g>
+                        <g transform="translate(174.7,44.8)"><circle r="11.5" fill="#000000" fill-opacity="0.85" stroke="#38BDF8" stroke-width="1.2"/><circle r="5.5" fill="none" stroke="#38BDF8" stroke-width="2.1"/><circle r="1.8" fill="#FB7185"/></g>
+                        <g transform="translate(208.4,91.3)"><circle r="11.5" fill="#09050B" fill-opacity="0.85" stroke="#FB7185" stroke-width="1.2"/><path d="M-6,-4 L0,-1 L6,-4 L4,5 L0,2 L-4,5 Z" fill="#FB7185"/><polygon points="0,-6 2.5,-2 0,2 -2.5,-2" fill="#FBBF24"/></g>
+                        <g transform="translate(208.4,148.7)"><circle r="11.5" fill="#080510" fill-opacity="0.85" stroke="#C084FC" stroke-width="1.2"/><path d="M-5,4 C-6,-4 0,-7 0,-7 C0,-7 6,-4 5,4" fill="none" stroke="#C084FC" stroke-width="2.2"/><circle cx="0" cy="0" r="2.6" fill="#38BDF8"/></g>
+                        <g transform="translate(174.7,195.2)"><circle r="11.5" fill="#030A07" fill-opacity="0.85" stroke="#34D399" stroke-width="1.2"/><polygon points="0,-6.5 6.5,5.5 -6.5,5.5" fill="none" stroke="#34D399" stroke-width="2" stroke-linejoin="round"/><circle cx="0" cy="1.5" r="2" fill="#FACC15"/></g>
+                        <g transform="translate(120,213)"><circle r="11.5" fill="#0B0908" fill-opacity="0.85" stroke="#FDE047" stroke-width="1.2"/><path d="M-4,-1 L-6,-7 L-1,-3 L1,-3 L6,-7 L4,-1 L5,6 L-5,6 Z" fill="#FDE047"/><circle cx="-2" cy="1.5" r="1" fill="#0B0908"/><circle cx="2" cy="1.5" r="1" fill="#0B0908"/></g>
+                        <g transform="translate(65.3,195.2)"><circle r="11.5" fill="#0F0D06" fill-opacity="0.85" stroke="#FACC15" stroke-width="1.2"/><polygon points="1,-7 -4,1 0,1 -1,7 4,-1 0,-1" fill="#FACC15"/></g>
+                        <g transform="translate(31.6,148.7)"><circle r="11.5" fill="#160709" fill-opacity="0.85" stroke="#FB7185" stroke-width="1.2"/><path d="M0,-7 C4,-3 5,2 0,7 C-5,2 -4,-3 0,-7 Z" fill="#FB7185"/><circle cx="0" cy="2" r="2" fill="#FBBF24"/></g>
+                        <g transform="translate(31.6,91.3)"><circle r="11.5" fill="#060D1A" fill-opacity="0.85" stroke="#38BDF8" stroke-width="1.2"/><polygon points="0,-6.5 5.5,-3 5.5,3 0,6.5 -5.5,3 -5.5,-3" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="0" cy="0" r="2.2" fill="#6D28D9"/></g>
+                        <g transform="translate(65.3,44.8)"><circle r="11.5" fill="#1B0B16" fill-opacity="0.85" stroke="#F472B6" stroke-width="1.2"/><path d="M0,0 L-6,-4 L-6,4 Z M0,0 L6,-4 L6,4 Z" fill="#EC4899"/><circle cx="0" cy="0" r="2.2" fill="#38BDF8"/></g>
+                        <g transform="translate(55,55) scale(1.2037)">
+                            <circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2"/>
+                            <path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#ovWmL)" stroke-width="6.2" stroke-linecap="round"/>
+                            <path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#ovWmR)" stroke-width="6.2" stroke-linecap="round"/>
+                            <path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/>
+                            <circle cx="54" cy="19.5" r="1.6" fill="#FEF08A"/><circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8"/><circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444"/>
+                            <rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                            <rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                            <rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8"/><rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/><rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/>
+                            <path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round"/>
+                            <circle cx="76.5" cy="80.5" r="6.6" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8"/><circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF"/>
+                        </g>
+                    </svg>`;
+                }
+                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">${reticle}<g transform="translate(30,30) scale(0.75)">${getOverlayThemeInnerPaths(t.emblem)}</g></svg>`;
+            }
+
+            if (t.emblem === "duel_scope") {
+                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" style="${styleStr}">
+                    <circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#38BDF8" stroke-width="7"/>
+                    <path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="#FACC15" stroke-width="7" stroke-linecap="round"/>
+                    <rect x="37.6" y="37.6" width="12" height="12" rx="2.4" fill="#22C55E"/><rect x="58" y="37.6" width="12" height="12" rx="2.4" fill="#EF4444"/>
+                    <rect x="37.6" y="58" width="12" height="12" rx="2.4" fill="#38BDF8"/><rect x="58" y="58" width="12" height="12" rx="2.4" fill="#475569"/>
                 </svg>`;
             }
-            if (t.emblem === "instinct") {
-                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">
-                    <path fill="#FACC15" d="M120,8 L224,120 L120,232 L16,120 Z M120,28 L36,120 L120,212 L204,120 Z"/>
-                    <path fill="#F59E0B" d="M120,40 L134,76 L172,50 L154,92 L210,70 L170,114 L222,110 L168,140 L200,164 L148,154 L164,194 L128,166 L120,216 L112,166 L76,194 L92,154 L40,164 L72,140 L18,110 L70,114 L30,70 L86,92 L68,50 L106,76 Z"/>
-                </svg>`;
-            }
-            if (t.emblem === "mystic") {
-                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">
-                    <path fill="#38BDF8" d="M120,10 L208,58 L208,162 L120,230 L32,162 L32,58 Z M120,28 L48,68 L48,154 L120,212 L192,154 L192,68 Z"/>
-                    <path fill="#60A5FA" d="M120,52 L136,80 L196,60 L166,112 L206,122 L154,144 L170,178 L132,160 L120,224 L108,160 L70,178 L86,144 L34,122 L74,112 L44,60 L104,80 Z"/>
-                </svg>`;
-            }
-            if (t.emblem === "valor") {
-                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">
-                    <path fill="#EF4444" d="M120,12 C168,46 212,92 212,144 C212,190 172,226 120,232 C68,226 28,190 28,144 C28,92 72,46 120,12 Z M120,34 C82,62 48,100 48,144 C48,180 78,208 120,214 C162,208 192,180 192,144 C192,100 158,62 120,34 Z"/>
-                    <path fill="#F97316" d="M120,40 L134,68 L158,50 L148,86 L200,64 L172,108 L208,102 L168,136 L194,158 L148,154 L162,190 L128,170 L120,216 L112,170 L78,190 L92,154 L46,158 L72,136 L32,102 L68,108 L40,64 L92,86 L82,50 L106,68 Z"/>
-                </svg>`;
-            }
-            if (t.emblem === "sylveon") {
-                return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">
-                    <path fill="#38BDF8" d="M96,126 C74,156 44,178 22,202 L44,210 C68,188 92,164 110,138 Z M144,126 C166,156 196,178 218,202 L196,210 C172,188 148,164 130,138 Z"/>
-                    <path fill="#F472B6" d="M112,106 C80,66 34,60 22,90 C10,120 44,154 112,126 Z M128,106 C160,66 206,60 218,90 C230,120 196,154 128,126 Z"/>
-                    <path fill="#38BDF8" d="M106,112 C84,84 52,80 44,98 C36,116 60,136 106,120 Z M134,112 C156,84 188,80 196,98 C204,116 180,136 134,120 Z"/>
-                    <circle cx="120" cy="118" r="26" fill="#EC4899" stroke="#FDF2F8" stroke-width="8"/>
-                    <path fill="#38BDF8" d="M120,22 L128,44 L150,52 L128,60 L120,82 L112,60 L90,52 L112,44 Z"/>
-                </svg>`;
-            }
-            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" style="${styleStr}">
-                <polygon points="54,12 88,28 88,64 54,94 20,64 20,28" fill="#101827" stroke="#38BDF8" stroke-width="7" stroke-linejoin="round"/>
-                <circle cx="42" cy="46" r="6" fill="#22C55E"/>
-                <circle cx="66" cy="46" r="6" fill="#EF4444"/>
-                <circle cx="54" cy="66" r="6" fill="#F59E0B"/>
-            </svg>`;
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="${styleStr}">${getOverlayThemeInnerPaths(t.emblem)}</svg>`;
         }
 
         function refreshOverlayWatermarkUi() {
             const wmEl = document.getElementById("overlay-watermark-bg");
             if (!wmEl) return;
-            const t = OVERLAY_THEME_PRESETS[activeOverlayThemeId] || OVERLAY_THEME_PRESETS["dialga_shiny_midnight"];
-            if (showOverlayWatermark && t.emblem && t.emblem !== "slate") {
-                wmEl.innerHTML = getOverlayThemeIconSvg(activeOverlayThemeId, 175);
+            const t = OVERLAY_THEME_PRESETS[activeOverlayThemeId] || OVERLAY_THEME_PRESETS[DEFAULT_OVERLAY_THEME_ID];
+            if (showOverlayWatermark && t && t.emblem) {
+                wmEl.innerHTML = getOverlayThemeIconSvg(activeOverlayThemeId, 175, true);
                 wmEl.classList.remove("hidden");
             } else {
                 wmEl.classList.add("hidden");
@@ -2494,8 +2571,7 @@
 
         window.setOverlayTheme = function(themeId) {
             try {
-                const mappedId = (themeId === "amoled_cyan" || themeId === "amoled_matrix") ? "dialga_shiny_midnight" : themeId;
-                activeOverlayThemeId = OVERLAY_THEME_PRESETS[mappedId] ? mappedId : "dialga_shiny_midnight";
+                activeOverlayThemeId = normalizeOverlayThemeId(themeId);
                 const t = OVERLAY_THEME_PRESETS[activeOverlayThemeId];
                 const root = document.documentElement;
                 root.style.setProperty("--panel-bg-rgb", t.bgRgb);
@@ -3591,6 +3667,9 @@
                 }
                 if (data.appThemeId) {
                     window.setOverlayTheme(data.appThemeId);
+                }
+                if (typeof data.showOverlayWatermark === "boolean") {
+                    window.setOverlayWatermark(data.showOverlayWatermark);
                 }
                 if (data.aiAdviceHudPosition) {
                     window.setAiAdviceHudPosition(data.aiAdviceHudPosition);

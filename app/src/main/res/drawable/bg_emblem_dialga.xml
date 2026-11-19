@@ -5,50 +5,72 @@
     android:viewportWidth="240"
     android:viewportHeight="240">
 
-    <!-- Outer Temporal Distortion Octagon Ring -->
+    <!-- Transparent HUD Reticle Frame -->
     <path
-        android:fillColor="#142DD4BF"
-        android:strokeColor="#2DD4BF"
-        android:strokeWidth="3.5"
-        android:pathData="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
-
-    <!-- Origin Forme Dialga Radiant Temporal Wheel & 6 Astral Spikes -->
+        android:fillColor="#0D2DD4BF"
+        android:strokeColor="#382DD4BF"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#FACC15"
-        android:strokeWidth="4"
-        android:pathData="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
-
-    <!-- Radial Temporal Spikes (Top-Left, Top-Right, Mid-Left, Mid-Right, Bottom-Left, Bottom-Right) -->
+        android:strokeColor="#782DD4BF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
     <path
-        android:fillColor="#FACC15"
-        android:pathData="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFACC15"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
 
-    <!-- Shiny Origin Dialga Towering Crown Crest, Neck Pillar & Blade Shoulders -->
-    <path
-        android:fillColor="#14B8A6"
-        android:strokeColor="#67E8F9"
-        android:strokeWidth="2.5"
-        android:pathData="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.75" android:scaleY="0.75">
+        <!-- Outer Temporal Distortion Octagon Ring -->
+        <path
+            android:fillColor="#142DD4BF"
+            android:strokeColor="#2DD4BF"
+            android:strokeWidth="3.5"
+            android:pathData="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
 
-    <!-- Shiny Teal Inner Armor Plates & Temporal Striations -->
-    <path
-        android:fillColor="#2DD4BF"
-        android:pathData="M120,28 L132,64 L120,82 L108,64 Z M70,102 L102,92 L96,122 Z M170,102 L138,92 L144,122 Z M104,152 L120,204 L136,152 L120,164 Z" />
+        <!-- Origin Forme Dialga Radiant Temporal Wheel & 6 Astral Spikes -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FACC15"
+            android:strokeWidth="4"
+            android:pathData="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
 
-    <!-- Center Chest Temporal Diamond Core (Adamant Crystal Motif) -->
-    <path
-        android:fillColor="#081224"
-        android:strokeColor="#FACC15"
-        android:strokeWidth="3.5"
-        android:pathData="M120,84 L152,120 L120,156 L88,120 Z" />
+        <!-- Radial Temporal Spikes -->
+        <path
+            android:fillColor="#FACC15"
+            android:pathData="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
 
-    <path
-        android:fillColor="#67E8F9"
-        android:pathData="M120,96 L140,120 L120,144 L100,120 Z" />
+        <!-- Shiny Origin Dialga Towering Crown Crest, Neck Pillar & Blade Shoulders -->
+        <path
+            android:fillColor="#14B8A6"
+            android:strokeColor="#67E8F9"
+            android:strokeWidth="2.5"
+            android:pathData="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
 
-    <!-- Shiny Sparkle Stars -->
-    <path
-        android:fillColor="#FEF08A"
-        android:pathData="M48,38 L52,48 L62,52 L52,56 L48,66 L44,56 L34,52 L44,48 Z M192,38 L195,46 L203,49 L195,52 L192,60 L189,52 L181,49 L189,46 Z" />
+        <!-- Shiny Teal Inner Armor Plates & Temporal Striations -->
+        <path
+            android:fillColor="#2DD4BF"
+            android:pathData="M120,28 L132,64 L120,82 L108,64 Z M70,102 L102,92 L96,122 Z M170,102 L138,92 L144,122 Z M104,152 L120,204 L136,152 L120,164 Z" />
+
+        <!-- Center Chest Temporal Diamond Core -->
+        <path
+            android:fillColor="#081224"
+            android:strokeColor="#FACC15"
+            android:strokeWidth="3.5"
+            android:pathData="M120,84 L152,120 L120,156 L88,120 Z" />
+
+        <path
+            android:fillColor="#67E8F9"
+            android:pathData="M120,96 L140,120 L120,144 L100,120 Z" />
+
+        <!-- Shiny Sparkle Stars -->
+        <path
+            android:fillColor="#FEF08A"
+            android:pathData="M48,38 L52,48 L62,52 L52,56 L48,66 L44,56 L34,52 L44,48 Z M192,38 L195,46 L203,49 L195,52 L192,60 L189,52 L181,49 L189,46 Z" />
+    </group>
 </vector>

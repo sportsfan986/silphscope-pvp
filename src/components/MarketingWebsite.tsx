@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { VersionRoadmapInfographic } from './VersionRoadmapInfographic';
+import {
+  type WebAppThemePalette,
+  DEFAULT_APP_THEME_ID,
+  renderThemeWatermarkSvg
+} from './AppThemeAndModels';
+
+function hexToRgbTriplet(hex: string, fallback: string = '5, 8, 16'): string {
+  const clean = String(hex || '').replace('#', '').trim();
+  if (clean.length !== 6) return fallback;
+  const n = parseInt(clean, 16);
+  if (Number.isNaN(n)) return fallback;
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
 
 export type MarketingSubpage = 'vault' | 'home' | 'live' | 'guide' | 'compare';
 
@@ -11,6 +24,12 @@ export interface MarketingWebsiteProps {
   webScreenName: string;
   onChangeWebScreenName: (name: string) => void;
   webMembershipTier: 'free' | 'supporter' | 'pro' | 'vip';
+  activeTheme: WebAppThemePalette;
+  showThemeWatermark: boolean;
+  isSignedIn: boolean;
+  onApplySyncedTheme?: (themeId: string, showWatermark?: boolean) => void;
+  onVaultLogout?: () => void;
+  onVaultSessionRestored?: (screenName: string, sessionToken: string) => void;
 }
 
 export interface DvrReplayItem {
@@ -271,7 +290,13 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   onOpenMembershipModal,
   webScreenName,
   onChangeWebScreenName,
-  webMembershipTier
+  webMembershipTier,
+  activeTheme,
+  showThemeWatermark,
+  isSignedIn,
+  onApplySyncedTheme,
+  onVaultLogout,
+  onVaultSessionRestored
 }) => {
   const [selectedHeroIdx, setSelectedHeroIdx] = useState<number>(0);
   const [heroShowStaticPoster, setHeroShowStaticPoster] = useState<boolean>(false);
@@ -349,10 +374,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       const isSilphDomain = window.location.hostname.endsWith('silphscopepvp.com');
       const domainAttr = isSilphDomain ? '; domain=.silphscopepvp.com' : '';
       const secureAttr = window.location.protocol === 'https:' ? '; Secure' : '';
-      document.cookie = `sspvp_vault_user=; path=/; max-age=0; SameSite=Lax${domainAttr}${secureAttr}`;
-      document.cookie = `sspvp_vault_session=; path=/; max-age=0; SameSite=Lax${domainAttr}${secureAttr}`;
-      document.cookie = `sspvp_vault_user=; path=/; max-age=0; SameSite=Lax${secureAttr}`;
-      document.cookie = `sspvp_vault_session=; path=/; max-age=0; SameSite=Lax${secureAttr}`;
+      ['sspvp_vault_user', 'sspvp_vault_session', 'sspvp_theme', 'sspvp_watermark'].forEach((ck) => {
+        document.cookie = `${ck}=; path=/; max-age=0; SameSite=Lax${domainAttr}${secureAttr}`;
+        document.cookie = `${ck}=; path=/; max-age=0; SameSite=Lax${secureAttr}`;
+      });
     } catch {}
   };
 
@@ -581,6 +606,18 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           localStorage.setItem('sspvp_vault_user', data.screenName);
           localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
           writeSharedVaultCookies(data.screenName, activeSess);
+          if (activeSess) onVaultSessionRestored?.(data.screenName, activeSess);
+          if (data.userThemeId) {
+            const wmFlag = data.showThemeWatermark !== false;
+            onApplySyncedTheme?.(String(data.userThemeId), wmFlag);
+            try {
+              const isSilphDomain = window.location.hostname.endsWith('silphscopepvp.com');
+              const dom = isSilphDomain ? '; domain=.silphscopepvp.com' : '';
+              const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+              document.cookie = `sspvp_theme=${encodeURIComponent(String(data.userThemeId))}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+              document.cookie = `sspvp_watermark=${wmFlag ? '1' : '0'}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+            } catch {}
+          }
         }
         if (!isFeat) {
           try {
@@ -958,6 +995,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           setVaultUser(resolvedName);
           setVaultInputUser(resolvedName);
           onChangeWebScreenName(resolvedName);
+          if (data.sessionToken) onVaultSessionRestored?.(resolvedName, data.sessionToken);
         }
         setIsVaultOwner(true);
         setOwnerLoginOpen(false);
@@ -1005,6 +1043,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           setVaultUser(resolvedName);
           setVaultInputUser(resolvedName);
           onChangeWebScreenName(resolvedName);
+          if (data.sessionToken) onVaultSessionRestored?.(resolvedName, data.sessionToken);
         }
         setIsVaultOwner(true);
         setOwnerLoginOpen(false);
@@ -1076,6 +1115,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 setVaultUser(d.screenName);
                 setVaultInputUser(d.screenName);
                 onChangeWebScreenName(d.screenName);
+                onVaultSessionRestored?.(d.screenName, d.sessionToken || sess);
               }
             })
             .catch(() => {});
@@ -1132,26 +1172,172 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const stripeVipSeasonUrl = `https://buy.stripe.com/9B6fZi3kJ6By4Lzamm1Jm0b?client_reference_id=${encodedRef}`;
   const stripeVipIntroUrl = `https://buy.stripe.com/4gM7sM5sR5xudi5amm1Jm0c?client_reference_id=${encodedRef}`;
 
+  const mkBgRgb = hexToRgbTriplet(activeTheme.bgHex, '5, 8, 16');
+  const mkCardRgb = hexToRgbTriplet(activeTheme.cardHex, '11, 21, 38');
+  const mkCardAltRgb = hexToRgbTriplet(activeTheme.cardAltHex, '7, 13, 25');
+  const mkAccentRgb = hexToRgbTriplet(activeTheme.accentHex, '56, 189, 248');
+  const mkAccent2Rgb = hexToRgbTriplet(activeTheme.accentSecondaryHex, '250, 204, 21');
+
   return (
     <div
-      className="min-h-screen flex flex-col selection:bg-teal-400/30 selection:text-teal-100"
+      className={`marketing-surface ${activeTheme.isLight ? 'mk-light' : 'mk-dark'} min-h-screen flex flex-col relative overflow-x-hidden transition-colors duration-200`}
       style={{
-        backgroundColor: '#050B16',
-        color: '#ECFEFF',
-        backgroundImage:
-          'radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%), radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%), linear-gradient(180deg, #050B16 0%, #081120 55%, #050B16 100%)'
+        ['--mk-bg' as any]: activeTheme.bgHex,
+        ['--mk-card' as any]: activeTheme.cardHex,
+        ['--mk-card-alt' as any]: activeTheme.cardAltHex,
+        ['--mk-border' as any]: activeTheme.borderHex,
+        ['--mk-accent' as any]: activeTheme.accentHex,
+        ['--mk-accent2' as any]: activeTheme.accentSecondaryHex,
+        ['--mk-text' as any]: activeTheme.textPrimaryHex,
+        ['--mk-muted' as any]: activeTheme.textSecondaryHex,
+        ['--mk-cta-text' as any]: activeTheme.ctaTextHex,
+        ['--mk-cta2-text' as any]: activeTheme.ctaSecondaryTextHex,
+        ['--mk-bg-rgb' as any]: mkBgRgb,
+        ['--mk-card-rgb' as any]: mkCardRgb,
+        ['--mk-card-alt-rgb' as any]: mkCardAltRgb,
+        ['--mk-accent-rgb' as any]: mkAccentRgb,
+        ['--mk-accent2-rgb' as any]: mkAccent2Rgb,
+        backgroundColor: activeTheme.bgHex,
+        color: activeTheme.textPrimaryHex,
+        backgroundImage: `radial-gradient(circle at 18% 12%, rgba(${mkAccentRgb}, ${activeTheme.isLight ? '0.10' : '0.11'}) 0%, transparent 42%), radial-gradient(circle at 82% 18%, rgba(${mkAccent2Rgb}, ${activeTheme.isLight ? '0.08' : '0.08'}) 0%, transparent 38%), linear-gradient(180deg, ${activeTheme.bgHex} 0%, ${activeTheme.cardAltHex} 55%, ${activeTheme.bgHex} 100%)`
       }}
     >
-      {/* Top Sticky Navigation Bar (Shiny Origin Dialga Midnight Theme) */}
+      <style>{`
+        .marketing-surface .bg-\\[\\#0E1B2E\\],
+        .marketing-surface .bg-\\[\\#0E1B2E\\]\\/90,
+        .marketing-surface .bg-slate-900,
+        .marketing-surface .bg-slate-900\\/90,
+        .marketing-surface .bg-slate-900\\/80,
+        .marketing-surface .bg-slate-900\\/40 {
+          background-color: color-mix(in srgb, var(--mk-card) ${showThemeWatermark ? '78%' : '96%'}, transparent) !important;
+          backdrop-filter: ${showThemeWatermark ? 'blur(2px)' : 'none'};
+        }
+        .marketing-surface .bg-\\[\\#081120\\],
+        .marketing-surface .bg-\\[\\#07101E\\],
+        .marketing-surface .bg-slate-950:not(.mk-media-preserve *):not(.mk-media-preserve),
+        .marketing-surface .bg-slate-950\\/90:not(.mk-media-preserve *),
+        .marketing-surface .bg-slate-950\\/85:not(.fixed),
+        .marketing-surface .bg-slate-950\\/60:not(.mk-media-preserve *) {
+          background-color: color-mix(in srgb, var(--mk-card-alt) ${showThemeWatermark ? '76%' : '95%'}, transparent) !important;
+        }
+        .marketing-surface .bg-slate-800:not(.mk-media-preserve *),
+        .marketing-surface .bg-slate-800\\/80:not(.mk-media-preserve *),
+        .marketing-surface .bg-slate-800\\/60:not(.mk-media-preserve *) {
+          background-color: color-mix(in srgb, var(--mk-card-alt) 85%, var(--mk-accent2) 15%) !important;
+          border-color: var(--mk-border) !important;
+        }
+        .marketing-surface .border-\\[\\#19304E\\],
+        .marketing-surface .border-slate-800,
+        .marketing-surface .border-slate-800\\/80,
+        .marketing-surface .border-slate-800\\/60,
+        .marketing-surface .border-slate-700 {
+          border-color: var(--mk-border) !important;
+        }
+        .marketing-surface .bg-teal-400,
+        .marketing-surface .bg-cyan-400 {
+          background-color: var(--mk-accent) !important;
+          color: var(--mk-cta-text) !important;
+          border-color: var(--mk-accent) !important;
+        }
+        .marketing-surface .text-teal-300:not(.mk-media-preserve *),
+        .marketing-surface .text-teal-200:not(.mk-media-preserve *),
+        .marketing-surface .text-cyan-300:not(.mk-media-preserve *),
+        .marketing-surface .text-cyan-200:not(.mk-media-preserve *) {
+          color: var(--mk-accent) !important;
+        }
+        .marketing-surface .text-amber-300:not(.mk-media-preserve *),
+        .marketing-surface .text-amber-200:not(.mk-media-preserve *) {
+          color: var(--mk-accent2) !important;
+        }
+        .marketing-surface .border-teal-400\\/40,
+        .marketing-surface .border-teal-400\\/50,
+        .marketing-surface .border-teal-400\\/60,
+        .marketing-surface .border-teal-500\\/40,
+        .marketing-surface .border-cyan-400\\/50,
+        .marketing-surface .border-cyan-500\\/40 {
+          border-color: rgba(var(--mk-accent-rgb), 0.45) !important;
+        }
+        .marketing-surface .bg-teal-950\\/40,
+        .marketing-surface .bg-cyan-950\\/40,
+        .marketing-surface .bg-teal-400\\/20,
+        .marketing-surface .bg-teal-500\\/15,
+        .marketing-surface .bg-cyan-500\\/20 {
+          background-color: rgba(var(--mk-accent-rgb), 0.14) !important;
+        }
+        .marketing-surface .bg-amber-400\\/15,
+        .marketing-surface .bg-amber-400\\/20,
+        .marketing-surface .bg-amber-500\\/20 {
+          background-color: rgba(var(--mk-accent2-rgb), 0.15) !important;
+        }
+        .marketing-surface.mk-light .text-white:not(.mk-media-preserve *):not(.bg-teal-400):not(.bg-cyan-400):not(.bg-indigo-600):not(.bg-purple-600):not(.bg-rose-600),
+        .marketing-surface.mk-light .text-slate-100:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-slate-200:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-teal-100:not(.mk-media-preserve *) {
+          color: var(--mk-text) !important;
+        }
+        .marketing-surface.mk-light .text-slate-300:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-slate-400:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-slate-500:not(.mk-media-preserve *) {
+          color: var(--mk-muted) !important;
+        }
+        .marketing-surface.mk-light .text-emerald-300:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-emerald-200:not(.mk-media-preserve *) {
+          color: #047857 !important;
+        }
+        .marketing-surface.mk-light .text-rose-300:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-rose-400:not(.mk-media-preserve *),
+        .marketing-surface.mk-light .text-rose-200:not(.mk-media-preserve *) {
+          color: #BE123C !important;
+        }
+        .marketing-surface.mk-light .bg-rose-950\\/40,
+        .marketing-surface.mk-light .bg-rose-950\\/60 {
+          background-color: #FFE4E6 !important;
+        }
+        .marketing-surface.mk-light input,
+        .marketing-surface.mk-light select {
+          background-color: var(--mk-card-alt) !important;
+          color: var(--mk-text) !important;
+          border-color: var(--mk-border) !important;
+        }
+        .marketing-surface.mk-light .bg-amber-400 {
+          color: #050810 !important;
+        }
+        .marketing-surface.mk-light .mk-media-preserve .text-white {
+          color: #FFFFFF !important;
+        }
+        .marketing-surface.mk-light .mk-media-preserve .text-slate-300,
+        .marketing-surface.mk-light .mk-media-preserve .text-slate-400 {
+          color: #CBD5E1 !important;
+        }
+        .marketing-surface.mk-light .mk-media-preserve .text-teal-300 {
+          color: #5EEAD4 !important;
+        }
+        .marketing-surface.mk-light .mk-media-preserve .text-amber-300 {
+          color: #FDE047 !important;
+        }
+      `}</style>
+
+      {/* Fixed Centered Transparent-HUD Watermark (default Duel Scope constellation for visitors; synced theme for signed-in users) */}
+      {showThemeWatermark && (
+        <div
+          className="fixed inset-0 pointer-events-none flex items-center justify-center z-0 overflow-hidden"
+          style={{ opacity: activeTheme.watermarkAlpha }}
+          aria-hidden="true"
+        >
+          {renderThemeWatermarkSvg(activeTheme.id, 'w-[500px] h-[500px] max-w-[90vw] max-h-[90vh]')}
+        </div>
+      )}
+
+      {/* Top Sticky Navigation Bar */}
       <header
         className="sticky top-0 z-50 backdrop-blur-xl border-b"
         style={{
-          backgroundColor: 'rgba(5, 11, 22, 0.88)',
-          borderColor: '#19304E'
+          backgroundColor: `rgba(${mkBgRgb}, 0.88)`,
+          borderColor: activeTheme.borderHex
         }}
       >
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          {/* Brand Logo + Origin Dialga Badge */}
+          {/* Brand Logo */}
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -1165,21 +1351,21 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-black text-base sm:text-lg tracking-tight text-white">
-                    SilphScope <span style={{ color: '#2DD4BF' }}>{activeSubpage === 'vault' ? 'DVR' : 'PvP'}</span>
+                  <span className="font-black text-base sm:text-lg tracking-tight" style={{ color: activeTheme.textPrimaryHex }}>
+                    SilphScope <span style={{ color: activeTheme.accentHex }}>{activeSubpage === 'vault' ? 'DVR' : 'PvP'}</span>
                   </span>
                   <span
                     className="text-[10px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-full border"
                     style={{
-                      color: '#FACC15',
-                      borderColor: 'rgba(250, 204, 21, 0.45)',
-                      backgroundColor: 'rgba(250, 204, 21, 0.12)'
+                      color: activeTheme.accentSecondaryHex,
+                      borderColor: `rgba(${mkAccent2Rgb}, 0.45)`,
+                      backgroundColor: `rgba(${mkAccent2Rgb}, 0.12)`
                     }}
                   >
-                    v7.77 • Latest Release
+                    v7.80 • Latest Release
                   </span>
                 </div>
-                <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
+                <p className="text-[11px] hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
                   {activeSubpage === 'vault'
                     ? 'Cloud Replay Vault • Frame-Synced Video & HUD Overlay'
                     : 'Automated Battle DVR & Auto-Logger • ELO Anti-Meta Builder • Optional Compact HUD'}
@@ -1203,9 +1389,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 href="https://dl.silphscopepvp.com"
                 className="px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-md hover:brightness-110"
                 style={{
-                  backgroundColor: '#2DD4BF',
-                  color: '#042F2E',
-                  boxShadow: '0 0 14px rgba(45, 212, 191, 0.3)'
+                  backgroundColor: 'var(--mk-accent)',
+                  color: 'var(--mk-cta-text)',
+                  boxShadow: '0 0 14px rgba(var(--mk-accent-rgb), 0.3)'
                 }}
               >
                 <span>📱</span>
@@ -1235,7 +1421,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <>
               <nav
                 className="flex items-center gap-1 p-1 rounded-xl border text-xs font-extrabold flex-wrap"
-                style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
               >
                 <button
                   type="button"
@@ -1304,9 +1490,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   onClick={handleInstallClick}
                   className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 hover:brightness-110 cursor-pointer shadow"
                   style={{
-                    backgroundColor: 'rgba(14, 27, 46, 0.95)',
-                    borderColor: '#2DD4BF',
-                    color: '#2DD4BF'
+                    backgroundColor: 'rgba(var(--mk-card-rgb), 0.95)',
+                    borderColor: 'var(--mk-accent)',
+                    color: 'var(--mk-accent)'
                   }}
                   title="Install SilphScope DVR as a standalone PWA on Android, iOS Safari, or Desktop"
                 >
@@ -1317,9 +1503,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   href="https://dl.silphscopepvp.com"
                   className="px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-lg hover:brightness-110"
                   style={{
-                    backgroundColor: '#2DD4BF',
-                    color: '#042F2E',
-                    boxShadow: '0 0 16px rgba(45, 212, 191, 0.35)'
+                    backgroundColor: 'var(--mk-accent)',
+                    color: 'var(--mk-cta-text)',
+                    boxShadow: '0 0 16px rgba(var(--mk-accent-rgb), 0.35)'
                   }}
                 >
                   <span>📱 Download APK</span>
@@ -1329,9 +1515,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   onClick={onOpenMembershipModal}
                   className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 cursor-pointer hover:brightness-110"
                   style={{
-                    backgroundColor: 'rgba(250, 204, 21, 0.16)',
-                    borderColor: '#FACC15',
-                    color: '#FDE047'
+                    backgroundColor: 'rgba(var(--mk-accent2-rgb), 0.16)',
+                    borderColor: 'var(--mk-accent2)',
+                    color: 'var(--mk-accent2)'
                   }}
                 >
                   <span>
@@ -1361,14 +1547,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="lg:col-span-7 space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-extrabold flex-wrap"
                 style={{
-                  backgroundColor: 'rgba(45, 212, 191, 0.10)',
-                  borderColor: 'rgba(45, 212, 191, 0.45)',
-                  color: '#2DD4BF'
+                  backgroundColor: 'rgba(var(--mk-accent-rgb), 0.10)',
+                  borderColor: 'rgba(var(--mk-accent-rgb), 0.45)',
+                  color: 'var(--mk-accent)'
                 }}
               >
                 <span>🎬 FRAME-SYNCED BATTLE DVR</span>
                 <span className="text-slate-500">•</span>
-                <span style={{ color: '#FACC15' }}>📊 ZERO-TYPING AUTO-LOGGER</span>
+                <span style={{ color: 'var(--mk-accent2)' }}>📊 ZERO-TYPING AUTO-LOGGER</span>
                 <span className="text-slate-500">•</span>
                 <span className="text-emerald-300">🔕 LOG-ONLY STEALTH MODE</span>
               </div>
@@ -1397,9 +1583,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
                   style={{
                     background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)',
-                    borderColor: '#99F6E4',
-                    color: '#042F2E',
-                    boxShadow: '0 8px 25px rgba(45, 212, 191, 0.28)'
+                    borderColor: 'var(--mk-border)',
+                    color: 'var(--mk-cta-text)',
+                    boxShadow: '0 8px 25px rgba(var(--mk-accent-rgb), 0.28)'
                   }}
                 >
                   <div className="flex items-center gap-3">
@@ -1418,19 +1604,19 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   href="https://dl.silphscopepvp.com"
                   className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01]"
                   style={{
-                    backgroundColor: '#0E1B2E',
-                    borderColor: '#2DD4BF',
-                    color: '#ECFEFF'
+                    backgroundColor: 'var(--mk-card)',
+                    borderColor: 'var(--mk-accent)',
+                    color: 'var(--mk-text)'
                   }}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
-                      <div className="text-sm font-black leading-tight" style={{ color: '#2DD4BF' }}>
+                      <div className="text-sm font-black leading-tight" style={{ color: 'var(--mk-accent)' }}>
                         Download Android APK
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Instant 1-Click Direct Release (v7.77)
+                        Instant 1-Click Direct Release (v7.80)
                       </div>
                     </div>
                   </div>
@@ -1442,15 +1628,15 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   onClick={() => onLaunchWebApp('presets')}
                   className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
                   style={{
-                    backgroundColor: '#0E1B2E',
-                    borderColor: '#FACC15',
-                    color: '#ECFEFF'
+                    backgroundColor: 'var(--mk-card)',
+                    borderColor: 'var(--mk-accent2)',
+                    color: 'var(--mk-text)'
                   }}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">🧬</span>
                     <div>
-                      <div className="text-sm font-black leading-tight" style={{ color: '#FACC15' }}>
+                      <div className="text-sm font-black leading-tight" style={{ color: 'var(--mk-accent2)' }}>
                         ELO Anti-Meta Builder &amp; Web Sim
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
@@ -1466,9 +1652,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   onClick={() => onSelectSubpage('guide')}
                   className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
                   style={{
-                    backgroundColor: '#081120',
-                    borderColor: '#19304E',
-                    color: '#ECFEFF'
+                    backgroundColor: 'var(--mk-card-alt)',
+                    borderColor: 'var(--mk-border)',
+                    color: 'var(--mk-text)'
                   }}
                 >
                   <div className="flex items-center gap-3">
@@ -1497,7 +1683,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <div
                     key={stat.k}
                     className="p-2.5 rounded-xl border"
-                    style={{ backgroundColor: 'rgba(14, 27, 46, 0.65)', borderColor: '#19304E' }}
+                    style={{ backgroundColor: 'rgba(var(--mk-card-rgb), 0.65)', borderColor: 'var(--mk-border)' }}
                   >
                     <div className="text-sm font-black font-mono" style={{ color: stat.c }}>
                       {stat.k}
@@ -1513,12 +1699,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               <div
                 className="relative w-full max-w-[340px] rounded-[34px] p-2.5 border-4 shadow-2xl"
                 style={{
-                  backgroundColor: '#081120',
-                  borderColor: '#2DD4BF',
-                  boxShadow: '0 0 40px rgba(45, 212, 191, 0.22), 0 0 80px rgba(250, 204, 21, 0.10)'
+                  backgroundColor: 'var(--mk-card-alt)',
+                  borderColor: 'var(--mk-accent)',
+                  boxShadow: '0 0 40px rgba(var(--mk-accent-rgb), 0.22), 0 0 80px rgba(var(--mk-accent2-rgb), 0.10)'
                 }}
               >
-                <div className="relative rounded-[24px] overflow-hidden border border-teal-400/30 bg-slate-950">
+                <div className="mk-media-preserve relative rounded-[24px] overflow-hidden border border-teal-400/30 bg-slate-950">
                   {heroShowStaticPoster ? (
                     <img
                       src={`${import.meta.env.BASE_URL}${activeHero.posterPath}`}
@@ -1579,7 +1765,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
                 <div
                   className="p-3 rounded-xl border text-xs space-y-1"
-                  style={{ backgroundColor: 'rgba(14, 27, 46, 0.75)', borderColor: '#19304E' }}
+                  style={{ backgroundColor: 'rgba(var(--mk-card-rgb), 0.75)', borderColor: 'var(--mk-border)' }}
                 >
                   <div className="font-extrabold text-amber-300">{activeHero.label}</div>
                   <p className="text-[11.5px] text-slate-300 leading-snug">{activeHero.caption}</p>
@@ -1591,11 +1777,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           {/* 2A. FEATURED BATTLES SHOWCASE (@Featured • Interactive Browser Replay Theater) */}
           <section
             className="rounded-3xl p-6 sm:p-8 border space-y-6"
-            style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+            style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
           >
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div>
-                <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider" style={{ color: '#FACC15' }}>
+                <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider" style={{ color: 'var(--mk-accent2)' }}>
                   <span>🎬 Interactive Browser Replay Theater (@Featured Vault)</span>
                   <span>•</span>
                   <span className="text-teal-300">Post-Match VOD Review on Desktop, iOS &amp; Android</span>
@@ -1613,9 +1799,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 rel="noopener noreferrer"
                 className="px-4 py-2.5 rounded-xl font-extrabold text-xs border shrink-0 transition hover:brightness-110"
                 style={{
-                  backgroundColor: 'rgba(250, 204, 21, 0.15)',
-                  borderColor: '#FACC15',
-                  color: '#FDE047'
+                  backgroundColor: 'rgba(var(--mk-accent2-rgb), 0.15)',
+                  borderColor: 'var(--mk-accent2)',
+                  color: 'var(--mk-accent2)'
                 }}
               >
                 🎬 Open Full @Featured Vault ↗
@@ -1626,7 +1812,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Featured Battle Card 1: Ultra League 3D Shadow Aura & D-3 Stage Math */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
-                style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
               >
                 <div>
                   <button
@@ -1697,7 +1883,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Featured Battle Card 2: Ultra League ⚡BP+1 Breakpoint & Shadow: N/A Trace */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
-                style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
               >
                 <div>
                   <button
@@ -1778,7 +1964,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Featured Battle Card 3: Ultra League Disguise Sync, Non-Shadow Proof & 0F Catch */}
               <div
                 className="rounded-2xl border overflow-hidden flex flex-col justify-between transition hover:border-teal-400/70"
-                style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
               >
                 <div>
                   <button
@@ -1862,7 +2048,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <section
             className="rounded-3xl p-6 sm:p-8 border space-y-6"
             style={{
-              background: 'linear-gradient(135deg, rgba(6, 78, 59, 0.35) 0%, rgba(7, 16, 30, 0.96) 55%, rgba(14, 27, 46, 0.96) 100%)',
+              background: 'linear-gradient(135deg, rgba(6, 78, 59, 0.35) 0%, rgba(7, 16, 30, 0.96) 55%, rgba(var(--mk-card-rgb), 0.96) 100%)',
               borderColor: 'rgba(16, 185, 129, 0.45)',
               boxShadow: '0 10px 35px rgba(16, 185, 129, 0.10)'
             }}
@@ -1902,10 +2088,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <a
                   href="https://dl.silphscopepvp.com"
                   className="px-4 py-2.5 rounded-xl font-black text-xs transition flex items-center justify-center gap-1.5 shadow-md hover:brightness-110"
-                  style={{ backgroundColor: '#2DD4BF', color: '#042F2E' }}
+                  style={{ backgroundColor: 'var(--mk-accent)', color: 'var(--mk-cta-text)' }}
                 >
                   <span>📱</span>
-                  <span>Download APK (v7.77)</span>
+                  <span>Download APK (v7.80)</span>
                 </a>
                 <button
                   type="button"
@@ -1970,7 +2156,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
                 Stop Building for Generic Rankings. Counter the Exact Micro-Meta at{' '}
-                <span style={{ color: '#2DD4BF' }}>Your Current ELO.</span>
+                <span style={{ color: 'var(--mk-accent)' }}>Your Current ELO.</span>
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 Static ranking sites assume you face all Top-100 Pokémon equally. In reality, a 2150 ELO pocket looks completely different from a 2750 Legend push. SilphScope PvP automatically records every opponent team you face and applies an <strong className="text-teal-300">exponential recency decay (<code className="font-mono">λ = 0.04</code>)</strong> to fuse your personal battle logs (up to 70% weight) with PvPoke&apos;s baseline ratings.
@@ -1979,7 +2165,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div
                   className="p-3.5 rounded-2xl border"
-                  style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+                  style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
                 >
                   <div className="font-black text-xs text-teal-300 mb-1">
                     ✅ Live Now: 2-Way Personal + PvPoke Fusion
@@ -1990,7 +2176,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
                 <div
                   className="p-3.5 rounded-2xl border"
-                  style={{ backgroundColor: 'rgba(250, 204, 21, 0.07)', borderColor: 'rgba(250, 204, 21, 0.4)' }}
+                  style={{ backgroundColor: 'rgba(var(--mk-accent2-rgb), 0.07)', borderColor: 'rgba(var(--mk-accent2-rgb), 0.4)' }}
                 >
                   <div className="font-black text-xs text-amber-300 mb-1">
                     🚀 Growing Userbase: 3-Way Meta Fusion
@@ -2004,7 +2190,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Hybrid Backline Probability Engine Callout */}
               <div
                 className="p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent)' }}
               >
                 <div className="space-y-0.5">
                   <div className="text-xs font-black text-teal-300">
@@ -2027,7 +2213,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="lg:col-span-6">
               <div
                 className="rounded-2xl overflow-hidden border-2 shadow-2xl"
-                style={{ borderColor: '#2DD4BF', boxShadow: '0 0 35px rgba(45, 212, 191, 0.18)' }}
+                style={{ borderColor: 'var(--mk-accent)', boxShadow: '0 0 35px rgba(var(--mk-accent-rgb), 0.18)' }}
               >
                 <img
                   src={`${import.meta.env.BASE_URL}screenshots/elo_adaptive_anti_meta_engine.jpg`}
@@ -2062,7 +2248,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Card A: vs PvPoke */}
               <div
                 className="rounded-3xl p-5 border flex flex-col justify-between space-y-4"
-                style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
               >
                 <div className="space-y-3">
                   <div className="rounded-xl overflow-hidden border border-teal-400/40">
@@ -2099,7 +2285,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Card B: vs GOBattleLog (+ Friendly Free Export Callout) */}
               <div
                 className="rounded-3xl p-5 border flex flex-col justify-between space-y-4"
-                style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
               >
                 <div className="space-y-3">
                   <div className="rounded-xl overflow-hidden border border-amber-400/40">
@@ -2139,8 +2325,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <section
             className="rounded-3xl p-6 sm:p-8 border space-y-6"
             style={{
-              background: 'linear-gradient(135deg, rgba(14, 27, 46, 0.96) 0%, rgba(7, 16, 30, 0.98) 100%)',
-              borderColor: 'rgba(45, 212, 191, 0.35)',
+              background: 'linear-gradient(135deg, rgba(var(--mk-card-rgb), 0.96) 0%, rgba(7, 16, 30, 0.98) 100%)',
+              borderColor: 'rgba(var(--mk-accent-rgb), 0.35)',
               boxShadow: '0 10px 35px rgba(15, 23, 42, 0.45)'
             }}
           >
@@ -2223,7 +2409,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <section
             id="pricing"
             className="rounded-3xl p-6 sm:p-8 border space-y-6"
-            style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+            style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
           >
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
@@ -2241,7 +2427,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Pre-Checkout Trainer ID Binding Input */}
               <div
                 className="p-3 rounded-2xl border flex flex-col gap-1.5 min-w-[270px]"
-                style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent)' }}
               >
                 <label className="text-[11px] font-extrabold text-teal-300">
                   🎮 Optional: Enter Trainer ID to Auto-Bind Checkout:
@@ -2270,7 +2456,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Tier 1: Free */}
               <div
                 className="rounded-2xl p-5 border flex flex-col justify-between space-y-4"
-                style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -2299,7 +2485,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Tier 2: Lifetime Supporter ($2) */}
               <div
                 className="rounded-2xl p-5 border flex flex-col justify-between space-y-4"
-                style={{ backgroundColor: '#081120', borderColor: '#38BDF8' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent)' }}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -2343,9 +2529,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               <div
                 className="rounded-2xl p-5 border-2 flex flex-col justify-between space-y-4 relative"
                 style={{
-                  backgroundColor: '#081120',
-                  borderColor: '#2DD4BF',
-                  boxShadow: '0 0 28px rgba(45, 212, 191, 0.22)'
+                  backgroundColor: 'var(--mk-card-alt)',
+                  borderColor: 'var(--mk-accent)',
+                  boxShadow: '0 0 28px rgba(var(--mk-accent-rgb), 0.22)'
                 }}
               >
                 <div className="space-y-3">
@@ -2403,7 +2589,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               {/* Tier 4: VIP / Coach ($5 Intro / $10 Season) */}
               <div
                 className="rounded-2xl p-5 border flex flex-col justify-between space-y-4"
-                style={{ backgroundColor: '#081120', borderColor: '#FACC15' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent2)' }}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -2494,17 +2680,17 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="lg:col-span-5 flex flex-col items-center gap-4">
               <div
                 className="rounded-3xl p-2 border-2 shadow-2xl max-w-[330px]"
-                style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent)' }}
               >
                 <img
                   src={`${import.meta.env.BASE_URL}screenshots/featured_hero_shiny_dialga_poster.png`}
-                  alt="Annotated Semi-Transparent Overlay — Shiny Origin Dialga"
+                  alt="Annotated Semi-Transparent Tactical Battle Overlay"
                   className="rounded-2xl w-full h-auto block"
                 />
               </div>
               <div
                 className="rounded-3xl p-2 border-2 shadow-2xl max-w-[330px]"
-                style={{ backgroundColor: '#081120', borderColor: '#FACC15' }}
+                style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent2)' }}
               >
                 <img
                   src={`${import.meta.env.BASE_URL}screenshots/featured_ul_bp_skeledirge_poster.png`}
@@ -2555,7 +2741,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 <div
                   key={item.step}
                   className="p-4 rounded-2xl border space-y-1.5"
-                  style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+                  style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-black text-sm sm:text-base text-teal-300">{item.step}</h3>
@@ -2613,7 +2799,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           {/* Comprehensive Feature Matrix Table */}
           <div
             className="rounded-2xl border overflow-x-auto"
-            style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+            style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
           >
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -2709,8 +2895,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <div
             className="p-3.5 sm:p-4 rounded-2xl border shadow-xl space-y-3"
             style={{
-              backgroundColor: '#0E1B2E',
-              borderColor: '#19304E',
+              backgroundColor: 'var(--mk-card)',
+              borderColor: 'var(--mk-border)',
               boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)'
             }}
           >
@@ -2733,7 +2919,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     }}
                     placeholder="Enter Trainer Screen Name or @Featured"
                     className="w-full pl-9 pr-3 py-2 rounded-xl font-mono font-bold text-xs border text-white placeholder-slate-500 focus:outline-none focus:border-teal-400 transition"
-                    style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                    style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
                   />
                 </div>
                 <button
@@ -2743,7 +2929,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     fetchVaultReplays(vaultInputUser);
                   }}
                   className="px-3.5 py-2 rounded-xl font-extrabold text-xs border transition hover:border-teal-400 text-white cursor-pointer flex items-center gap-1.5 flex-shrink-0"
-                  style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                  style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-accent)' }}
                 >
                   <span>🔍</span>
                   <span>View</span>
@@ -2757,8 +2943,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   }}
                   className="px-3 py-2 rounded-xl font-extrabold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1 flex-shrink-0"
                   style={{
-                    backgroundColor: 'rgba(250, 204, 21, 0.12)',
-                    borderColor: 'rgba(250, 204, 21, 0.45)'
+                    backgroundColor: 'rgba(var(--mk-accent2-rgb), 0.12)',
+                    borderColor: 'rgba(var(--mk-accent2-rgb), 0.45)'
                   }}
                 >
                   <span>⭐</span>
@@ -2795,7 +2981,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     )
                   }
                   className="px-2.5 py-2 rounded-lg font-bold text-xs border transition hover:border-slate-500 text-slate-300 cursor-pointer flex items-center gap-1"
-                  style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                  style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'var(--mk-border)' }}
                 >
                   <span>📋</span>
                   <span>Share</span>
@@ -2811,6 +2997,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       setIsVaultOwner(false);
                       setVaultUser('Featured');
                       setVaultInputUser('Featured');
+                      onVaultLogout?.();
                       fetchVaultReplays('Featured');
                     }}
                     className="px-2.5 py-2 rounded-lg font-bold text-xs border border-rose-500/40 bg-rose-950/40 text-rose-300 hover:text-white transition cursor-pointer flex items-center gap-1"
@@ -2824,7 +3011,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     type="button"
                     onClick={() => setOwnerLoginOpen(true)}
                     className="px-2.5 py-2 rounded-lg font-bold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1"
-                    style={{ backgroundColor: '#081120', borderColor: 'rgba(250, 204, 21, 0.35)' }}
+                    style={{ backgroundColor: 'var(--mk-card-alt)', borderColor: 'rgba(var(--mk-accent2-rgb), 0.35)' }}
                   >
                     <span>🔐</span>
                     <span>Owner Login</span>
@@ -3059,9 +3246,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                           key={item.shareId}
                           className="rounded-2xl border p-4.5 flex flex-col justify-between gap-4 transition hover:border-teal-400/50 hover:shadow-xl"
                           style={{
-                            backgroundColor: '#0E1B2E',
+                            backgroundColor: 'var(--mk-card)',
                             borderColor: item.isPinned ? '#2DD4BF' : '#19304E',
-                            boxShadow: item.isPinned ? '0 0 16px rgba(45, 212, 191, 0.12)' : 'none'
+                            boxShadow: item.isPinned ? '0 0 16px rgba(var(--mk-accent-rgb), 0.12)' : 'none'
                           }}
                         >
                           {/* Card Header */}
@@ -3165,10 +3352,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                                   }}
                                   className="px-3.5 py-1.5 rounded-xl font-black text-xs border shadow transition hover:scale-105 cursor-pointer flex items-center gap-1.5"
                                   style={{
-                                    backgroundColor: '#2DD4BF',
-                                    borderColor: '#2DD4BF',
-                                    color: '#042F2E',
-                                    boxShadow: '0 2px 10px rgba(45, 212, 191, 0.3)'
+                                    backgroundColor: 'var(--mk-accent)',
+                                    borderColor: 'var(--mk-accent)',
+                                    color: 'var(--mk-cta-text)',
+                                    boxShadow: '0 2px 10px rgba(var(--mk-accent-rgb), 0.3)'
                                   }}
                                 >
                                   <span>▶️</span>
@@ -3384,8 +3571,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <div
             className="p-5 rounded-2xl border shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
             style={{
-              backgroundColor: 'rgba(14, 27, 46, 0.85)',
-              borderColor: '#19304E'
+              backgroundColor: 'rgba(var(--mk-card-rgb), 0.85)',
+              borderColor: 'var(--mk-border)'
             }}
           >
             <div className="flex items-start sm:items-center gap-3">
@@ -3411,7 +3598,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           {/* Connection & Live Simulation Card */}
           <div
             className="p-6 rounded-2xl border shadow-xl space-y-4"
-            style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+            style={{ backgroundColor: 'var(--mk-card)', borderColor: 'var(--mk-border)' }}
           >
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
@@ -3466,10 +3653,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
 
           {/* Interactive Simulated Live Tactical HUD Stage */}
           <div
-            className="rounded-3xl border-2 overflow-hidden shadow-2xl relative"
+            className="mk-media-preserve rounded-3xl border-2 overflow-hidden shadow-2xl relative"
             style={{
-              borderColor: '#2DD4BF',
-              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(45, 212, 191, 0.15)'
+              borderColor: 'var(--mk-accent)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(var(--mk-accent-rgb), 0.15)'
             }}
           >
             {/* Arena Top Bar */}
@@ -3488,7 +3675,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               className="p-6 relative min-h-[460px] flex flex-col justify-between"
               style={{
                 background:
-                  'radial-gradient(circle at 50% 30%, rgba(45, 212, 191, 0.15) 0%, transparent 60%), linear-gradient(180deg, #050B16 0%, #0A1728 50%, #050B16 100%)'
+                  'radial-gradient(circle at 50% 30%, rgba(var(--mk-accent-rgb), 0.15) 0%, transparent 60%), linear-gradient(180deg, #050B16 0%, #0A1728 50%, #050B16 100%)'
               }}
             >
               {/* Top Mirrored HUD Header */}
@@ -3496,7 +3683,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 className="p-4 rounded-2xl border backdrop-blur-md transition-all shadow-xl"
                 style={{
                   backgroundColor: 'rgba(8, 17, 32, 0.65)',
-                  borderColor: 'rgba(45, 212, 191, 0.4)'
+                  borderColor: 'rgba(var(--mk-accent-rgb), 0.4)'
                 }}
               >
                 <div className="grid grid-cols-12 gap-3 items-center">
@@ -3567,8 +3754,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 className="my-6 p-4 rounded-2xl border backdrop-blur-md space-y-2"
                 style={{
                   backgroundColor: 'rgba(8, 17, 32, 0.75)',
-                  borderColor: 'rgba(250, 204, 21, 0.45)',
-                  boxShadow: '0 0 20px rgba(250, 204, 21, 0.1)'
+                  borderColor: 'rgba(var(--mk-accent2-rgb), 0.45)',
+                  boxShadow: '0 0 20px rgba(var(--mk-accent2-rgb), 0.1)'
                 }}
               >
                 <div className="flex items-center justify-between text-xs font-black">
@@ -3596,7 +3783,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 className="p-3.5 rounded-2xl border backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
                 style={{
                   backgroundColor: 'rgba(8, 17, 32, 0.65)',
-                  borderColor: 'rgba(45, 212, 191, 0.3)'
+                  borderColor: 'rgba(var(--mk-accent-rgb), 0.3)'
                 }}
               >
                 <div className="flex items-center gap-2">
@@ -3687,7 +3874,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             className="fixed top-3 right-3 z-[60] w-9 h-9 rounded-xl bg-[#081120]/90 hover:bg-[#0E1B2E] text-teal-200 hover:text-white flex items-center justify-center font-black text-sm cursor-pointer transition shadow-2xl backdrop-blur-md"
             style={{
               border: '1.5px solid #2DD4BF',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(45, 212, 191, 0.35)'
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(var(--mk-accent-rgb), 0.35)'
             }}
             title="Close Replay & Return to Vault"
             aria-label="Close Replay"
@@ -3711,6 +3898,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 }
               });
             } catch {}
+            watchParams.set('theme', activeTheme.id);
+            watchParams.set('wm', showThemeWatermark ? '1' : '0');
             return (
               <iframe
                 src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?${watchParams.toString()}`}
@@ -3729,9 +3918,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <div
             className="w-full max-w-lg rounded-3xl border-2 p-6 space-y-5 shadow-2xl relative"
             style={{
-              backgroundColor: '#0E1B2E',
-              borderColor: '#2DD4BF',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(45, 212, 191, 0.25)'
+              backgroundColor: 'var(--mk-card)',
+              borderColor: 'var(--mk-accent)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(var(--mk-accent-rgb), 0.25)'
             }}
           >
             <div className="flex items-center justify-between">
@@ -3775,7 +3964,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     </li>
                   </ol>
                   <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                    <strong>SilphScope DVR</strong> will appear on your Home Screen with the Shiny Origin Dialga icon, launching directly into the DVR Vault and Live HUD with zero browser bars.
+                    <strong>SilphScope DVR</strong> will appear on your Home Screen with the SilphScope emblem icon, launching directly into the DVR Vault and Live HUD with zero browser bars.
                   </p>
                 </div>
               ) : (
@@ -3827,9 +4016,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <div
             className="w-full max-w-md rounded-3xl border-2 p-6 space-y-4 shadow-2xl relative"
             style={{
-              backgroundColor: '#0E1B2E',
-              borderColor: '#FACC15',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(250, 204, 21, 0.2)'
+              backgroundColor: 'var(--mk-card)',
+              borderColor: 'var(--mk-accent2)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(var(--mk-accent2-rgb), 0.2)'
             }}
           >
             <div className="flex items-center justify-between">
@@ -3940,7 +4129,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       {/* Footer */}
       <footer
         className="border-t py-8 px-4 mt-12 text-xs"
-        style={{ backgroundColor: '#050B16', borderColor: '#19304E', color: '#94A3B8' }}
+        style={{ backgroundColor: activeTheme.bgHex, borderColor: activeTheme.borderHex, color: activeTheme.textSecondaryHex }}
       >
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">

@@ -2,52 +2,61 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="320dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
+    android:viewportWidth="240"
+    android:viewportHeight="240">
 
-    <!-- Outer Fairy Starlight & Ribbon Ring -->
+    <!-- Transparent HUD Reticle Frame -->
     <path
-        android:fillColor="#14EC4899"
-        android:strokeColor="#F472B6"
-        android:strokeWidth="3.5"
-        android:pathData="M100,12 L152,30 L184,76 L174,132 L134,176 L100,188 L66,176 L26,132 L16,76 L48,30 Z" />
-
-    <!-- Swirling Sky-Blue & Rose Feeler Ribbons (Left & Right Waves) -->
+        android:fillColor="#0DBE185D"
+        android:strokeColor="#38BE185D"
+        android:strokeWidth="1.5"
+        android:pathData="M12,120 A108,108 0 1,0 228,120 A108,108 0 1,0 12,120 Z" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#38BDF8"
-        android:strokeWidth="5"
-        android:pathData="M70,74 C28,54 14,96 42,118 C64,136 22,162 48,178 M130,74 C172,54 186,96 158,118 C136,136 178,162 152,178" />
-
+        android:strokeColor="#78BE185D"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14,38 L14,14 L38,14 M202,14 L226,14 L226,38 M14,202 L14,226 L38,226 M202,226 L226,226 L226,202" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#EC4899"
-        android:strokeWidth="5"
-        android:pathData="M78,92 C36,88 22,126 54,144 C76,156 54,180 76,186 M122,92 C164,88 178,126 146,144 C124,156 146,180 124,186" />
+        android:strokeColor="#4D0369A1"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M120,4 L120,16 M120,224 L120,236 M4,120 L16,120 M224,120 L236,120" />
 
-    <!-- Sylveon Tall Rabbit-Like Ears & Graceful Head/Crest Silhouette -->
-    <path
-        android:fillColor="#F472B6"
-        android:pathData="M78,66 L54,16 L68,12 L90,56 L110,56 L132,12 L146,16 L122,66 L128,88 L114,112 L124,154 L76,154 L86,112 L72,88 Z" />
-
-    <!-- Inner Ear Sky-Blue Tips -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M58,20 L66,16 L78,42 L68,44 Z M142,20 L134,16 L122,42 L132,44 Z" />
-
-    <!-- Sylveon Signature Center Bow (Neck & Ear Bow Motif) -->
-    <path
-        android:fillColor="#EC4899"
-        android:pathData="M100,104 L68,86 L68,122 Z M100,104 L132,86 L132,122 Z" />
-
-    <!-- Bow Center Knot & Sky-Blue Tips -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M68,86 L58,82 L58,126 L68,122 Z M132,86 L142,82 L142,126 L132,122 Z" />
-
-    <path
-        android:fillColor="#FDF2F8"
-        android:strokeColor="#DB2777"
-        android:strokeWidth="2.5"
-        android:pathData="M100,92 L112,104 L100,116 L88,104 Z" />
+    <group android:translateX="30" android:translateY="30" android:scaleX="0.9" android:scaleY="0.9">
+        <path
+            android:fillColor="#14EC4899"
+            android:strokeColor="#F472B6"
+            android:strokeWidth="3.5"
+            android:pathData="M100,12 L152,30 L184,76 L174,132 L134,176 L100,188 L66,176 L26,132 L16,76 L48,30 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#0369A1"
+            android:strokeWidth="5"
+            android:pathData="M70,74 C28,54 14,96 42,118 C64,136 22,162 48,178 M130,74 C172,54 186,96 158,118 C136,136 178,162 152,178" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#BE185D"
+            android:strokeWidth="5"
+            android:pathData="M78,92 C36,88 22,126 54,144 C76,156 54,180 76,186 M122,92 C164,88 178,126 146,144 C124,156 146,180 124,186" />
+        <path
+            android:fillColor="#F472B6"
+            android:pathData="M78,66 L54,16 L68,12 L90,56 L110,56 L132,12 L146,16 L122,66 L128,88 L114,112 L124,154 L76,154 L86,112 L72,88 Z" />
+        <path
+            android:fillColor="#0369A1"
+            android:pathData="M58,20 L66,16 L78,42 L68,44 Z M142,20 L134,16 L122,42 L132,44 Z" />
+        <path
+            android:fillColor="#BE185D"
+            android:pathData="M100,104 L68,86 L68,122 Z M100,104 L132,86 L132,122 Z" />
+        <path
+            android:fillColor="#0369A1"
+            android:pathData="M68,86 L58,82 L58,126 L68,122 Z M132,86 L142,82 L142,126 L132,122 Z" />
+        <path
+            android:fillColor="#FDF2F8"
+            android:strokeColor="#BE185D"
+            android:strokeWidth="2.5"
+            android:pathData="M100,92 L112,104 L100,116 L88,104 Z" />
+    </group>
 </vector>
