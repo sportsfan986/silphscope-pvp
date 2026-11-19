@@ -222,6 +222,47 @@ import { DocumentationModals } from './components/DocumentationModals';
 import { MarketingWebsite, type MarketingSubpage } from './components/MarketingWebsite';
 export type { WebBattleLogEntry, WebAiTrainingLogRecord, GblSeasonInfo, WebAppThemePalette };
 export { WEB_APP_THEMES };
+export interface CompactHudConfig {
+  showOppAttacks: boolean;
+  showMyAttacks: boolean;
+  showCoach: boolean;
+  showMatrix: boolean;
+  showPacing: boolean;
+  toolbarMode: 'auto' | 'always' | 'hidden';
+}
+
+const DEFAULT_COMPACT_HUD_CONFIG: CompactHudConfig = {
+  showOppAttacks: true,
+  showMyAttacks: true,
+  showCoach: false,
+  showMatrix: false,
+  showPacing: true,
+  toolbarMode: 'auto'
+};
+
+function parseBoolParam(params: URLSearchParams, key: string): boolean | null {
+  if (!params.has(key)) return null;
+  const v = (params.get(key) || '').trim().toLowerCase();
+  if (v === '1' || v === 'true' || v === 'yes' || v === 'on') return true;
+  if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
+  return null;
+}
+
+function hasHudConfigUrlParams(params: URLSearchParams): boolean {
+  return (
+    params.has('hud') ||
+    params.has('cmp') ||
+    params.has('opp') ||
+    params.has('my') ||
+    params.has('coach') ||
+    params.has('matrix') ||
+    params.has('mtx') ||
+    params.has('pace') ||
+    params.has('pacing') ||
+    params.has('tb')
+  );
+}
+
 export default function App() {
   // Site View Router ('marketing' for Landing Page / Guide / Compare vs 'app' for Web Simulator & Team Builder)
   const [siteView, setSiteView] = useState<'marketing' | 'app'>(() => {
@@ -229,7 +270,10 @@ export default function App() {
       const path = window.location.pathname.toLowerCase();
       const params = new URLSearchParams(window.location.search);
       const view = (params.get('view') || '').toLowerCase();
-      if (path.endsWith('/app') || view === 'app' || view === 'simulator' || view === 'teams' || view === 'logs') {
+      const isMarketingExplicit =
+        view === 'vault' || view === 'home' || view === 'guide' || view === 'compare' || view === 'live' ||
+        path.endsWith('/vault') || path.endsWith('/home') || path.endsWith('/guide') || path.endsWith('/compare') || path.endsWith('/live');
+      if (path.endsWith('/app') || view === 'app' || view === 'simulator' || view === 'teams' || view === 'logs' || (!isMarketingExplicit && hasHudConfigUrlParams(params))) {
         return 'app';
       }
     } catch {}
@@ -272,7 +316,15 @@ export default function App() {
   }, []);
 
   // Navigation tabs (reordered: Teams, Battle Logs, Settings, Meta, IV Lab, Help, Math Validator)
-  const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'iv_lab' | 'help' | 'math_validator'>('simulator');
+  const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'iv_lab' | 'help' | 'math_validator'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const view = (params.get('view') || '').toLowerCase();
+      if (view === 'teams') return 'presets';
+      if (view === 'logs') return 'battle_log';
+    } catch {}
+    return 'simulator';
+  });
 
   // Roadmap #7: Built Pokemon Personal IV Roster (persisted in localStorage + synced via Cloudflare D1 Vault)
   const [builtPokemonRoster, setBuiltPokemonRoster] = useState<BuiltPokemonEntry[]>(() => {
@@ -704,46 +756,214 @@ export default function App() {
   // v6.00 AI Advice HUD Position ("bottom" default for higher visibility vs "top")
   const [aiAdviceHudPosition, setAiAdviceHudPositionState] = useState<'bottom' | 'top'>(() => {
     try {
+      const adv = (new URLSearchParams(window.location.search).get('adv') || '').trim().toLowerCase();
+      if (adv === 'top') return 'top';
+      if (adv === 'bottom' || adv === 'bot') return 'bottom';
       return localStorage.getItem('gbl_ai_advice_hud_position') === 'top' ? 'top' : 'bottom';
     } catch {
       return 'bottom';
     }
   });
-  const handleSetAiAdviceHudPosition = (pos: 'bottom' | 'top') => {
-    setAiAdviceHudPositionState(pos);
-    try {
-      localStorage.setItem('gbl_ai_advice_hud_position', pos);
-    } catch {}
-  };
 
-  // Overlay HUD Mode ("full" default vs "compact") & 3x3 Matchup Matrix Visibility in Compact HUD
+  // Overlay HUD Mode ("full" default vs "compact") & Modular 6-Toggle Compact HUD Customizer
   const [overlayHudMode, setOverlayHudModeState] = useState<'full' | 'compact'>(() => {
     try {
+      const params = new URLSearchParams(window.location.search);
+      const rawHud = (params.get('hud') || '').trim().toLowerCase();
+      if (rawHud === 'compact') return 'compact';
+      if (rawHud === 'full' || rawHud === 'live') return 'full';
+      if (
+        params.has('cmp') || params.has('opp') || params.has('my') ||
+        params.has('coach') || params.has('matrix') || params.has('mtx') ||
+        params.has('pace') || params.has('pacing') || params.has('tb')
+      ) {
+        return 'compact';
+      }
       return localStorage.getItem('gbl_overlay_hud_mode') === 'compact' ? 'compact' : 'full';
     } catch {
       return 'full';
     }
   });
+
+  const [compactHudConfig, setCompactHudConfigState] = useState<CompactHudConfig>(() => {
+    const cfg: CompactHudConfig = { ...DEFAULT_COMPACT_HUD_CONFIG };
+    try {
+      const savedRaw = localStorage.getItem('gbl_compact_hud_cfg_v2');
+      if (savedRaw) {
+        const parsed = JSON.parse(savedRaw);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.showOppAttacks !== undefined) cfg.showOppAttacks = !!parsed.showOppAttacks;
+          if (parsed.showMyAttacks !== undefined) cfg.showMyAttacks = !!parsed.showMyAttacks;
+          if (parsed.showCoach !== undefined) cfg.showCoach = !!parsed.showCoach;
+          if (parsed.showMatrix !== undefined) cfg.showMatrix = !!parsed.showMatrix;
+          if (parsed.showPacing !== undefined) cfg.showPacing = !!parsed.showPacing;
+          if (parsed.toolbarMode === 'always' || parsed.toolbarMode === 'hidden' || parsed.toolbarMode === 'auto') {
+            cfg.toolbarMode = parsed.toolbarMode;
+          }
+        }
+      }
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('cmp')) {
+        const cmpRaw = (params.get('cmp') || '').trim().toLowerCase();
+        if (cmpRaw === 'none' || cmpRaw === '') {
+          cfg.showOppAttacks = false;
+          cfg.showMyAttacks = false;
+          cfg.showCoach = false;
+          cfg.showMatrix = false;
+          cfg.showPacing = false;
+        } else {
+          const tokens = new Set(cmpRaw.split(',').map((s) => s.trim()).filter(Boolean));
+          cfg.showOppAttacks = tokens.has('opp');
+          cfg.showMyAttacks = tokens.has('my') || tokens.has('mine');
+          cfg.showCoach = tokens.has('coach');
+          cfg.showMatrix = tokens.has('matrix') || tokens.has('mtx');
+          cfg.showPacing = tokens.has('pace') || tokens.has('pacing');
+        }
+      }
+      const oppOvr = parseBoolParam(params, 'opp');
+      if (oppOvr !== null) cfg.showOppAttacks = oppOvr;
+      const myOvr = parseBoolParam(params, 'my');
+      if (myOvr !== null) cfg.showMyAttacks = myOvr;
+      const coachOvr = parseBoolParam(params, 'coach');
+      if (coachOvr !== null) cfg.showCoach = coachOvr;
+      const mtxOvr = parseBoolParam(params, 'matrix') ?? parseBoolParam(params, 'mtx');
+      if (mtxOvr !== null) cfg.showMatrix = mtxOvr;
+      const paceOvr = parseBoolParam(params, 'pace') ?? parseBoolParam(params, 'pacing');
+      if (paceOvr !== null) cfg.showPacing = paceOvr;
+      const tbParam = (params.get('tb') || '').trim().toLowerCase();
+      if (tbParam === 'auto' || tbParam === 'always' || tbParam === 'hidden') {
+        cfg.toolbarMode = tbParam;
+      }
+    } catch {}
+    return cfg;
+  });
+
+  const [showShieldDecisionOverlay, setShowShieldDecisionOverlayState] = useState<boolean>(() => {
+    try {
+      const shOvr = parseBoolParam(new URLSearchParams(window.location.search), 'sh');
+      if (shOvr !== null) return shOvr;
+      const saved = localStorage.getItem('gbl_show_shield_decision_overlay');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [simHudShareCopied, setSimHudShareCopied] = useState<boolean>(false);
+
+  const buildSimHudQueryString = (
+    modeVal: 'full' | 'compact',
+    cmpVal: CompactHudConfig,
+    shieldVal: boolean,
+    advVal: 'bottom' | 'top'
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set('view', 'app');
+    if (modeVal === 'compact') {
+      qs.set('hud', 'compact');
+      const cmpList: string[] = [];
+      if (cmpVal.showOppAttacks) cmpList.push('opp');
+      if (cmpVal.showMyAttacks) cmpList.push('my');
+      if (cmpVal.showCoach) cmpList.push('coach');
+      if (cmpVal.showMatrix) cmpList.push('matrix');
+      if (cmpVal.showPacing) cmpList.push('pace');
+      qs.set('cmp', cmpList.length > 0 ? cmpList.join(',') : 'none');
+      if (cmpVal.toolbarMode !== 'auto') qs.set('tb', cmpVal.toolbarMode);
+      qs.set('sh', shieldVal ? '1' : '0');
+    } else if (!shieldVal) {
+      qs.set('sh', '0');
+    }
+    if (advVal === 'top') qs.set('adv', 'top');
+    return qs.toString();
+  };
+
+  const syncSimHudAddressBar = (
+    modeVal: 'full' | 'compact',
+    cmpVal: CompactHudConfig,
+    shieldVal: boolean,
+    advVal: 'bottom' | 'top'
+  ) => {
+    if (siteView !== 'app') return;
+    try {
+      const qStr = buildSimHudQueryString(modeVal, cmpVal, shieldVal, advVal);
+      window.history.replaceState(null, '', `${window.location.pathname}?${qStr}`);
+    } catch {}
+  };
+
+  const handleSetAiAdviceHudPosition = (pos: 'bottom' | 'top') => {
+    setAiAdviceHudPositionState(pos);
+    try {
+      localStorage.setItem('gbl_ai_advice_hud_position', pos);
+    } catch {}
+    syncSimHudAddressBar(overlayHudMode, compactHudConfig, showShieldDecisionOverlay, pos);
+  };
+
   const handleSetOverlayHudMode = (mode: 'full' | 'compact') => {
     setOverlayHudModeState(mode);
     try {
       localStorage.setItem('gbl_overlay_hud_mode', mode);
     } catch {}
+    syncSimHudAddressBar(mode, compactHudConfig, showShieldDecisionOverlay, aiAdviceHudPosition);
   };
 
-  const [compactHudShowMatrix, setCompactHudShowMatrixState] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('gbl_compact_hud_show_matrix') === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const handleSetCompactHudShowMatrix = (show: boolean) => {
-    setCompactHudShowMatrixState(show);
-    try {
-      localStorage.setItem('gbl_compact_hud_show_matrix', String(show));
-    } catch {}
+  const updateCompactHudConfig = (updater: CompactHudConfig | ((prev: CompactHudConfig) => CompactHudConfig)) => {
+    setCompactHudConfigState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem('gbl_compact_hud_cfg_v2', JSON.stringify(next));
+      } catch {}
+      syncSimHudAddressBar(overlayHudMode, next, showShieldDecisionOverlay, aiAdviceHudPosition);
+      return next;
+    });
   };
+
+  const applySimulatorCompactPreset = (preset: 'moves_default' | 'minimal' | 'coach_moves' | 'full_lite') => {
+    const next: CompactHudConfig =
+      preset === 'minimal'
+        ? { showOppAttacks: false, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' }
+        : preset === 'coach_moves'
+        ? { showOppAttacks: true, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' }
+        : preset === 'full_lite'
+        ? { showOppAttacks: true, showMyAttacks: true, showCoach: true, showMatrix: true, showPacing: true, toolbarMode: 'auto' }
+        : { ...DEFAULT_COMPACT_HUD_CONFIG };
+    updateCompactHudConfig(next);
+  };
+
+  const handleSetCompactHudShowMatrix = (show: boolean) => {
+    updateCompactHudConfig((prev) => ({ ...prev, showMatrix: show }));
+  };
+
+  const handleSetShowShieldDecisionOverlay = (show: boolean) => {
+    setShowShieldDecisionOverlayState(show);
+    try {
+      localStorage.setItem('gbl_show_shield_decision_overlay', String(show));
+    } catch {}
+    syncSimHudAddressBar(overlayHudMode, compactHudConfig, show, aiAdviceHudPosition);
+  };
+
+  const buildSimulatorHudShareUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://silphscopepvp.com';
+    const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+    const qStr = buildSimHudQueryString(overlayHudMode, compactHudConfig, showShieldDecisionOverlay, aiAdviceHudPosition);
+    return `${origin}${path}?${qStr}`;
+  };
+
+  const handleShareSimulatorHudConfig = () => {
+    const url = buildSimulatorHudShareUrl();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          setSimHudShareCopied(true);
+          window.setTimeout(() => setSimHudShareCopied(false), 1800);
+        }).catch(() => {
+          window.prompt('Copy HUD Share Link:', url);
+        });
+        return;
+      }
+    } catch {}
+    window.prompt('Copy HUD Share Link:', url);
+  };
+
+  const compactHudShowMatrix = compactHudConfig.showMatrix;
 
   // v6.00 📊 Meta Tab State (Mode-Independent League Selectors, Scope Toggle & Collapsible Drawer Default Collapsed)
   const [metaTabGblLeague, setMetaTabGblLeague] = useState<LeagueType>(() => {
@@ -7053,7 +7273,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.74 • Android Native Overlay
+                  v7.75 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7374,7 +7594,14 @@ export default function App() {
                     <span>{overlayHudMode === 'compact' ? '⚡ Compact HUD' : '📐 Full HUD'}</span>
                     {overlayHudMode === 'compact' && (
                       <span className="text-[10px] font-mono opacity-80">
-                        ({compactHudShowMatrix ? '3×3 Matrix ON' : '3×3 Matrix OFF'})
+                        ({(() => {
+                          const c = compactHudConfig;
+                          if (c.showOppAttacks && c.showMyAttacks && !c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto') return 'Moves (Def)';
+                          if (!c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto') return 'Minimal';
+                          if (c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto') return 'Coach+Opp';
+                          if (c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing && c.toolbarMode === 'auto') return 'Full-Lite';
+                          return 'Custom';
+                        })()})
                       </span>
                     )}
                   </button>
@@ -7414,6 +7641,118 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              {/* Granular Compact HUD Customizer & Shareable URL Config Strip */}
+              {overlayHudMode === 'compact' && (() => {
+                const c = compactHudConfig;
+                const tb = c.toolbarMode;
+                const isMovesDef = c.showOppAttacks && c.showMyAttacks && !c.showCoach && !c.showMatrix && c.showPacing && tb === 'auto';
+                const isMinimal = !c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && tb === 'auto';
+                const isCoachOpp = c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && tb === 'auto';
+                const isFullLite = c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing && tb === 'auto';
+                const activeChipCls = 'bg-emerald-500/20 border-emerald-400/70 text-emerald-200';
+                const idleChipCls = 'bg-slate-950/90 border-slate-700 text-slate-400 hover:text-slate-200';
+                return (
+                  <div className="w-full mb-2.5 p-2 rounded-xl bg-slate-900/95 border border-emerald-500/35 space-y-1.5 shadow-md text-[10.5px]">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-[10px] font-extrabold text-emerald-300 mr-1">🧩 Compact:</span>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('moves_default')}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${isMovesDef ? activeChipCls : idleChipCls}`}
+                        title="Header (Shields/E) + Opp Moves + My Moves + Pacing + Shield Call"
+                      >
+                        Moves (Def)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('minimal')}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${isMinimal ? activeChipCls : idleChipCls}`}
+                      >
+                        Minimal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('coach_moves')}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${isCoachOpp ? activeChipCls : idleChipCls}`}
+                      >
+                        Coach+Opp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('full_lite')}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${isFullLite ? activeChipCls : idleChipCls}`}
+                      >
+                        Full-Lite
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShareSimulatorHudConfig}
+                        className="ml-auto px-2 py-0.5 rounded-md border border-sky-400/55 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-bold transition"
+                        title="Copy Shareable Link with This Real-Time Compact HUD Config"
+                      >
+                        {simHudShareCopied ? '✅ Copied!' : '📤 Share HUD'}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showOppAttacks: !prev.showOppAttacks }))}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${c.showOppAttacks ? activeChipCls : idleChipCls}`}
+                      >
+                        ⚔️ Opp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showMyAttacks: !prev.showMyAttacks }))}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${c.showMyAttacks ? activeChipCls : idleChipCls}`}
+                      >
+                        ⚡ Mine
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showCoach: !prev.showCoach }))}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${c.showCoach ? activeChipCls : idleChipCls}`}
+                      >
+                        🧠 Coach
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showMatrix: !prev.showMatrix }))}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${c.showMatrix ? activeChipCls : idleChipCls}`}
+                      >
+                        📊 Matrix
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showPacing: !prev.showPacing }))}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${c.showPacing ? activeChipCls : idleChipCls}`}
+                      >
+                        ⏱️ Pacing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCompactHudConfig((prev) => ({
+                            ...prev,
+                            toolbarMode: prev.toolbarMode === 'auto' ? 'always' : prev.toolbarMode === 'always' ? 'hidden' : 'auto'
+                          }))
+                        }
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${tb !== 'hidden' ? activeChipCls : idleChipCls}`}
+                      >
+                        {tb === 'always' ? '🎥 Bar: On' : tb === 'hidden' ? '🎥 Bar: Off' : '🎥 Bar: Auto'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetShowShieldDecisionOverlay(!showShieldDecisionOverlay)}
+                        className={`px-2 py-0.5 rounded-md border font-bold transition ${showShieldDecisionOverlay ? activeChipCls : idleChipCls}`}
+                      >
+                        {showShieldDecisionOverlay ? '🛡️ Shield: ON' : '🛡️ Shield: OFF'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Real-time Overlay Placement & Nudge Control Bar */}
               <div className="w-full max-w-[390px] mb-2.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs shadow-md">
@@ -7852,8 +8191,62 @@ export default function App() {
                         </div>
                       </div>
 
+                      {/* v7.32 Standalone Compact Pacing Strip (shown when Compact HUD has Pacing ON & either Attack table hidden) */}
+                      {overlayHudMode === 'compact' &&
+                        !isWaitingOpponent &&
+                        scannedOpponents.length > 0 &&
+                        compactHudConfig.showPacing &&
+                        (!compactHudConfig.showOppAttacks || !compactHudConfig.showMyAttacks) && (
+                          <div className="flex items-center justify-between gap-1 px-1.5 py-0.5 my-0.5 rounded bg-slate-950/65 border border-white/10 font-mono text-[6.8px] font-extrabold">
+                            <div className="flex items-center gap-1">
+                              <span
+                                className={`px-1 py-0.2 rounded border leading-none ${
+                                  playerSwapRemainingSec <= 0
+                                    ? 'text-[#00FF00] bg-emerald-950/60 border-emerald-500/60'
+                                    : playerSwapRemainingSec < 10
+                                    ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
+                                    : 'text-white bg-black/45 border-white/30'
+                                }`}
+                              >
+                                Swap: {playerSwapRemainingSec}s
+                              </span>
+                              <span
+                                className={`px-1 py-0.2 rounded border leading-none ${
+                                  oppMoveTimingInfo.winsCmp
+                                    ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
+                                    : 'bg-red-500/25 border-red-400/80 text-slate-100'
+                                }`}
+                              >
+                                CMP {oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span
+                                className={`px-1 py-0.2 rounded border leading-none ${
+                                  !oppMoveTimingInfo.winsCmp
+                                    ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
+                                    : 'bg-red-500/25 border-red-400/80 text-slate-100'
+                                }`}
+                              >
+                                CMP {!oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                              </span>
+                              <span
+                                className={`px-1 py-0.2 rounded border leading-none ${
+                                  oppSwapRemainingSec <= 0
+                                    ? 'text-[#FF3B30] bg-red-950/60 border-red-500/60'
+                                    : oppSwapRemainingSec < 10
+                                    ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
+                                    : 'text-white bg-black/45 border-white/30'
+                                }`}
+                              >
+                                Swap: {oppSwapRemainingSec}s
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                       {/* v6.00 Top Placement Option: 4-Pillar Condensed 2-Line AI Tactical Coach (when aiAdviceHudPosition === 'top') */}
-                      {showTacticalRec && activeTacticalRec && aiAdviceHudPosition === 'top' && (() => {
+                      {showTacticalRec && activeTacticalRec && aiAdviceHudPosition === 'top' && (overlayHudMode !== 'compact' || compactHudConfig.showCoach) && (() => {
                         const oppFastGain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove?.energyGain || 8;
                         const cheapestOppCost = Math.min(
                           ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
@@ -7950,7 +8343,9 @@ export default function App() {
                       })()}
 
                       {/* Action Toolbar: 2-Row Compact Buttons (Visible in Full HUD, or in Compact HUD when idle Waiting...) */}
-                      {(overlayHudMode !== 'compact' || ((isWaitingOpponent || scannedOpponents.length === 0) && !isBattleActive)) && (
+                      {(overlayHudMode !== 'compact' ||
+                        compactHudConfig.toolbarMode === 'always' ||
+                        (compactHudConfig.toolbarMode === 'auto' && ((isWaitingOpponent || scannedOpponents.length === 0) && !isBattleActive))) && (
                       <div
                         className="flex items-stretch justify-between gap-0.5 p-1 rounded border border-white/10 my-1"
                         style={{
@@ -8127,7 +8522,9 @@ export default function App() {
                       )}
 
                       {/* v3.40: Pokéball Counts, Shield Counts, Persistent Floating HP% & Charged Attack Simulator Controls */}
-                      {(overlayHudMode !== 'compact' || ((isWaitingOpponent || scannedOpponents.length === 0) && !isBattleActive)) && (
+                      {(overlayHudMode !== 'compact' ||
+                        compactHudConfig.toolbarMode === 'always' ||
+                        (compactHudConfig.toolbarMode === 'auto' && ((isWaitingOpponent || scannedOpponents.length === 0) && !isBattleActive))) && (
                       <div className="flex flex-col gap-0.5 px-1 py-0.5 bg-black/35 rounded border border-white/10 text-[7px] font-mono my-0.5">
                         <div className="flex items-center justify-between gap-1">
                           <div className="flex items-center gap-1">
@@ -8520,8 +8917,10 @@ export default function App() {
                       )}
 
                       {/* Opponent Attacks & My Attacks (Segmented Range Bars + 3-Column Damage Matrices with Vertical Highlight) */}
-                      {overlayHudMode !== 'compact' && !isWaitingOpponent && scannedOpponents.length > 0 && (
+                      {(overlayHudMode !== 'compact' || compactHudConfig.showOppAttacks || compactHudConfig.showMyAttacks) && !isWaitingOpponent && scannedOpponents.length > 0 && (
                         <div className="flex flex-col gap-0.5 my-1">
+                          {(overlayHudMode !== 'compact' || compactHudConfig.showOppAttacks) && (
+                          <>
                           {/* Opponent Attacks Section Header (2-Line) + 3-Team Column Headers & Opponent Swap Clock */}
                           <div className="grid grid-cols-[minmax(0,1fr)_84px] items-stretch gap-1 px-1 pt-0.5">
                             <div className="flex flex-col justify-between gap-0.5 pr-1 min-w-0">
@@ -8560,6 +8959,7 @@ export default function App() {
                                     <span>{oppShields}</span>
                                   </button>
                                 </span>
+                                {(overlayHudMode !== 'compact' || compactHudConfig.showPacing) && (
                                 <span className="flex items-center gap-1 shrink-0">
                                   <span
                                     className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
@@ -8595,6 +8995,7 @@ export default function App() {
                                     Swap: {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
                                   </span>
                                 </span>
+                                )}
                               </div>
                               <div className="flex items-center justify-between gap-1 min-w-0 leading-tight">
                                 <span className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate min-w-0 flex-1">
@@ -8825,7 +9226,11 @@ export default function App() {
                               );
                             })}
                           </div>
+                          </>
+                          )}
 
+                          {(overlayHudMode !== 'compact' || compactHudConfig.showMyAttacks) && (
+                          <>
                           {/* My Attacks Section Header (2-Line) + 3-Opponent Column Headers & Player Swap Clock */}
                           <div className="grid grid-cols-[minmax(0,1fr)_84px] items-stretch gap-1 px-1 pt-1">
                             <div className="flex flex-col justify-between gap-0.5 pr-1 min-w-0">
@@ -8869,6 +9274,7 @@ export default function App() {
                                     <span>{userShields}</span>
                                   </button>
                                 </span>
+                                {(overlayHudMode !== 'compact' || compactHudConfig.showPacing) && (
                                 <span className="flex items-center gap-1 shrink-0">
                                   <span
                                     className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
@@ -8898,6 +9304,7 @@ export default function App() {
                                     Swap: {playerSwapRemainingSec}s{!playerSwitchValidityLatched ? ' [1F]' : ''}
                                   </span>
                                 </span>
+                                )}
                               </div>
                               <div className="flex items-center justify-between gap-1 min-w-0 leading-tight">
                                 <span className="text-sky-300 font-extrabold text-[7.5px] font-mono normal-case truncate min-w-0 flex-1">
@@ -9097,11 +9504,13 @@ export default function App() {
                               );
                             })}
                           </div>
+                          </>
+                          )}
                         </div>
                       )}
 
                       {/* v6.00 Bottom Placement (New Default): 4-Pillar Condensed 2-Line AI Tactical Coach */}
-                      {showTacticalRec && activeTacticalRec && aiAdviceHudPosition === 'bottom' && (() => {
+                      {showTacticalRec && activeTacticalRec && aiAdviceHudPosition === 'bottom' && (overlayHudMode !== 'compact' || compactHudConfig.showCoach) && (() => {
                         const oppFastGain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove?.energyGain || 8;
                         const cheapestOppCost = Math.min(
                           ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
@@ -9192,6 +9601,101 @@ export default function App() {
                             </div>
                             <div className="text-[6.8px] text-cyan-200/95 font-bold truncate border-t border-white/10 pt-0.5">
                               {backlineLine2}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Bottom-Attached Shield Decision Overlay Card (matches Android #sky-shield-decision-card) */}
+                      {showShieldDecisionOverlay && isAttackIncomingPrompt && !isWaitingOpponent && scannedOpponents.length > 0 && (() => {
+                        const curUserHp = Math.max(1, userSlotHpPct[activeUserSlotIndex] ?? 100);
+                        const curOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
+                        const candRows = (activeOppChargedMoveBounds.candidateMoves || []).map((cm) => {
+                          const cost = Math.max(35, Math.min(100, resolveChargedMove(cm.name, activeOpponent.types[0]).energyCost || 50));
+                          const dmg = Math.max(1, Math.round(cm.damagePct));
+                          const remHp = Math.max(0, curUserHp - dmg);
+                          const isKo = dmg >= curUserHp;
+                          return {
+                            name: cm.name,
+                            shortName: abbrMove5(cm.name),
+                            cost,
+                            dmg,
+                            remHp,
+                            isKo,
+                            isFunded: curOppE >= cost
+                          };
+                        });
+                        const fundedRows = candRows.filter((r) => r.isFunded).sort((a, b) => Number(b.isKo) - Number(a.isKo) || b.dmg - a.dmg);
+                        const unfundedRows = candRows.filter((r) => !r.isFunded).sort((a, b) => Number(b.isKo) - Number(a.isKo) || b.dmg - a.dmg);
+                        const allFundedKo = fundedRows.length > 0 && fundedRows.every((r) => r.isKo);
+                        const someFundedKo = fundedRows.some((r) => r.isKo) && fundedRows.some((r) => !r.isKo);
+                        const unfundedKo = !fundedRows.some((r) => r.isKo) && unfundedRows.some((r) => r.isKo);
+                        const cardColors = allFundedKo
+                          ? 'bg-red-950/95 border-red-500'
+                          : someFundedKo
+                          ? 'bg-orange-950/95 border-orange-500'
+                          : unfundedKo
+                          ? 'bg-yellow-950/95 border-yellow-500'
+                          : 'bg-emerald-950/95 border-emerald-500';
+                        const verdict = allFundedKo
+                          ? '🛡️ SHIELD (1S): ALL FUNDED KO!'
+                          : someFundedKo
+                          ? '🛡️ SHIELD / BAIT MIX: NUKE KOs!'
+                          : unfundedKo
+                          ? '🛡️ TANK (0S) • Unfunded KO'
+                          : '🛡️ TANK (0S): SURVIVES MOVE';
+                        return (
+                          <div className={`mt-1 px-2 py-1.5 rounded-lg border-2 shadow-lg font-mono text-[7.5px] leading-tight space-y-1 ${cardColors}`}>
+                            <div className="flex items-center justify-between gap-1 border-b border-yellow-300/30 pb-0.5">
+                              <span className="font-black text-yellow-200 truncate">
+                                {verdict} • {abbrPoke3(activeOpponent.name, isOpponentShadow)}({curOppE}e) vs {curUserHp}%
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {userShields > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResolveOppChargedAttack(true, 0)}
+                                    className="px-1.5 py-0.2 rounded bg-pink-500/45 hover:bg-pink-500/65 text-pink-100 font-extrabold text-[6.8px] border border-pink-300/70"
+                                  >
+                                    🛡️ 1S
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleResolveOppChargedAttack(false, 0)}
+                                  className="px-1.5 py-0.2 rounded bg-sky-500/40 hover:bg-sky-500/60 text-sky-100 font-extrabold text-[6.8px] border border-sky-300/70"
+                                >
+                                  0S
+                                </button>
+                              </div>
+                            </div>
+                            <div className="space-y-0.5">
+                              {fundedRows.slice(0, 4).map((m) => (
+                                <div key={`sd-f-${m.name}`} className="flex items-center justify-between gap-1 text-[7.2px] font-bold">
+                                  <span className={m.isKo ? 'text-rose-200' : 'text-sky-200'}>
+                                    ⚡ {m.shortName} ({m.cost}e)
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.2 rounded-full border font-extrabold text-[6.8px] ${
+                                      m.isKo || m.remHp < 10
+                                        ? 'bg-red-900 border-red-400 text-rose-200'
+                                        : m.remHp < 20
+                                        ? 'bg-orange-900 border-orange-400 text-orange-200'
+                                        : m.remHp <= 50
+                                        ? 'bg-yellow-900 border-yellow-400 text-yellow-200'
+                                        : 'bg-emerald-900 border-emerald-400 text-emerald-200'
+                                    }`}
+                                  >
+                                    {m.isKo ? `💥 KO! (-${m.dmg}%)` : `✓ ${m.remHp}% left (-${m.dmg}%)`}
+                                  </span>
+                                </div>
+                              ))}
+                              {unfundedRows.slice(0, 2).map((m) => (
+                                <div key={`sd-u-${m.name}`} className="flex items-center justify-between gap-1 text-[6.8px] italic opacity-85 text-slate-300">
+                                  <span>• {m.name} ({curOppE}e/{m.cost}e)</span>
+                                  <span>{m.isKo ? '💥 would KO' : `${m.remHp}% left`} (-{m.dmg}%)</span>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         );
@@ -15321,20 +15825,35 @@ export default function App() {
               </div>
             </div>
 
-            {/* Overlay HUD Mode (Full vs. Compact) & 3x3 Matchup Matrix Visibility in Compact Mode */}
+            {/* Overlay HUD Mode (Full vs. Compact) & Modular Compact HUD Customizer */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                  <span>📐 Overlay HUD Mode (Full vs. Compact) &amp; Compact 3×3 Matrix</span>
+                  <span>📐 Overlay HUD Mode (Full vs. Compact) &amp; Modular Customizer</span>
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300">
-                  {overlayHudMode === 'compact'
-                    ? `Compact HUD • 3×3 Matrix ${compactHudShowMatrix ? 'ON' : 'OFF (Def)'}`
-                    : 'Full HUD (Def)'}
+                  {(() => {
+                    if (overlayHudMode !== 'compact') return 'Full HUD (Def)';
+                    const c = compactHudConfig;
+                    const p =
+                      c.showOppAttacks && c.showMyAttacks && !c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto'
+                        ? 'Moves (Def)'
+                        : !c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto'
+                        ? 'Minimal'
+                        : c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && c.toolbarMode === 'auto'
+                        ? 'Coach+Opp'
+                        : c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing && c.toolbarMode === 'auto'
+                        ? 'Full-Lite'
+                        : 'Custom';
+                    return `Compact HUD • ${p}`;
+                  })()}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                <strong>Compact HUD</strong> shows only the Mirrored Header, 2-Line AI Tactical Coach, Shield Decision Card (on incoming charged attack), and Post-Battle Log. Tapping the top-left emblem on the overlay strictly alternates <strong>Full ↔ Compact HUD</strong>, while holding the emblem for <strong>2.0s</strong> activates <strong>Log-Only Stealth Mode</strong>. In idle (<code>Waiting...</code>) state, both Full and Compact HUDs display your selected League, Team Name, and 3 Team Pokémon, and Compact HUD auto-hides the action toolbar once battle begins.
+                <strong>Compact HUD</strong> keeps the Mirrored Header (HP%, Energy &amp; Shields) plus the modules you choose below (defaulting to{' '}
+                <code>Moves (Def)</code>: Header + Opp Attacks + My Attacks + Pacing + Shield Call). Tapping the top-left emblem strictly alternates{' '}
+                <strong>Full ↔ Compact HUD</strong>, holding for <strong>2.0s</strong> activates <strong>Log-Only Stealth Mode</strong>, and{' '}
+                <strong>📤 Share HUD</strong> encodes your live layout as URL query parameters.
               </p>
               <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                 <button
@@ -15360,7 +15879,150 @@ export default function App() {
                   ⚡ Compact HUD
                 </button>
               </div>
-              <div className="space-y-1.5 pt-1">
+
+              {/* Modular 4-Preset + 6-Toggle Compact HUD Customizer */}
+              {(() => {
+                const c = compactHudConfig;
+                const tb = c.toolbarMode;
+                const isMovesDef = c.showOppAttacks && c.showMyAttacks && !c.showCoach && !c.showMatrix && c.showPacing && tb === 'auto';
+                const isMinimal = !c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && tb === 'auto';
+                const isCoachOpp = c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && tb === 'auto';
+                const isFullLite = c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing && tb === 'auto';
+                const activeCls = 'bg-emerald-500/25 border-emerald-400/70 text-emerald-200';
+                const offCls = 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200';
+                return (
+                  <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="font-bold text-emerald-300">🧩 Modular Compact HUD Customizer</span>
+                      <button
+                        type="button"
+                        onClick={handleShareSimulatorHudConfig}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/60 text-sky-200 transition"
+                      >
+                        {simHudShareCopied ? '✅ Copied HUD Link!' : '📤 Share HUD URL'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('moves_default')}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${isMovesDef ? activeCls : offCls}`}
+                      >
+                        Moves (Def)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('minimal')}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${isMinimal ? activeCls : offCls}`}
+                      >
+                        Minimal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('coach_moves')}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${isCoachOpp ? activeCls : offCls}`}
+                      >
+                        Coach + Opp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySimulatorCompactPreset('full_lite')}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${isFullLite ? activeCls : offCls}`}
+                      >
+                        Full-Lite
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showOppAttacks: !prev.showOppAttacks }))}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${c.showOppAttacks ? activeCls : offCls}`}
+                      >
+                        {c.showOppAttacks ? '⚔️ Opp Attacks: ON' : '⚔️ Opp Attacks: OFF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showMyAttacks: !prev.showMyAttacks }))}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${c.showMyAttacks ? activeCls : offCls}`}
+                      >
+                        {c.showMyAttacks ? '⚡ My Attacks: ON' : '⚡ My Attacks: OFF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showCoach: !prev.showCoach }))}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${c.showCoach ? activeCls : offCls}`}
+                      >
+                        {c.showCoach ? '🧠 AI Coach: ON' : '🧠 AI Coach: OFF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showMatrix: !prev.showMatrix }))}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${c.showMatrix ? activeCls : offCls}`}
+                      >
+                        {c.showMatrix ? '📊 3×3 Matrix: ON' : '📊 3×3 Matrix: OFF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCompactHudConfig((prev) => ({ ...prev, showPacing: !prev.showPacing }))}
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${c.showPacing ? activeCls : offCls}`}
+                      >
+                        {c.showPacing ? '⏱️ Pacing: ON' : '⏱️ Pacing: OFF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCompactHudConfig((prev) => ({
+                            ...prev,
+                            toolbarMode: prev.toolbarMode === 'auto' ? 'always' : prev.toolbarMode === 'always' ? 'hidden' : 'auto'
+                          }))
+                        }
+                        className={`py-2 px-2 rounded-lg border text-xs font-bold transition ${tb !== 'hidden' ? activeCls : offCls}`}
+                      >
+                        {tb === 'always' ? '🎥 Toolbar: Always' : tb === 'hidden' ? '🎥 Toolbar: Hidden' : '🎥 Toolbar: Auto'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Shield Decision Overlay Card Toggle */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">🛡️ Attack Incoming! Shield Decision Overlay</span>
+                  <span className="text-[10px] font-mono text-emerald-300">
+                    {showShieldDecisionOverlay ? 'Enabled (Default)' : 'Disabled'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Shows the Red/Orange/Yellow/Green KO &amp; Tank survival verdict attached to the bottom of the main overlay during incoming charged attacks.
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleSetShowShieldDecisionOverlay(true)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      showShieldDecisionOverlay
+                        ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🛡️ Shield Call: ON (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetShowShieldDecisionOverlay(false)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      !showShieldDecisionOverlay
+                        ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🛡️ Shield Call: OFF
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-300">🔕 Competitive Mode: Log-Only</span>
                   <span className="text-[10px] font-mono text-amber-300">
@@ -15392,38 +16054,6 @@ export default function App() {
                     }`}
                   >
                     🔕 Log-Only Stealth ON
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-300">📊 3×3 Matchup Matrix in Compact HUD</span>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    {compactHudShowMatrix ? 'Visible in Compact Mode' : 'Hidden in Compact Mode (Default)'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => handleSetCompactHudShowMatrix(false)}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                      !compactHudShowMatrix
-                        ? 'bg-slate-800 border border-slate-600 text-slate-200'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    📊 3×3 Matrix in Compact: OFF (Default)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetCompactHudShowMatrix(true)}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                      compactHudShowMatrix
-                        ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    📊 3×3 Matrix in Compact: ON
                   </button>
                 </div>
               </div>
@@ -19651,7 +20281,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.74 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.75 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

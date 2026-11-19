@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.75',
+    codename: 'Bottom-Attached Shield Call & AI Coach DVR Parity, Moves (Def) Compact HUD & Shareable URL Config',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Fixes DVR Replay bottom Shield Call & AI Tactical Coach anchoring to match Android, upgrades the default Compact HUD preset to Moves (Def) across Android/Web/DVR with full 6-module granular controls, and encodes live HUD layouts into shareable URL query parameters.',
+    icon: '🎛️',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Fixed DVR Replay aiAdviceHudPosition defaulting to top instead of bottom so the 2-line AI Coach and Shield Decision Card stay attached to the bottom of the main overlay (matching Android), and added Shield Call card rendering to Web Simulator and DVR canvas exports',
+      'Refined the default Compact HUD preset to Moves (Def) (Header [Shields/E] + Opp Attacks + My Attacks + Pacing + Shield Call) across Android Settings (2x2 preset grid), overlay.html, Web Simulator, and Cloud DVR',
+      'Added full 6-module Granular Compact HUD controls (Opp, Mine, Coach, Matrix, Pacing, Toolbar Mode) + Shield toggle directly above DVR/Simulator controls, encoded into real-time ?hud=compact&cmp=...&sh=1 URL parameters with live address-bar sync and Marketing Website iframe parameter forwarding'
+    ]
+  },
+  {
     version: 'v7.74',
     codename: 'Combat Telemetry Fixes, Cross-Platform Dynamic Shadow Eligibility & 2-Tier Local DVR Quota',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Hardens combat OCR/energy edge cases from v7.70 telemetry, replaces Web hardcoded nonShadowBases with live PvPoke gamemaster + rankings Shadow eligibility synced across Android/Web/Worker, and upgrades local DVR telemetry caching with a 6 GB soft / 20 GB hard quota and un-truncated version audit matrices.',
     icon: '🛡️',

@@ -4361,6 +4361,30 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       .playback-btns button { padding: 3.5px 5px; font-size: 10px; }
       .drawer-toggle-btn { padding: 3.5px 6px; font-size: 10px; }
     }
+    .compact-customizer-bar {
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 6px;
+      background: rgba(8, 17, 32, 0.92);
+      border: 1px solid rgba(45, 212, 191, 0.36);
+      border-radius: 7px;
+      max-height: 78px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #2dd4bf rgba(8, 17, 32, 0.6);
+    }
+    .compact-customizer-bar button {
+      font-size: 9.5px;
+      padding: 2.5px 6px;
+    }
+    @media (min-width: 900px) and (min-aspect-ratio: 11/10) {
+      .compact-customizer-bar {
+        max-height: none;
+        overflow: visible;
+      }
+    }
     /* Mobile/Portrait Drawer: expands smoothly to 18dvh (within 10-20% vertical screen height),
        automatically shrinking .stage-wrap video above it with vertical-only scrolling inside! */
     .tools-drawer {
@@ -4544,6 +4568,22 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           </div>
           <button onclick="toggleToolsDrawer()" id="btn-tools-toggle" class="drawer-toggle-btn" title="Expand Tools & Key Events Timeline">⚙️ Tools/Timeline ▾</button>
         </div>
+        <div id="compact-customizer-bar" class="compact-customizer-bar">
+          <span id="cmp-summary-label" style="font-size:9.5px;font-weight:800;color:#2dd4bf;margin-right:2px">🧩 Compact: Moves (Def)</span>
+          <button type="button" id="cmp-pre-moves-def" onclick="applyReplayCompactPreset('moves_default')" title="Header (Shields/E) + Opp Moves + My Moves + Pacing + Shield Call">Moves (Def)</button>
+          <button type="button" id="cmp-pre-minimal" onclick="applyReplayCompactPreset('minimal')" title="Header + 2-Line AI Coach + Pacing + Shield Call">Minimal</button>
+          <button type="button" id="cmp-pre-moves" onclick="applyReplayCompactPreset('coach_moves')" title="Header + Opp Moves + 2-Line AI Coach + Pacing + Shield Call">Coach+Opp</button>
+          <button type="button" id="cmp-pre-full" onclick="applyReplayCompactPreset('full_lite')" title="All Compact HUD Modules Enabled">Full-Lite</button>
+          <span style="color:#475569;font-size:10px">|</span>
+          <button type="button" id="cmp-chip-opp" onclick="toggleReplayCompactChip('showOppAttacks')" title="Toggle Opponent Charged Moves & Timing Bars">⚔️ Opp</button>
+          <button type="button" id="cmp-chip-my" onclick="toggleReplayCompactChip('showMyAttacks')" title="Toggle Your Charged Moves & Timing Bars">⚡ Mine</button>
+          <button type="button" id="cmp-chip-coach" onclick="toggleReplayCompactChip('showCoach')" title="Toggle 2-Line AI Tactical Coach">🧠 Coach</button>
+          <button type="button" id="cmp-chip-matrix" onclick="toggleReplayCompactChip('showMatrix')" title="Toggle 3x3 Asymmetric Matchup Matrix">📊 Matrix</button>
+          <button type="button" id="cmp-chip-pacing" onclick="toggleReplayCompactChip('showPacing')" title="Toggle Swap Clocks & CMP Pacing Badges">⏱️ Pacing</button>
+          <button type="button" id="cmp-chip-toolbar" onclick="cycleReplayCompactToolbar()" title="Cycle Action Toolbar Mode (Auto / Always / Hidden)">🎥 Bar: Auto</button>
+          <button type="button" id="cmp-chip-shield" onclick="toggleShieldHud()" class="${(shareInfo.userTier || 'pro') !== 'free' ? 'active' : ''}" title="Toggle Attack Incoming! Shield Decision Card">${(shareInfo.userTier || 'pro') !== 'free' ? '🛡️ Shield' : '🔒 Shield'}</button>
+          <button type="button" id="cmp-btn-share" onclick="shareCurrentReplayMoment(this)" style="border-color:rgba(56,189,248,0.55);color:#bae6fd" title="Copy Shareable Link with This Real-Time Compact HUD Config">🔗 Share HUD</button>
+        </div>
         <div class="tools-drawer" id="tools-drawer">
           <div class="tools-group">
             <button onclick="setHudMode('live')" id="mode-live" class="active">👁️ HUD</button>
@@ -4552,29 +4592,17 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
             <button onclick="setHudMode('off')" id="mode-off">HUD OFF</button>
             <button onclick="toggleHudPos()" id="btn-pos" title="Move HUD Top/Bottom">⬆️ Top</button>
             <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
-            <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield' : '🔒 Shield'}</button>
+            <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${(shareInfo.userTier || 'pro') !== 'free' ? 'active' : ''}">${(shareInfo.userTier || 'pro') !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield'}</button>
             <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
             <div style="display:inline-flex;align-items:center;gap:4px;background:rgba(8,17,32,0.85);border:1px solid var(--border);border-radius:7px;padding:2px 6px">
               <span style="font-size:9.5px;color:var(--muted);font-weight:700">HUD</span>
               <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:52px;height:12px;accent-color:#2dd4bf;margin:0" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
             </div>
             <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Hidden' : 'Names'}</button>
-            <button onclick="shareCurrentReplayMoment()" id="btn-share-moment" title="Share Replay Link">📤 Share</button>
+            <button onclick="shareCurrentReplayMoment(this)" id="btn-share-moment" title="Share Replay Link with Active HUD Config">📤 Share</button>
             <button id="btn-flag-issue-hdr" onclick="flagOrEditCurrentIssue()" style="border-color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#f59e0b' : '#b91c1c'};color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#fbbf24' : '#fca5a5'}">🚩 ${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'Flagged ✓' : 'Flag'}</button>
             <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'}">↩️ Unflag</button>
             <button id="btn-export" onclick="exportWithHud()">💾 Export</button>
-          </div>
-          <div id="compact-customizer-bar" style="display:none;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 6px;margin-top:4px;background:rgba(8,17,32,0.88);border:1px solid rgba(45,212,191,0.32);border-radius:7px">
-            <span style="font-size:9.5px;font-weight:800;color:#2dd4bf;margin-right:2px">🧩 Compact:</span>
-            <button type="button" id="cmp-pre-minimal" onclick="applyReplayCompactPreset('minimal')" style="font-size:9.5px;padding:2px 6px">Minimal</button>
-            <button type="button" id="cmp-pre-moves" onclick="applyReplayCompactPreset('coach_moves')" style="font-size:9.5px;padding:2px 6px">Coach+Opp</button>
-            <button type="button" id="cmp-pre-full" onclick="applyReplayCompactPreset('full_lite')" style="font-size:9.5px;padding:2px 6px">Full-Lite</button>
-            <span style="color:#475569;font-size:10px">|</span>
-            <button type="button" id="cmp-chip-opp" onclick="toggleReplayCompactChip('showOppAttacks')" style="font-size:9.5px;padding:2px 6px">⚔️ Opp</button>
-            <button type="button" id="cmp-chip-my" onclick="toggleReplayCompactChip('showMyAttacks')" style="font-size:9.5px;padding:2px 6px">⚡ Mine</button>
-            <button type="button" id="cmp-chip-coach" onclick="toggleReplayCompactChip('showCoach')" style="font-size:9.5px;padding:2px 6px">🧠 Coach</button>
-            <button type="button" id="cmp-chip-matrix" onclick="toggleReplayCompactChip('showMatrix')" style="font-size:9.5px;padding:2px 6px">📊 Matrix</button>
-            <button type="button" id="cmp-chip-pacing" onclick="toggleReplayCompactChip('showPacing')" style="font-size:9.5px;padding:2px 6px">⏱️ Pacing</button>
           </div>
           <div class="timeline-section" id="timeline-section">
             <div class="chips-header">
@@ -4644,37 +4672,121 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free';
     let currentIssueNote = ${safeJsonForScript(shareInfo.userIssueNote || '')};
     let isIssueFlagged = ${safeJsonForScript(Boolean(shareInfo.userIssueNote || shareInfo.manuallyFlagged))};
-    let hideNames = ${safeJsonForScript(hideNamesDefault)};
+    const DEFAULT_HIDE_NAMES = ${safeJsonForScript(hideNamesDefault)};
+    const IS_EMBED = ${safeJsonForScript(Boolean(isEmbed))};
+    let hideNames = DEFAULT_HIDE_NAMES;
     const rawTrainerName = ${safeJsonForScript(shareInfo.screenName || 'Trainer')};
     let frames = [];
     let summaryHeader = null;
     let hudMode = 'live';
     let hudTop = true;
+    let aiAdvicePos = 'bottom';
     let showShieldHud = IS_SHIELD_HUD_UNLOCKED;
     let sideBySide = false;
     let selectedSpeed = 1;
     let mp4TimeCompressionRatio = 1.0;
-    const IS_CLEAN_STAGE = new URLSearchParams(window.location.search).get('cleanStage') === '1';
+    const initParams = new URLSearchParams(window.location.search);
+    const IS_CLEAN_STAGE = initParams.get('cleanStage') === '1';
     if (IS_CLEAN_STAGE) document.documentElement.classList.add('clean-stage');
     let currentHudTransparencyPct = 50;
     let compactHudConfig = {
-      showOppAttacks: false,
-      showMyAttacks: false,
-      showCoach: true,
+      showOppAttacks: true,
+      showMyAttacks: true,
+      showCoach: false,
       showMatrix: false,
       showPacing: true,
       toolbarMode: 'auto'
     };
     try {
-      const savedCmp = JSON.parse(localStorage.getItem('sspvp_compact_hud_cfg') || 'null');
+      const savedCmp = JSON.parse(localStorage.getItem('sspvp_compact_hud_cfg_v2') || 'null');
       if (savedCmp && typeof savedCmp === 'object') {
         if (savedCmp.showOppAttacks !== undefined) compactHudConfig.showOppAttacks = !!savedCmp.showOppAttacks;
         if (savedCmp.showMyAttacks !== undefined) compactHudConfig.showMyAttacks = !!savedCmp.showMyAttacks;
         if (savedCmp.showCoach !== undefined) compactHudConfig.showCoach = !!savedCmp.showCoach;
         if (savedCmp.showMatrix !== undefined) compactHudConfig.showMatrix = !!savedCmp.showMatrix;
         if (savedCmp.showPacing !== undefined) compactHudConfig.showPacing = !!savedCmp.showPacing;
+        if (savedCmp.toolbarMode === 'always' || savedCmp.toolbarMode === 'hidden' || savedCmp.toolbarMode === 'auto') {
+          compactHudConfig.toolbarMode = savedCmp.toolbarMode;
+        }
       }
     } catch (_) {}
+
+    function parseBoolQueryParam(key) {
+      if (!initParams.has(key)) return null;
+      const v = String(initParams.get(key) || '').trim().toLowerCase();
+      if (v === '1' || v === 'true' || v === 'yes' || v === 'on') return true;
+      if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
+      return null;
+    }
+    (function hydrateWatchConfigFromUrl() {
+      const rawHud = (initParams.get('hud') || '').trim().toLowerCase();
+      const hasCompactParam =
+        initParams.has('cmp') || initParams.has('opp') || initParams.has('my') ||
+        initParams.has('coach') || initParams.has('matrix') || initParams.has('mtx') ||
+        initParams.has('pace') || initParams.has('pacing') || initParams.has('tb');
+      if (rawHud === 'compact') {
+        hudMode = 'compact';
+      } else if (rawHud === 'diag' || rawHud === 'diagnostic') {
+        hudMode = 'diag';
+      } else if (rawHud === 'off') {
+        hudMode = 'off';
+      } else if (rawHud === 'live' || rawHud === 'full') {
+        hudMode = 'live';
+      } else if (hasCompactParam) {
+        hudMode = 'compact';
+      }
+      if (initParams.has('cmp')) {
+        const cmpRaw = String(initParams.get('cmp') || '').trim().toLowerCase();
+        if (cmpRaw === 'none' || cmpRaw === '') {
+          compactHudConfig.showOppAttacks = false;
+          compactHudConfig.showMyAttacks = false;
+          compactHudConfig.showCoach = false;
+          compactHudConfig.showMatrix = false;
+          compactHudConfig.showPacing = false;
+        } else {
+          const tokens = new Set(cmpRaw.split(',').map(s => s.trim()).filter(Boolean));
+          compactHudConfig.showOppAttacks = tokens.has('opp');
+          compactHudConfig.showMyAttacks = tokens.has('my') || tokens.has('mine');
+          compactHudConfig.showCoach = tokens.has('coach');
+          compactHudConfig.showMatrix = tokens.has('matrix') || tokens.has('mtx');
+          compactHudConfig.showPacing = tokens.has('pace') || tokens.has('pacing');
+        }
+      }
+      const oppOvr = parseBoolQueryParam('opp');
+      if (oppOvr !== null) compactHudConfig.showOppAttacks = oppOvr;
+      const myOvr = parseBoolQueryParam('my');
+      if (myOvr !== null) compactHudConfig.showMyAttacks = myOvr;
+      const coachOvr = parseBoolQueryParam('coach');
+      if (coachOvr !== null) compactHudConfig.showCoach = coachOvr;
+      const mtxOvr = parseBoolQueryParam('matrix') ?? parseBoolQueryParam('mtx');
+      if (mtxOvr !== null) compactHudConfig.showMatrix = mtxOvr;
+      const paceOvr = parseBoolQueryParam('pace') ?? parseBoolQueryParam('pacing');
+      if (paceOvr !== null) compactHudConfig.showPacing = paceOvr;
+      const tbParam = (initParams.get('tb') || '').trim().toLowerCase();
+      if (tbParam === 'auto' || tbParam === 'always' || tbParam === 'hidden') {
+        compactHudConfig.toolbarMode = tbParam;
+      }
+      const shOvr = parseBoolQueryParam('sh');
+      if (shOvr !== null && IS_SHIELD_HUD_UNLOCKED) {
+        showShieldHud = shOvr;
+      }
+      const posParam = (initParams.get('pos') || '').trim().toLowerCase();
+      if (posParam === 'bottom' || posParam === 'bot') hudTop = false;
+      else if (posParam === 'top') hudTop = true;
+      const advParam = (initParams.get('adv') || '').trim().toLowerCase();
+      if (advParam === 'top') aiAdvicePos = 'top';
+      else if (advParam === 'bottom' || advParam === 'bot') aiAdvicePos = 'bottom';
+      if (initParams.has('op')) {
+        const opVal = Number(initParams.get('op'));
+        if (Number.isFinite(opVal)) {
+          currentHudTransparencyPct = Math.max(15, Math.min(100, Math.round(opVal)));
+        }
+      }
+      const sbsOvr = parseBoolQueryParam('sbs');
+      if (sbsOvr !== null) sideBySide = sbsOvr;
+      const anonOvr = parseBoolQueryParam('anon');
+      if (anonOvr !== null) hideNames = anonOvr;
+    })();
 
     function updateEffectivePlaybackRate() {
       const rate = Math.max(0.1, Math.min(4.0, selectedSpeed / mp4TimeCompressionRatio));
@@ -4722,6 +4834,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           updateContentHeight(h) {
             const px = Math.max(48, Math.ceil(Number(h) || 340));
             hudIframe.style.height = px + 'px';
+          },
+          setOverlayHudMode(mode) {
+            setHudMode(String(mode || '').toLowerCase() === 'compact' ? 'compact' : 'live');
           },
           selectActiveUserPokemon(name) {
             const uSpecs = getResolvedUserSpecs();
@@ -4801,10 +4916,71 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       const el = document.getElementById('spd-' + id);
       if (el) el.classList.add('active');
     }
+    function buildReplayQueryParams(overrideT) {
+      const qs = new URLSearchParams();
+      if (overrideT !== undefined && overrideT !== null && Number(overrideT) >= 1) {
+        qs.set('t', String(Math.round(Number(overrideT))));
+      }
+      if (hudMode !== 'live') {
+        qs.set('hud', hudMode);
+      }
+      if (hudMode === 'compact') {
+        const cmpList = [];
+        if (compactHudConfig.showOppAttacks) cmpList.push('opp');
+        if (compactHudConfig.showMyAttacks) cmpList.push('my');
+        if (compactHudConfig.showCoach) cmpList.push('coach');
+        if (compactHudConfig.showMatrix) cmpList.push('matrix');
+        if (compactHudConfig.showPacing) cmpList.push('pace');
+        qs.set('cmp', cmpList.length > 0 ? cmpList.join(',') : 'none');
+        if (compactHudConfig.toolbarMode && compactHudConfig.toolbarMode !== 'auto') {
+          qs.set('tb', compactHudConfig.toolbarMode);
+        }
+        if (IS_SHIELD_HUD_UNLOCKED) {
+          qs.set('sh', showShieldHud ? '1' : '0');
+        }
+      } else if (!showShieldHud && IS_SHIELD_HUD_UNLOCKED) {
+        qs.set('sh', '0');
+      }
+      if (!hudTop) qs.set('pos', 'bottom');
+      if (aiAdvicePos === 'top') qs.set('adv', 'top');
+      if (currentHudTransparencyPct !== 50) qs.set('op', String(currentHudTransparencyPct));
+      if (sideBySide) qs.set('sbs', '1');
+      if (hideNames !== DEFAULT_HIDE_NAMES) qs.set('anon', hideNames ? '1' : '0');
+      return qs;
+    }
+    function buildCurrentReplayShareUrl(includeTimestamp) {
+      const baseUrl = window.location.origin + '/watch/' + encodeURIComponent(SHARE_ID || '');
+      const curRealSec = Math.round((video.currentTime || 0) * mp4TimeCompressionRatio);
+      const tVal = (includeTimestamp && (curRealSec >= 3 || (video.paused && curRealSec >= 1))) ? curRealSec : null;
+      const qStr = buildReplayQueryParams(tVal).toString();
+      return qStr ? (baseUrl + '?' + qStr) : baseUrl;
+    }
+    function syncUrlStateToAddressBar() {
+      if (IS_CLEAN_STAGE || IS_EMBED) return;
+      try {
+        const existingT = new URLSearchParams(window.location.search).get('t');
+        const qStr = buildReplayQueryParams(existingT).toString();
+        const nextPath = window.location.pathname + (qStr ? ('?' + qStr) : '');
+        window.history.replaceState(null, '', nextPath);
+      } catch (_) {}
+    }
+    function refreshShieldButtonsUi() {
+      const btn = document.getElementById('btn-shield-hud');
+      if (btn) {
+        btn.classList.toggle('active', !!showShieldHud);
+        btn.textContent = !IS_SHIELD_HUD_UNLOCKED ? '🔒 Shield' : (showShieldHud ? '🛡️ Shield: ON' : '🛡️ Shield: OFF');
+      }
+      const cmpShield = document.getElementById('cmp-chip-shield');
+      if (cmpShield) {
+        cmpShield.classList.toggle('active', !!showShieldHud);
+        cmpShield.textContent = !IS_SHIELD_HUD_UNLOCKED ? '🔒 Shield' : (showShieldHud ? '🛡️ Shield' : '🛡️ Shield: OFF');
+      }
+    }
     function refreshCompactCustomizerUi() {
       const bar = document.getElementById('compact-customizer-bar');
       if (bar) bar.style.display = hudMode === 'compact' ? 'flex' : 'none';
       const c = compactHudConfig;
+      const tbMode = c.toolbarMode === 'always' || c.toolbarMode === 'hidden' ? c.toolbarMode : 'auto';
       const chipMap = [
         ['cmp-chip-opp', c.showOppAttacks],
         ['cmp-chip-my', c.showMyAttacks],
@@ -4816,19 +4992,34 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('active', !!on);
       });
-      const isMinimal = !c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing;
-      const isCoachMoves = c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing;
-      const isFullLite = c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing;
+      const tbBtn = document.getElementById('cmp-chip-toolbar');
+      if (tbBtn) {
+        tbBtn.classList.toggle('active', tbMode !== 'hidden');
+        tbBtn.textContent = tbMode === 'always' ? '🎥 Bar: On' : tbMode === 'hidden' ? '🎥 Bar: Off' : '🎥 Bar: Auto';
+      }
+      const isMovesDef = c.showOppAttacks && c.showMyAttacks && !c.showCoach && !c.showMatrix && c.showPacing && tbMode === 'auto';
+      const isMinimal = !c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && tbMode === 'auto';
+      const isCoachMoves = c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing && tbMode === 'auto';
+      const isFullLite = c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing && tbMode === 'auto';
+      const pDef = document.getElementById('cmp-pre-moves-def');
       const pMin = document.getElementById('cmp-pre-minimal');
       const pMov = document.getElementById('cmp-pre-moves');
       const pFul = document.getElementById('cmp-pre-full');
+      if (pDef) pDef.classList.toggle('active', isMovesDef);
       if (pMin) pMin.classList.toggle('active', isMinimal);
       if (pMov) pMov.classList.toggle('active', isCoachMoves);
       if (pFul) pFul.classList.toggle('active', isFullLite);
+      const sumLbl = document.getElementById('cmp-summary-label');
+      if (sumLbl) {
+        const pName = isMovesDef ? 'Moves (Def)' : isMinimal ? 'Minimal' : isCoachMoves ? 'Coach+Opp' : isFullLite ? 'Full-Lite' : 'Custom';
+        sumLbl.textContent = '🧩 Compact: ' + pName;
+      }
+      refreshShieldButtonsUi();
     }
     function persistAndPushCompactHudConfig() {
-      try { localStorage.setItem('sspvp_compact_hud_cfg', JSON.stringify(compactHudConfig)); } catch (_) {}
+      try { localStorage.setItem('sspvp_compact_hud_cfg_v2', JSON.stringify(compactHudConfig)); } catch (_) {}
       refreshCompactCustomizerUi();
+      syncUrlStateToAddressBar();
       try {
         if (hudIframe.contentWindow && typeof hudIframe.contentWindow.setCompactHudConfig === 'function') {
           hudIframe.contentWindow.setCompactHudConfig(compactHudConfig);
@@ -4840,13 +5031,20 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       compactHudConfig[key] = !compactHudConfig[key];
       persistAndPushCompactHudConfig();
     }
+    function cycleReplayCompactToolbar() {
+      const cur = compactHudConfig.toolbarMode === 'always' || compactHudConfig.toolbarMode === 'hidden' ? compactHudConfig.toolbarMode : 'auto';
+      compactHudConfig.toolbarMode = cur === 'auto' ? 'always' : (cur === 'always' ? 'hidden' : 'auto');
+      persistAndPushCompactHudConfig();
+    }
     function applyReplayCompactPreset(preset) {
-      if (preset === 'coach_moves') {
+      if (preset === 'minimal') {
+        compactHudConfig = { showOppAttacks: false, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' };
+      } else if (preset === 'coach_moves') {
         compactHudConfig = { showOppAttacks: true, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' };
       } else if (preset === 'full_lite') {
         compactHudConfig = { showOppAttacks: true, showMyAttacks: true, showCoach: true, showMatrix: true, showPacing: true, toolbarMode: 'auto' };
       } else {
-        compactHudConfig = { showOppAttacks: false, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' };
+        compactHudConfig = { showOppAttacks: true, showMyAttacks: true, showCoach: false, showMatrix: false, showPacing: true, toolbarMode: 'auto' };
       }
       persistAndPushCompactHudConfig();
     }
@@ -4855,6 +5053,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       ['live','compact','diag','off'].forEach(k => { const b = document.getElementById('mode-' + k); if (b) b.classList.toggle('active', k === m); });
       hudLayer.style.display = m === 'off' ? 'none' : 'block';
       refreshCompactCustomizerUi();
+      syncUrlStateToAddressBar();
       syncHudFrame();
     }
     function toggleShieldHud() {
@@ -4863,11 +5062,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         return;
       }
       showShieldHud = !showShieldHud;
-      const btn = document.getElementById('btn-shield-hud');
-      if (btn) {
-        btn.classList.toggle('active', showShieldHud);
-        btn.textContent = showShieldHud ? '🛡️ Shield: ON' : '🛡️ Shield: OFF';
-      }
+      refreshShieldButtonsUi();
+      syncUrlStateToAddressBar();
       try {
         if (hudIframe.contentWindow && hudIframe.contentWindow.setReplayShieldOverlayEnabled) {
           hudIframe.contentWindow.setReplayShieldOverlayEnabled(showShieldHud);
@@ -4879,15 +5075,19 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       hudTop = !hudTop;
       hudLayer.classList.toggle('pos-top', hudTop);
       document.getElementById('btn-pos').textContent = hudTop ? '⬆️ Top' : '⬇️ Bot';
+      syncUrlStateToAddressBar();
+      syncHudFrame();
     }
     function updateOpacity(val) {
       currentHudTransparencyPct = Math.max(15, Math.min(100, Number(val) || 50));
+      syncUrlStateToAddressBar();
       syncHudFrame();
     }
     function togglePrivacy() {
       hideNames = !hideNames;
       document.getElementById('hdr-trainer').textContent = hideNames ? 'Trainer' : rawTrainerName;
       document.getElementById('btn-privacy').textContent = hideNames ? '🕵️ Names Hidden' : '🕵️ Hide Names';
+      syncUrlStateToAddressBar();
       syncHudFrame();
     }
     function toggleLayout() {
@@ -4899,8 +5099,32 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         document.getElementById('video-box').appendChild(hudLayer);
       }
       document.getElementById('btn-layout').textContent = sideBySide ? '📐 Side-by-Side: ON' : '📐 Side-by-Side: OFF';
+      syncUrlStateToAddressBar();
       setTimeout(syncHudFrame, 60);
     }
+    function applyInitialWatchUiState() {
+      ['live','compact','diag','off'].forEach(k => { const b = document.getElementById('mode-' + k); if (b) b.classList.toggle('active', k === hudMode); });
+      hudLayer.style.display = hudMode === 'off' ? 'none' : 'block';
+      hudLayer.classList.toggle('pos-top', hudTop);
+      const posBtn = document.getElementById('btn-pos');
+      if (posBtn) posBtn.textContent = hudTop ? '⬆️ Top' : '⬇️ Bot';
+      const opSlider = document.getElementById('hud-opacity');
+      if (opSlider) opSlider.value = String(currentHudTransparencyPct);
+      const trSpan = document.getElementById('hdr-trainer');
+      if (trSpan) trSpan.textContent = hideNames ? 'Trainer' : rawTrainerName;
+      const privBtn = document.getElementById('btn-privacy');
+      if (privBtn) privBtn.textContent = hideNames ? '🕵️ Names Hidden' : '🕵️ Hide Names';
+      stageWrap.classList.toggle('side-by-side', sideBySide);
+      if (sideBySide) {
+        stageWrap.appendChild(hudLayer);
+      } else {
+        document.getElementById('video-box').appendChild(hudLayer);
+      }
+      const layoutBtn = document.getElementById('btn-layout');
+      if (layoutBtn) layoutBtn.textContent = sideBySide ? '📐 Side-by-Side: ON' : '📐 Side-by-Side: OFF';
+      refreshCompactCustomizerUi();
+    }
+    applyInitialWatchUiState();
 
     function refreshWatchIssueBannerUi() {
       const hdrFlagBtn = document.getElementById('btn-flag-issue-hdr');
@@ -5509,7 +5733,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           isReplayMode: true,
           overlayTransparencyPct: 12,
           appThemeId: 'dialga_shiny_midnight',
-          aiAdviceHudPosition: hudTop ? 'top' : 'bottom',
+          aiAdviceHudPosition: aiAdvicePos,
           isOverlayMinimized: false,
           scanHzMode: 10,
           lastScanDurationMs: 12,
@@ -6255,7 +6479,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         fastDetectTurnOffset: 0,
         overlayTransparencyPct: currentHudTransparencyPct,
         appThemeId: 'dialga_shiny_midnight',
-        aiAdviceHudPosition: hudTop ? 'top' : 'bottom',
+        aiAdviceHudPosition: aiAdvicePos,
         isOverlayMinimized: false,
         maxHorizonTurns,
         oppShadowEligible: (actOpp.meta.shadowEligible !== false) && (f.oppShadowEligible !== false),
@@ -6649,24 +6873,32 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       }
     }
 
-    function shareCurrentReplayMoment() {
-      const curRealSec = Math.round((video.currentTime || 0) * mp4TimeCompressionRatio);
-      const baseUrl = window.location.origin + '/watch/' + encodeURIComponent(SHARE_ID || '');
-      const shareUrl = curRealSec >= 3 ? (baseUrl + '?t=' + curRealSec) : baseUrl;
+    function shareCurrentReplayMoment(triggerBtn) {
+      const shareUrl = buildCurrentReplayShareUrl(true);
       const shareTitle = 'SilphScope DVR • ' + (SHARE_MATCHUP || SHARE_LEAGUE || 'Battle Replay');
+      const btn = (triggerBtn && triggerBtn.nodeType === 1) ? triggerBtn : document.getElementById('btn-share-moment');
+      const flashCopied = () => {
+        if (!btn) return;
+        const orig = btn.textContent;
+        btn.textContent = hudMode === 'compact' ? '✅ Copied Compact' : '✅ Copied Link';
+        setTimeout(() => { btn.textContent = orig; }, 1800);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(shareUrl).then(() => {
+            if (!navigator.share) flashCopied();
+          }).catch(() => {});
+        }
+      } catch (_) {}
       if (navigator.share) {
-        navigator.share({ title: shareTitle, text: shareTitle, url: shareUrl }).catch(() => {});
+        navigator.share({ title: shareTitle, text: shareTitle, url: shareUrl }).then(() => {
+          flashCopied();
+        }).catch(() => {});
         return;
       }
-      try {
-        navigator.clipboard.writeText(shareUrl);
-        const btn = document.getElementById('btn-share-moment');
-        if (btn) {
-          const orig = btn.textContent;
-          btn.textContent = '✅ Copied';
-          setTimeout(() => { btn.textContent = orig; }, 1800);
-        }
-      } catch (_) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        flashCopied();
+      } else {
         prompt('Copy Replay Link:', shareUrl);
       }
     }
@@ -6947,9 +7179,13 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           }
           ctx.drawImage(video, 0, 0, 544, 1184);
           if (hudMode !== 'off') {
-            const f = findFrameAtSec(video.currentTime || 0);
+            const effectiveSec = (video.currentTime || 0) * mp4TimeCompressionRatio;
+            const f = findFrameAtSec(effectiveSec);
             if (f) {
-              const y = hudTop ? 36 : 1020;
+              const payload = (typeof buildReplayOverlayPayload === 'function') ? buildReplayOverlayPayload(f) : null;
+              const sd = payload && payload.shieldDecisionOverlay;
+              const hasSd = Boolean(showShieldHud && sd && sd.visible);
+              const y = hudTop ? 36 : (hasSd ? 950 : 1020);
               ctx.fillStyle = 'rgba(5, 11, 22, 0.92)';
               ctx.fillRect(12, y, 520, 110);
               ctx.strokeStyle = '#2dd4bf';
@@ -6963,7 +7199,26 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
               ctx.fillText(String(f.recommendedAction || f.moveBannerText || 'SilphScope PvP').slice(0, 62), 24, y + 66);
               ctx.fillStyle = '#facc15';
               ctx.font = '12px monospace';
-              ctx.fillText('F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's • ✨ Shiny Origin Dialga Replay', 24, y + 94);
+              ctx.fillText('F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's • ✨ SilphScope Replay', 24, y + 94);
+              if (hasSd) {
+                const sdRows = Array.isArray(sd.fundedMoves) ? sd.fundedMoves.slice(0, 2) : [];
+                const sdH = 38 + sdRows.length * 18;
+                const sdY = y + 116;
+                ctx.fillStyle = sd.bgColorHex || 'rgba(6, 78, 59, 0.95)';
+                ctx.fillRect(12, sdY, 520, sdH);
+                ctx.strokeStyle = sd.strokeColorHex || '#10B981';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(12, sdY, 520, sdH);
+                ctx.fillStyle = '#FEF08A';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText(String(sd.headerLineText || '🛡️ SHIELD DECISION').slice(0, 74), 22, sdY + 20);
+                sdRows.forEach((mr, mrIdx) => {
+                  ctx.fillStyle = mr.isKo ? '#FECDD3' : '#6EE7B7';
+                  ctx.font = 'bold 11px sans-serif';
+                  const rowTxt = '⚡ ' + (mr.shortName || mr.moveName || 'Move') + ' (' + mr.energyCost + 'e) → ' + (mr.isKo ? 'KO! (0%)' : (mr.remHpPct + '% HP left'));
+                  ctx.fillText(rowTxt.slice(0, 72), 22, sdY + 40 + mrIdx * 18);
+                });
+              }
             }
           }
           requestAnimationFrame(drawTick);
@@ -8315,7 +8570,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.74');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.75');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
 
@@ -8910,7 +9165,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.74',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.75',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -9078,8 +9333,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.74',
-        releaseTitle: 'SilphScope PvP v7.74',
+        versionName: 'v7.75',
+        releaseTitle: 'SilphScope PvP v7.75',
         publishedAt: '',
         assetSizeMb: '',
       };

@@ -2553,9 +2553,9 @@
         window.liveHudMode = "full";
         window.compactHudShowMatrix = false;
         window.compactHudConfig = {
-            showOppAttacks: false,
-            showMyAttacks: false,
-            showCoach: true,
+            showOppAttacks: true,
+            showMyAttacks: true,
+            showCoach: false,
             showMatrix: false,
             showPacing: true,
             toolbarMode: "auto"
@@ -5120,9 +5120,9 @@
             const isDiag = (effectiveMode === "diagnostic");
             const isGuidedEloScan = !isReplay && isWaitingState && !!(battleData && battleData.eloScanState && battleData.eloScanState.guidedScanActive);
             const cfg = window.compactHudConfig || {
-                showOppAttacks: false,
-                showMyAttacks: false,
-                showCoach: true,
+                showOppAttacks: true,
+                showMyAttacks: true,
+                showCoach: false,
                 showMatrix: !!window.compactHudShowMatrix,
                 showPacing: true,
                 toolbarMode: "auto"
@@ -5253,6 +5253,8 @@
 
         window.setReplayHudMode = function(mode) {
             window.replayHudMode = mode || "live";
+            window.liveHudMode = (String(window.replayHudMode).toLowerCase() === "compact") ? "compact" : "full";
+            updateMinimizeSwordButtonTooltip();
             const isWaitingState = (battleData.activeOpponent === "Waiting..." || !battleData.activeOpponent);
             const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1")) || window.replayHudMode !== "live";
             applyActiveHudModeVisibility(isWaitingState, isReplay);

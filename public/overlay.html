@@ -1656,6 +1656,29 @@
             background: rgba(15, 23, 42, 0.65);
             color: #94a3b8;
         }
+        .hud-mega-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 0.5px 4.5px;
+            border-radius: 3px;
+            font-size: 6.9px;
+            font-weight: 900;
+            letter-spacing: 0.15px;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            border: 1px solid rgba(148, 163, 184, 0.42);
+            background: rgba(30, 41, 59, 0.72);
+            color: #cbd5e1;
+            transition: all 0.12s ease;
+        }
+        .hud-mega-toggle-btn.active {
+            border-color: rgba(232, 121, 249, 0.9);
+            background: rgba(134, 25, 143, 0.52);
+            color: #f5d0fe;
+            box-shadow: 0 0 6px rgba(217, 70, 239, 0.48);
+        }
         .idle-party-preview-row {
             display: flex;
             justify-content: space-between;
@@ -1912,6 +1935,7 @@
                     </div>
                     <div class="section-header-line2">
                         <span id="sky-my-short" style="color:#38bdf8; font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;">Lead</span>
+                        <span id="sky-my-mega-wrap" style="display:none; flex-shrink:0;"></span>
                         <span id="sky-my-bp-pill" style="display:none; flex-shrink:0;"></span>
                         <span id="sky-my-atk-energy-pill" class="energy-slot-pill building" style="margin-left:2px; flex-shrink:0;" title="Your Active Pokémon Energy">0E</span>
                     </div>
@@ -2529,9 +2553,9 @@
         window.liveHudMode = "full";
         window.compactHudShowMatrix = false;
         window.compactHudConfig = {
-            showOppAttacks: false,
-            showMyAttacks: false,
-            showCoach: true,
+            showOppAttacks: true,
+            showMyAttacks: true,
+            showCoach: false,
             showMatrix: false,
             showPacing: true,
             toolbarMode: "auto"
@@ -3259,6 +3283,13 @@
             if (ev && ev.stopPropagation) ev.stopPropagation();
             if (window.AndroidOverlay && window.AndroidOverlay.cycleActivePresetMeta) {
                 window.AndroidOverlay.cycleActivePresetMeta();
+            }
+        }
+
+        function togglePlayerMegaHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.togglePlayerMegaState) {
+                window.AndroidOverlay.togglePlayerMegaState();
             }
         }
 
@@ -4123,6 +4154,23 @@
                     : `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)} · ${escapeHtml(userFastTelemetry)}`;
                 setHtmlIfChanged(myShortEl, myHtml);
             }
+            const myMegaWrapEl = document.getElementById("sky-my-mega-wrap");
+            if (myMegaWrapEl) {
+                if (!isReplay && battleData.hasMegaCapableSlot) {
+                    const isMegaOn = !!battleData.isPlayerMegaActive;
+                    const mTitle = isMegaOn
+                        ? `Mega/Primal Active (${escapeHtml(battleData.megaSlotLabel || 'Mega')}) — Tap to toggle to Base Form`
+                        : `Mega/Primal Ready (${escapeHtml(battleData.megaSlotLabel || 'Mega')}) — Tap to activate Mega Form`;
+                    myMegaWrapEl.style.display = "inline-flex";
+                    setHtmlIfChanged(
+                        myMegaWrapEl,
+                        `<button type="button" class="hud-mega-toggle-btn ${isMegaOn ? 'active' : ''}" onclick="togglePlayerMegaHud(event)" title="${mTitle}">${formatOverlayMegaHtml(isMegaOn ? "Mega ON" : "Mega OFF", 9.5)}</button>`
+                    );
+                } else {
+                    myMegaWrapEl.style.display = "none";
+                    setHtmlIfChanged(myMegaWrapEl, "");
+                }
+            }
             const myBpPillEl = document.getElementById("sky-my-bp-pill");
             if (myBpPillEl) {
                 const myBpDelta = Number(battleData.liveMyBpDeltaHp) || 0;
@@ -4241,10 +4289,20 @@
                     const leaguePillTitle = hasMultiMeta
                         ? `Active Meta: ${escapeHtml(activeLeagueStr)} (Tap to switch: ${escapeHtml(assignedMetasArr.join(' / '))})`
                         : `Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}`;
+                    const idleMegaBtnHtml = (!isReplay && battleData.hasMegaCapableSlot)
+                        ? (() => {
+                            const isMegaOn = !!battleData.isPlayerMegaActive;
+                            const mTitle = isMegaOn
+                                ? `Mega/Primal Active (${escapeHtml(battleData.megaSlotLabel || 'Mega')}) — Tap to toggle to Base Form`
+                                : `Mega/Primal Ready (${escapeHtml(battleData.megaSlotLabel || 'Mega')}) — Tap to activate Mega Form`;
+                            return `<button type="button" class="hud-mega-toggle-btn ${isMegaOn ? 'active' : ''}" onclick="togglePlayerMegaHud(event)" title="${mTitle}">${formatOverlayMegaHtml(isMegaOn ? "Mega ON" : "Mega OFF", 9.5)}</button>`;
+                        })()
+                        : "";
                     const idleBannerChanged = setHtmlIfChanged(idleTeamBannerEl, `
                         <div class="idle-team-line1">
                             <span class="idle-league-pill"${leaguePillClickAttr} title="${leaguePillTitle}">🏆 ${formatOverlayMegaHtml(activeLeagueStr, 10.5)}${leaguePillSwitchGlyph} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
                             <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
+                                ${idleMegaBtnHtml}
                                 ${eloChipHtml}
                                 ${compactLogPillHtml}
                                 ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
@@ -5062,9 +5120,9 @@
             const isDiag = (effectiveMode === "diagnostic");
             const isGuidedEloScan = !isReplay && isWaitingState && !!(battleData && battleData.eloScanState && battleData.eloScanState.guidedScanActive);
             const cfg = window.compactHudConfig || {
-                showOppAttacks: false,
-                showMyAttacks: false,
-                showCoach: true,
+                showOppAttacks: true,
+                showMyAttacks: true,
+                showCoach: false,
                 showMatrix: !!window.compactHudShowMatrix,
                 showPacing: true,
                 toolbarMode: "auto"
@@ -5195,6 +5253,8 @@
 
         window.setReplayHudMode = function(mode) {
             window.replayHudMode = mode || "live";
+            window.liveHudMode = (String(window.replayHudMode).toLowerCase() === "compact") ? "compact" : "full";
+            updateMinimizeSwordButtonTooltip();
             const isWaitingState = (battleData.activeOpponent === "Waiting..." || !battleData.activeOpponent);
             const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1")) || window.replayHudMode !== "live";
             applyActiveHudModeVisibility(isWaitingState, isReplay);

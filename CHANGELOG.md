@@ -2,6 +2,15 @@
 
 ---
 
+## v7.75 (2026-11-19) — Bottom-Attached Shield Call & AI Coach DVR Parity, `Moves (Def)` Compact HUD & Shareable URL Config
+*UI/UX & replay parity update (`v7.75`, `versionCode = 1775`) aligning DVR replay bottom Shield Call & AI Tactical Coach attachment with Android, introducing the `Moves (Def)` Compact HUD preset across Android/Web/DVR with full 6-module granular toggles, and encoding custom real-time HUD configurations into shareable URL query parameters.*
+
+- **Bottom-Attached Shield Call & AI Coach DVR Parity (`worker.mjs`, `overlay.html`, `src/App.tsx`)**: Fixed `aiAdviceHudPosition` defaulting to `'top'` instead of `'bottom'` in `/watch/:shareId` DVR payloads so both the 2-line AI Coach and `#sky-shield-decision-card` stay attached to the bottom of the main overlay just like Android; fixed `#btn-shield-hud` default active state (`🛡️ Shield: ON`); added bottom-attached Shield Call card rendering in DVR canvas `exportWithHud()`; and added a matching bottom-attached Shield Decision Overlay Card to the Web Simulator phone preview.
+- **Refined `Moves (Def)` Compact HUD & Full Modular Controls (`OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `overlay.html`, `worker.mjs`, `src/App.tsx`)**: Upgraded the default Compact HUD preset to `Moves (Def)` (`Header [HP/E/Shields] + Opp Attacks + My Attacks + Pacing + Shield Call`, Coach/Matrix OFF, Toolbar Auto) synced across Android Settings (`2×2` preset grid), Web Simulator (`Overlay HUD` inline customizer + Settings tab), and DVR Replay Theater (`#compact-customizer-bar` directly above the Tools drawer with all 4 presets, 6 Android toggles `Opp`/`Mine`/`Coach`/`Matrix`/`Pacing`/`Bar`, and `Shield Call`).
+- **Shareable Real-Time URL Parameter HUD Config (`worker.mjs`, `src/App.tsx`, `MarketingWebsite.tsx`)**: Encoded active HUD mode, modular Compact toggles, Toolbar mode, Shield Call overlay toggle, HUD position, opacity, and timestamp into clean shareable query parameters (`?hud=compact&cmp=opp,my,pace&sh=1`) with non-destructive URL hydration, live `history.replaceState` address-bar sync, `🔗 Share HUD` buttons, and Marketing Website Replay Theater iframe parameter forwarding (`clipboard-write`).
+
+---
+
 ## v7.74 (2026-11-19) — Combat Telemetry Fixes, Cross-Platform Dynamic Shadow Eligibility & 2-Tier Local DVR Quota
 *Telemetry reliability & dynamic catalog parity release (`v7.74`, `versionCode = 1774`) resolving 0-shield Mimikyu Disguise accounting, noisy-circle post-swap opponent fast-move timing, bench OCR species cross-contamination, purple stat-stage/swap-in Shadow aura false spikes, cross-platform dynamic Shadow eligibility (unlocking Shadow Corviknight and all live PvPoke Shadow species automatically), and a two-tier `6 GB` / `20 GB` local DVR cache quota with un-truncated audit reporting.*
 

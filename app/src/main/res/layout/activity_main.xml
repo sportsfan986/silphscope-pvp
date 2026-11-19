@@ -2999,11 +2999,11 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="Preset: Minimal (Def) • Header + 2-Line Coach + Move Pacing + Auto Toolbar"
+                    android:text="Preset: Moves (Def) • Header (HP/E/Shields) + Opp Moves + My Moves + Pacing + Shield Call + Auto Toolbar"
                     android:textColor="#94a3b8"
                     android:textSize="10sp" />
 
-                <!-- 1-Tap Presets Row -->
+                <!-- 1-Tap Presets 2x2 Grid -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -3011,7 +3011,7 @@
                     android:layout_marginTop="6dp">
 
                     <Button
-                        android:id="@+id/btn_compact_preset_minimal"
+                        android:id="@+id/btn_compact_preset_moves_default"
                         android:layout_width="0dp"
                         android:layout_height="34dp"
                         android:layout_weight="1"
@@ -3019,12 +3019,34 @@
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingHorizontal="4dp"
-                        android:text="Minimal (Def)"
+                        android:text="Moves (Def)"
                         android:textAllCaps="false"
                         android:textSize="10sp"
                         android:textStyle="bold"
                         android:backgroundTint="#0d9488"
                         android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_preset_minimal"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="4dp"
+                        android:text="Minimal"
+                        android:textAllCaps="false"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
 
                     <Button
                         android:id="@+id/btn_compact_preset_coach_moves"
@@ -3074,11 +3096,11 @@
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingHorizontal="3dp"
-                        android:text="⚔️ Opp: OFF"
+                        android:text="⚔️ Opp: ON"
                         android:textAllCaps="false"
                         android:textSize="9.8sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#334155"
+                        android:backgroundTint="#0d9488"
                         android:textColor="#ffffff" />
 
                     <Button
@@ -3090,11 +3112,11 @@
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingHorizontal="3dp"
-                        android:text="⚡ Mine: OFF"
+                        android:text="⚡ Mine: ON"
                         android:textAllCaps="false"
                         android:textSize="9.8sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#334155"
+                        android:backgroundTint="#0d9488"
                         android:textColor="#ffffff" />
 
                     <Button
@@ -3105,11 +3127,11 @@
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingHorizontal="3dp"
-                        android:text="🧠 Coach: ON"
+                        android:text="🧠 Coach: OFF"
                         android:textAllCaps="false"
                         android:textSize="9.8sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#0d9488"
+                        android:backgroundTint="#334155"
                         android:textColor="#ffffff" />
                 </LinearLayout>
 

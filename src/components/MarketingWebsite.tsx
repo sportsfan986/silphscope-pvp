@@ -1176,7 +1176,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.74 • Latest Release
+                    v7.75 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1405,7 +1405,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.74)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.75)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -1616,7 +1616,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   style={{ backgroundColor: '#2DD4BF', color: '#042F2E' }}
                 >
                   <span>📱</span>
-                  <span>Download APK (v7.74)</span>
+                  <span>Download APK (v7.75)</span>
                 </a>
                 <button
                   type="button"
@@ -3676,14 +3676,30 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           </button>
 
           {/* Full-Screen Replay Stage */}
-          <iframe
-            src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?embed=1${
-              selectedWatchSeekSec > 0 ? `&t=${selectedWatchSeekSec}` : ''
-            }`}
-            title="SilphScope Replay Theater"
-            className="w-full h-full flex-1 border-none block bg-black"
-            allow="fullscreen"
-          ></iframe>
+          {(() => {
+            const watchParams = new URLSearchParams();
+            watchParams.set('embed', '1');
+            if (selectedWatchSeekSec > 0) {
+              watchParams.set('t', String(selectedWatchSeekSec));
+            }
+            try {
+              const curQs = new URLSearchParams(window.location.search);
+              ['hud', 'cmp', 'opp', 'my', 'coach', 'matrix', 'mtx', 'pace', 'pacing', 'tb', 'sh', 'pos', 'adv', 'op', 'sbs', 'anon'].forEach((k) => {
+                const v = curQs.get(k);
+                if (v !== null && v !== '') {
+                  watchParams.set(k, v);
+                }
+              });
+            } catch {}
+            return (
+              <iframe
+                src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?${watchParams.toString()}`}
+                title="SilphScope Replay Theater"
+                className="w-full h-full flex-1 border-none block bg-black"
+                allow="fullscreen; clipboard-write"
+              ></iframe>
+            );
+          })()}
         </div>
       )}
 

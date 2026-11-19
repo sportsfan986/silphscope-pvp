@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textLogOnlyStealthModeDesc: TextView
     private lateinit var btnToggleCompactHudMatrix: Button
     private lateinit var textCompactHudMatrixDesc: TextView
+    private lateinit var btnCompactPresetMovesDefault: Button
     private lateinit var btnCompactPresetMinimal: Button
     private lateinit var btnCompactPresetCoachMoves: Button
     private lateinit var btnCompactPresetFullLite: Button
@@ -1339,6 +1340,7 @@ class MainActivity : AppCompatActivity() {
         textLogOnlyStealthModeDesc = findViewById(R.id.text_log_only_stealth_mode_desc)
         btnToggleCompactHudMatrix = findViewById(R.id.btn_toggle_compact_hud_matrix)
         textCompactHudMatrixDesc = findViewById(R.id.text_compact_hud_matrix_desc)
+        btnCompactPresetMovesDefault = findViewById(R.id.btn_compact_preset_moves_default)
         btnCompactPresetMinimal = findViewById(R.id.btn_compact_preset_minimal)
         btnCompactPresetCoachMoves = findViewById(R.id.btn_compact_preset_coach_moves)
         btnCompactPresetFullLite = findViewById(R.id.btn_compact_preset_full_lite)
@@ -2316,6 +2318,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnCompactPresetMovesDefault.setOnClickListener {
+            commitAndBroadcastCompactHudPrefs {
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, true)
+                putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+            }
+        }
+
         btnCompactPresetMinimal.setOnClickListener {
             commitAndBroadcastCompactHudPrefs {
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, false)
@@ -2413,6 +2426,7 @@ class MainActivity : AppCompatActivity() {
             val nextShow = !currentShow
             prefs.edit().putBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, nextShow).apply()
             updateShieldDecisionOverlayUi()
+            updateCompactHudMatrixUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -10088,7 +10102,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleOverlayHudMode.text = "Compact HUD"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
             btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
-            textOverlayHudModeDesc.text = "Active: Compact HUD (Header + 2-Line Coach + Shield Card • Tap emblem for Full HUD • Hold 2s for Stealth)"
+            textOverlayHudModeDesc.text = "Active: Compact HUD (Header [Shields/E] + Selected Modules + Shield Card • Tap emblem for Full HUD • Hold 2s for Stealth)"
         } else {
             btnToggleOverlayHudMode.text = "Full HUD (Def)"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
@@ -10178,12 +10192,16 @@ class MainActivity : AppCompatActivity() {
             styleChipBtn(btnCompactChipToolbar, tbMode != "hidden", tbLabel)
         }
 
+        val isMovesDefault = showOpp && showMy && !showCoach && !showMatrix && showPacing && tbMode == "auto"
         val isMinimal = !showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
         val isCoachMoves = showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
         val isFullLite = showOpp && showMy && showCoach && showMatrix && showPacing && tbMode == "auto"
 
+        if (::btnCompactPresetMovesDefault.isInitialized) {
+            styleChipBtn(btnCompactPresetMovesDefault, isMovesDefault, "Moves (Def)")
+        }
         if (::btnCompactPresetMinimal.isInitialized) {
-            styleChipBtn(btnCompactPresetMinimal, isMinimal, "Minimal (Def)")
+            styleChipBtn(btnCompactPresetMinimal, isMinimal, "Minimal")
         }
         if (::btnCompactPresetCoachMoves.isInitialized) {
             styleChipBtn(btnCompactPresetCoachMoves, isCoachMoves, "Coach + Opp")
@@ -10193,17 +10211,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         val presetName = when {
-            isMinimal -> "Minimal (Def)"
+            isMovesDefault -> "Moves (Def)"
+            isMinimal -> "Minimal"
             isCoachMoves -> "Coach + Opp Moves"
             isFullLite -> "Tactical Full-Lite"
             else -> "✨ Custom"
         }
-        val activeParts = mutableListOf("Header")
+        val activeParts = mutableListOf("Header (Shields/E)")
         if (showOpp) activeParts.add("Opp Moves")
         if (showMy) activeParts.add("My Moves")
         if (showCoach) activeParts.add("2-Line Coach")
         if (showMatrix) activeParts.add("3x3 Matrix")
         if (showPacing) activeParts.add("Pacing")
+        val showShieldOverlay = OverlayService.getEffectiveReplayTierStatic(prefs) != "free" &&
+            prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+        if (showShieldOverlay) activeParts.add("Shield Call")
         activeParts.add(when (tbMode) { "always" -> "Toolbar Always"; "hidden" -> "Toolbar Hidden"; else -> "Auto Toolbar" })
         textCompactHudMatrixDesc.text = "Preset: $presetName • ${activeParts.joinToString(" + ")}"
     }

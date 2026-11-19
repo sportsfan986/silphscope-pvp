@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.74"
-        const val APP_VERSION_CODE = 1774
+        const val APP_VERSION = "7.75"
+        const val APP_VERSION_CODE = 1775
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -170,11 +170,11 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_COMPACT_HUD_SHOW_MATRIX = "gbl_compact_hud_show_matrix"
         const val DEFAULT_COMPACT_HUD_SHOW_MATRIX = false
         const val PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS = "gbl_compact_hud_show_opp_attacks"
-        const val DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS = false
+        const val DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS = true
         const val PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS = "gbl_compact_hud_show_my_attacks"
-        const val DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS = false
+        const val DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS = true
         const val PREFS_KEY_COMPACT_HUD_SHOW_COACH = "gbl_compact_hud_show_coach"
-        const val DEFAULT_COMPACT_HUD_SHOW_COACH = true
+        const val DEFAULT_COMPACT_HUD_SHOW_COACH = false
         const val PREFS_KEY_COMPACT_HUD_SHOW_PACING = "gbl_compact_hud_show_pacing"
         const val DEFAULT_COMPACT_HUD_SHOW_PACING = true
         const val PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE = "gbl_compact_hud_toolbar_mode"
