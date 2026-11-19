@@ -8315,7 +8315,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.72');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.73');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
 
@@ -8910,7 +8910,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.72',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.73',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -9078,8 +9078,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.72',
-        releaseTitle: 'SilphScope PvP v7.72',
+        versionName: 'v7.73',
+        releaseTitle: 'SilphScope PvP v7.73',
         publishedAt: '',
         assetSizeMb: '',
       };

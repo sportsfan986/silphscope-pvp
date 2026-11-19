@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.72"
-        const val APP_VERSION_CODE = 1772
+        const val APP_VERSION = "7.73"
+        const val APP_VERSION_CODE = 1773
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -237,6 +237,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_GBL_LAST_ELO_CONFIRMED_MS = "gbl_last_elo_confirmed_ms_v745"
         const val PREFS_KEY_AUTO_TEAM_SCAN_ENABLED = "gbl_auto_team_scan_enabled_v760"
         const val PREFS_KEY_V761_MULTI_META_MIGRATED = "gbl_v761_multi_meta_migrated_v1"
+        const val PREFS_KEY_V773_MEGA_STD_MIGRATED = "gbl_v773_mega_std_merged_v1"
         const val PREFS_KEY_GBL_ROTATION_SCHEDULE_JSON = "gbl_rotation_schedule_v761"
         const val PREFS_KEY_GBL_ROTATION_FETCHED_MS = "gbl_rotation_fetched_ms_v761"
         const val PREFS_KEY_PENDING_PARTY_RENAME_JSON = "gbl_pending_party_rename_v761"
@@ -651,6 +652,422 @@ class OverlayService : LifecycleService() {
                 }
             }
             editor.putBoolean(PREFS_KEY_V761_MULTI_META_MIGRATED, true).apply()
+            return anyMutated
+        }
+
+        private val NON_MEGA_REGIONAL_ALT_FORM_TOKENS: List<String> = listOf(
+            "alolan", "galarian", "hisuian", "paldean", "origin", "therian", "crowned",
+            "apex", "armored", "dusk mane", "dawn wings", "complete", "10%",
+            "unbound", "confined", "resolute", "bloodmoon", "hero", "zen", "ash",
+            "black", "white"
+        )
+
+        fun stripMegaOrPrimalToBaseNameStatic(name: String): String {
+            var s = name.trim()
+            if (s.isEmpty()) return ""
+            s = s.replace(Regex("\\s*\\((?:Mega(?:\\s+[XY])?|Primal)\\)\\s*$", RegexOption.IGNORE_CASE), "").trim()
+            s = s.replace(Regex("^Mega\\s+(.+?)\\s+([XY])$", RegexOption.IGNORE_CASE), "$1").trim()
+            s = s.replace(Regex("^(?:Mega|Primal)\\s+", RegexOption.IGNORE_CASE), "").trim()
+            return s
+        }
+
+        fun canonicalizeMegaFormDisplayNameStatic(rawName: String): String {
+            val s = rawName.trim()
+            if (s.isEmpty()) return ""
+            val pMatch = Regex("^(.+?)\\s*\\((Primal|Mega(?:\\s+[XY])?)\\)$", RegexOption.IGNORE_CASE).matchEntire(s)
+            if (pMatch != null) {
+                val base = pMatch.groupValues[1].trim()
+                val formTok = pMatch.groupValues[2].trim().lowercase()
+                val canonForm = when {
+                    formTok == "primal" -> "Primal"
+                    formTok.endsWith("x") -> "Mega X"
+                    formTok.endsWith("y") -> "Mega Y"
+                    else -> "Mega"
+                }
+                return "$base ($canonForm)"
+            }
+            val megaPrefixXY = Regex("^Mega\\s+(.+?)\\s+([XY])$", RegexOption.IGNORE_CASE).matchEntire(s)
+            if (megaPrefixXY != null) {
+                return "${megaPrefixXY.groupValues[1].trim()} (Mega ${megaPrefixXY.groupValues[2].uppercase()})"
+            }
+            val megaPrefix = Regex("^Mega\\s+(.+)$", RegexOption.IGNORE_CASE).matchEntire(s)
+            if (megaPrefix != null) {
+                return "${megaPrefix.groupValues[1].trim()} (Mega)"
+            }
+            val primalPrefix = Regex("^Primal\\s+(.+)$", RegexOption.IGNORE_CASE).matchEntire(s)
+            if (primalPrefix != null) {
+                return "${primalPrefix.groupValues[1].trim()} (Primal)"
+            }
+            return s
+        }
+
+        fun formatShortMegaVariantChipLabelStatic(megaFormName: String): String {
+            val u = megaFormName.trim().uppercase()
+            return when {
+                u.contains("PRIMAL") -> "Primal"
+                Regex("\\bMEGA\\s*X\\b|_MEGA_X").containsMatchIn(u) -> "Mega X"
+                Regex("\\bMEGA\\s*Y\\b|_MEGA_Y").containsMatchIn(u) -> "Mega Y"
+                else -> "Mega"
+            }
+        }
+
+        fun formatCardMegaBadgeTextStatic(megaFormName: String?, isActiveNow: Boolean): String {
+            if (megaFormName.isNullOrBlank()) return ""
+            if (isActiveNow) return "Mega Active"
+            val shortLbl = formatShortMegaVariantChipLabelStatic(megaFormName)
+            return when (shortLbl) {
+                "Primal" -> "Mega Primal"
+                "Mega X" -> "Mega X"
+                "Mega Y" -> "Mega Y"
+                else -> "Mega Evo"
+            }
+        }
+
+        fun getAvailableMegaFormsForSpeciesStatic(speciesName: String): List<String> {
+            val trimmed = speciesName.trim()
+            if (trimmed.isEmpty()) return emptyList()
+            if (trimmed.contains("shadow", ignoreCase = true)) return emptyList()
+            val strippedLower = stripMegaOrPrimalToBaseNameStatic(trimmed).lowercase()
+            if (NON_MEGA_REGIONAL_ALT_FORM_TOKENS.any { tok -> strippedLower.contains(tok) }) {
+                return emptyList()
+            }
+            val baseKey = FormResolver.extractBaseSpecies(strippedLower)
+            if (baseKey.isBlank()) return emptyList()
+
+            val seenIds = LinkedHashMap<String, String>()
+            for (meta in getAllPokemonMeta()) {
+                val isMegaOrPrimal = isMegaOrPrimalSpeciesStatic(meta.name) || isMegaOrPrimalSpeciesStatic(meta.speciesId)
+                if (!isMegaOrPrimal) continue
+                if (!meta.baseSpecies.equals(baseKey, ignoreCase = true)) continue
+                val cleanId = meta.speciesId.lowercase().removeSuffix("_shadow")
+                if (!seenIds.containsKey(cleanId)) {
+                    seenIds[cleanId] = canonicalizeMegaFormDisplayNameStatic(meta.name)
+                }
+            }
+            return seenIds.values.distinct().sorted()
+        }
+
+        fun computeMegaFormCpFromBaseSlotStatic(
+            baseName: String,
+            baseCp: Int,
+            baseIvs: String?,
+            isBestBuddy: Boolean,
+            megaFormName: String,
+            league: String
+        ): Int {
+            val megaMeta = resolveRecommendedMovesForSpecies(megaFormName, league, null, baseIvs, isBestBuddy)
+                ?: return baseCp
+            val baseMeta = resolveRecommendedMovesForSpecies(baseName, league, null, baseIvs, isBestBuddy)
+            val leagueCap = getLeagueCpCapStatic(league)
+            if (baseMeta != null && baseMeta.isRawBaseStats && megaMeta.isRawBaseStats && baseCp >= 100) {
+                val ivs = parseIvTriplet(baseIvs, league, baseMeta)
+                val uBaseAtk = (baseMeta.atk + ivs.first).coerceAtLeast(20.0)
+                val uBaseDef = (baseMeta.def + ivs.second).coerceAtLeast(20.0)
+                val uBaseHp = (baseMeta.hp.toDouble() + ivs.third).coerceAtLeast(20.0)
+                val maxLvl = if (isBestBuddy) 51.0 else 50.0
+                var bestCpm = 0.8403
+                var bestDiff = Int.MAX_VALUE
+                for ((lvl, cpm) in CPM_TABLE) {
+                    if (lvl > maxLvl + 1e-6) continue
+                    val lvlCp = kotlin.math.floor(uBaseAtk * kotlin.math.sqrt(uBaseDef * uBaseHp) * cpm * cpm / 10.0).toInt().coerceAtLeast(10)
+                    val diff = kotlin.math.abs(lvlCp - baseCp)
+                    if (diff < bestDiff) {
+                        bestDiff = diff
+                        bestCpm = cpm
+                        if (diff == 0) break
+                    }
+                }
+                if (bestDiff > 2 && !isBestBuddy) {
+                    for ((lvl, cpm) in CPM_TABLE) {
+                        if (lvl <= 50.0) continue
+                        val lvlCp = kotlin.math.floor(uBaseAtk * kotlin.math.sqrt(uBaseDef * uBaseHp) * cpm * cpm / 10.0).toInt().coerceAtLeast(10)
+                        val diff = kotlin.math.abs(lvlCp - baseCp)
+                        if (diff < bestDiff) {
+                            bestDiff = diff
+                            bestCpm = cpm
+                        }
+                    }
+                }
+                val mAtk = (megaMeta.atk + ivs.first).coerceAtLeast(20.0)
+                val mDef = (megaMeta.def + ivs.second).coerceAtLeast(20.0)
+                val mHp = (megaMeta.hp.toDouble() + ivs.third).coerceAtLeast(20.0)
+                val rawMegaCp = kotlin.math.floor(mAtk * kotlin.math.sqrt(mDef * mHp) * bestCpm * bestCpm / 10.0).toInt().coerceAtLeast(10)
+                if (leagueCap >= 10000 || rawMegaCp <= leagueCap) {
+                    return rawMegaCp
+                }
+            }
+            return computeEffectiveCombatStats(megaMeta, league, null, baseIvs, isBestBuddy).defaultCp
+        }
+
+        fun resolveEffectiveTeamMemberForLeagueStatic(
+            slot: TeamMember,
+            league: String,
+            forceMegaActive: Boolean? = null
+        ): TeamMember {
+            val megaName = slot.megaFormName?.takeIf { it.isNotBlank() } ?: return slot
+            val megaActive = forceMegaActive ?: isMegaAllowedInLeagueStatic(league)
+            if (!megaActive) return slot
+            val canonMega = canonicalizeMegaFormDisplayNameStatic(megaName)
+            val megaCp = computeMegaFormCpFromBaseSlotStatic(
+                baseName = slot.name,
+                baseCp = slot.cp,
+                baseIvs = slot.ivs,
+                isBestBuddy = slot.isBestBuddy == true,
+                megaFormName = canonMega,
+                league = league
+            )
+            return slot.copy(name = canonMega, cp = megaCp)
+        }
+
+        fun resolveEffectivePokemonSlotForLeagueStatic(
+            slot: PokemonSlot,
+            league: String,
+            forceMegaActive: Boolean? = null
+        ): PokemonSlot {
+            val megaName = slot.megaFormName?.takeIf { it.isNotBlank() } ?: return slot
+            val megaActive = forceMegaActive ?: isMegaAllowedInLeagueStatic(league)
+            if (!megaActive) return slot
+            val canonMega = canonicalizeMegaFormDisplayNameStatic(megaName)
+            val megaCp = computeMegaFormCpFromBaseSlotStatic(
+                baseName = slot.name,
+                baseCp = slot.cp,
+                baseIvs = slot.ivs,
+                isBestBuddy = slot.isBestBuddy == true,
+                megaFormName = canonMega,
+                league = league
+            )
+            return slot.copy(name = canonMega, cp = megaCp)
+        }
+
+        fun hasMultipleMegaDesignationsStatic(slots: List<PokemonSlot>): Boolean {
+            return slots.count { isMegaOrPrimalSpeciesStatic(it.name) || !it.megaFormName.isNullOrBlank() } > 1
+        }
+
+        private fun canonicalizeNonMegaSlotNameAndIdStatic(rawName: String, league: String): Pair<String, String> {
+            val isShad = rawName.contains("shadow", ignoreCase = true)
+            val baseOnly = stripMegaOrPrimalToBaseNameStatic(rawName)
+                .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\s*\\(Shadow\\)\\s*$", RegexOption.IGNORE_CASE), "")
+                .trim()
+            val allMeta = getAllPokemonMeta()
+            val exact = allMeta.firstOrNull {
+                !isMegaOrPrimalSpeciesStatic(it.name) &&
+                    (it.name.equals(baseOnly, ignoreCase = true) ||
+                        it.speciesId.equals(baseOnly.replace(" ", "_"), ignoreCase = true))
+            } ?: run {
+                val noParensNorm = baseOnly.lowercase().replace(Regex("[^a-z0-9]+"), "_")
+                allMeta.firstOrNull {
+                    !isMegaOrPrimalSpeciesStatic(it.name) && it.speciesId.equals(noParensNorm, ignoreCase = true)
+                }
+            } ?: resolveRecommendedMovesForSpecies(baseOnly, league)?.let { rec ->
+                if (!isMegaOrPrimalSpeciesStatic(rec.name)) rec else null
+            }
+            val canonBaseName = exact?.name ?: baseOnly
+            val canonSpeciesKey = (exact?.speciesId ?: FormResolver.extractBaseSpecies(baseOnly)).lowercase().removeSuffix("_shadow")
+            val finalDisp = if (isShad && !canonBaseName.startsWith("Shadow ", ignoreCase = true)) {
+                "Shadow $canonBaseName"
+            } else {
+                canonBaseName
+            }
+            return "$canonSpeciesKey|$isShad" to finalDisp
+        }
+
+        /**
+         * One-time idempotent migration on first launch of v7.73+:
+         * merges duplicate Standard + Mega/Primal TeamPresets sharing combatMode + CP cap + exact 3-slot
+         * non-Mega species/form/Shadow/movesets (e.g. ML Dia/Lug/Kyo + MML Kyogre (Primal)),
+         * keeping canonical base slots with megaFormName, re-pointing BattleLogEntry.presetId,
+         * and tombstoning merged duplicate IDs for Cloudflare D1 Vault Sync.
+         */
+        fun runV773MegaStandardTeamMergeMigrationStatic(prefs: SharedPreferences, gson: Gson): Boolean {
+            if (prefs.getBoolean(PREFS_KEY_V773_MEGA_STD_MIGRATED, false)) return false
+            val nowMs = System.currentTimeMillis()
+            val presetType = object : TypeToken<List<com.gbl.overlay.TeamPreset>>() {}.type
+            val logType = object : TypeToken<List<BattleLogEntry>>() {}.type
+            val strType = object : TypeToken<List<String>>() {}.type
+            var anyMutated = false
+
+            data class BucketCfg(
+                val presetKey: String,
+                val logKey: String,
+                val delTeamKey: String,
+                val selKey: String,
+                val mode: String
+            )
+            val buckets = listOf(
+                BucketCfg(PREFS_KEY_PERSISTENT_TEAMS, PREFS_KEY_BATTLE_LOGS, PREFS_KEY_DELETED_TEAM_IDS, "gbl_selected_preset_id", "gbl"),
+                BucketCfg(PREFS_KEY_SHOW6_PRESETS_OF_3, PREFS_KEY_SHOW6_BATTLE_LOGS, PREFS_KEY_SHOW6_DELETED_TEAM_IDS, PREFS_KEY_SHOW6_SELECTED_PRESET_ID, "show6")
+            )
+
+            val editor = prefs.edit()
+            for (cfg in buckets) {
+                val rawTeams = prefs.getString(cfg.presetKey, null)
+                if (rawTeams.isNullOrBlank()) continue
+                val presets: List<com.gbl.overlay.TeamPreset> = (try { gson.fromJson<List<com.gbl.overlay.TeamPreset>>(rawTeams, presetType) } catch (_: Exception) { null }).orEmpty()
+                if (presets.size < 2) continue
+
+                val rawLogs = prefs.getString(cfg.logKey, null)
+                val logs: MutableList<BattleLogEntry> = if (!rawLogs.isNullOrBlank()) {
+                    (try { gson.fromJson<List<BattleLogEntry>>(rawLogs, logType) } catch (_: Exception) { null }).orEmpty().toMutableList()
+                } else mutableListOf()
+                val logCountsByPreset = HashMap<String, Int>()
+                for (l in logs) {
+                    if (l.presetId.isNotBlank()) {
+                        logCountsByPreset[l.presetId] = (logCountsByPreset[l.presetId] ?: 0) + 1
+                    }
+                }
+                val selectedId = prefs.getString(cfg.selKey, null).orEmpty()
+
+                val groups = LinkedHashMap<String, MutableList<com.gbl.overlay.TeamPreset>>()
+                val ungrouped = mutableListOf<com.gbl.overlay.TeamPreset>()
+                for (p in presets) {
+                    if (p.pokemon.size < 3) {
+                        ungrouped.add(p)
+                        continue
+                    }
+                    val cpCap = getLeagueCpCapStatic(p.league, prefs)
+                    val slotKeys = p.pokemon.take(3).map { s ->
+                        val (idKey, _) = canonicalizeNonMegaSlotNameAndIdStatic(s.name, p.league)
+                        val f = s.fastMove.trim().lowercase()
+                        val c1 = s.chargedMove1.trim().lowercase()
+                        val c2 = s.chargedMove2.trim().lowercase()
+                        "$idKey|$f|$c1|$c2"
+                    }
+                    val gKey = "${cfg.mode}|$cpCap|${slotKeys.joinToString("||")}"
+                    groups.getOrPut(gKey) { mutableListOf() }.add(p)
+                }
+
+                if (groups.values.none { it.size >= 2 }) continue
+
+                val redirectMap = HashMap<String, String>()
+                val mergedPresetList = mutableListOf<com.gbl.overlay.TeamPreset>()
+                mergedPresetList.addAll(ungrouped)
+
+                for (group in groups.values) {
+                    if (group.size == 1) {
+                        mergedPresetList.add(group[0])
+                        continue
+                    }
+                    val megaSlotFormByIdx = HashMap<Int, String>()
+                    var groupConflict = false
+                    for (p in group) {
+                        for (i in 0..2) {
+                            val sl = p.pokemon[i]
+                            val megaCand = when {
+                                !sl.megaFormName.isNullOrBlank() -> canonicalizeMegaFormDisplayNameStatic(sl.megaFormName)
+                                isMegaOrPrimalSpeciesStatic(sl.name) -> canonicalizeMegaFormDisplayNameStatic(sl.name)
+                                else -> null
+                            }
+                            if (megaCand != null) {
+                                val prev = megaSlotFormByIdx[i]
+                                if (prev != null && !prev.equals(megaCand, ignoreCase = true)) {
+                                    groupConflict = true
+                                } else {
+                                    megaSlotFormByIdx[i] = megaCand
+                                }
+                            }
+                        }
+                    }
+                    if (groupConflict || megaSlotFormByIdx.size != 1) {
+                        mergedPresetList.addAll(group)
+                        continue
+                    }
+
+                    anyMutated = true
+                    val survivor = group.maxWithOrNull { a, b ->
+                        val aStd = if (a.pokemon.none { isMegaOrPrimalSpeciesStatic(it.name) }) 1 else 0
+                        val bStd = if (b.pokemon.none { isMegaOrPrimalSpeciesStatic(it.name) }) 1 else 0
+                        val aSel = if (a.id == selectedId || a.isSelected) 1 else 0
+                        val bSel = if (b.id == selectedId || b.isSelected) 1 else 0
+                        if (aSel != bSel) return@maxWithOrNull aSel.compareTo(bSel)
+                        val aLogs = logCountsByPreset[a.id] ?: 0
+                        val bLogs = logCountsByPreset[b.id] ?: 0
+                        if (aLogs != bLogs) return@maxWithOrNull aLogs.compareTo(bLogs)
+                        if (aStd != bStd) return@maxWithOrNull aStd.compareTo(bStd)
+                        a.updatedAt.compareTo(b.updatedAt)
+                    } ?: group[0]
+
+                    val mergedAssigned = group.flatMap { getEffectiveAssignedLeaguesStatic(it) }.distinct()
+                    val mergedSlots = (0..2).map { i ->
+                        val cands = group.map { it.pokemon[i] }
+                        val baseCand = cands.firstOrNull { !isMegaOrPrimalSpeciesStatic(it.name) && !it.ivs.isNullOrBlank() }
+                            ?: cands.firstOrNull { !isMegaOrPrimalSpeciesStatic(it.name) }
+                            ?: cands[0]
+                        val chosenMega = megaSlotFormByIdx[i]
+                        val (_, canonBaseDisp) = canonicalizeNonMegaSlotNameAndIdStatic(baseCand.name, survivor.league)
+                        val bestIvs = cands.firstOrNull { !it.ivs.isNullOrBlank() }?.ivs
+                        val bestBuiltId = cands.firstOrNull { !it.builtPokemonId.isNullOrBlank() }?.builtPokemonId
+                        val bestPlus = cands.mapNotNull { it.plusMoveLevel }.firstOrNull() ?: 4
+                        val bestBb = if (cands.any { it.isBestBuddy == true }) true else baseCand.isBestBuddy
+                        val baseCp = if (!isMegaOrPrimalSpeciesStatic(baseCand.name) && baseCand.cp >= 100) {
+                            baseCand.cp
+                        } else {
+                            resolveRecommendedMovesForSpecies(canonBaseDisp, survivor.league, null, bestIvs, bestBb == true)?.defaultCp ?: baseCand.cp
+                        }
+                        PokemonSlot(
+                            name = canonBaseDisp,
+                            cp = baseCp,
+                            fastMove = baseCand.fastMove,
+                            chargedMove1 = baseCand.chargedMove1,
+                            chargedMove2 = baseCand.chargedMove2,
+                            ivs = bestIvs,
+                            plusMoveLevel = bestPlus,
+                            isBestBuddy = bestBb,
+                            builtPokemonId = bestBuiltId,
+                            megaFormName = chosenMega
+                        )
+                    }
+
+                    val strippedStems = group.map { p -> stripLeagueAffixFromTeamNameStatic(p.name) }.filter { it.length >= 2 }
+                    val cleanName = if (strippedStems.distinctBy { it.lowercase() }.size == 1) {
+                        strippedStems[0]
+                    } else {
+                        stripLeagueAffixFromTeamNameStatic(survivor.name).ifBlank { survivor.name }
+                    }
+
+                    val updatedSurvivor = survivor.copy(
+                        name = cleanName,
+                        assignedLeagues = mergedAssigned,
+                        pokemon = mergedSlots,
+                        metaPoolMetrics = null,
+                        isSelected = group.any { it.isSelected || it.id == selectedId },
+                        updatedAt = maxOf(nowMs, group.maxOf { it.updatedAt })
+                    )
+                    mergedPresetList.add(updatedSurvivor)
+                    for (dup in group) {
+                        if (dup.id != survivor.id) {
+                            redirectMap[dup.id] = survivor.id
+                        }
+                    }
+                }
+
+                if (redirectMap.isNotEmpty()) {
+                    editor.putString(cfg.presetKey, gson.toJson(mergedPresetList))
+                    if (redirectMap.containsKey(selectedId)) {
+                        editor.putString(cfg.selKey, redirectMap[selectedId])
+                    }
+                    val rawDel = prefs.getString(cfg.delTeamKey, null)
+                    val delList = (if (!rawDel.isNullOrBlank()) {
+                        try { gson.fromJson<List<String>>(rawDel, strType) } catch (_: Exception) { null }
+                    } else null).orEmpty().toMutableSet()
+                    delList.addAll(redirectMap.keys)
+                    editor.putString(cfg.delTeamKey, gson.toJson(delList.toList()))
+
+                    var logsMutated = false
+                    for (i in logs.indices) {
+                        val entry = logs[i]
+                        val newPid = redirectMap[entry.presetId]
+                        if (newPid != null) {
+                            logs[i] = entry.copy(presetId = newPid, updatedAt = maxOf(entry.updatedAt, nowMs))
+                            logsMutated = true
+                        }
+                    }
+                    if (logsMutated) {
+                        editor.putString(cfg.logKey, gson.toJson(logs))
+                    }
+                }
+            }
+            editor.putBoolean(PREFS_KEY_V773_MEGA_STD_MIGRATED, true).apply()
             return anyMutated
         }
 
@@ -1997,7 +2414,8 @@ class OverlayService : LifecycleService() {
             val ivs: String? = null,
             val plusMoveLevel: Int? = 4,
             val isBestBuddy: Boolean? = null,
-            val builtPokemonId: String? = null
+            val builtPokemonId: String? = null,
+            val megaFormName: String? = null
         )
 
         data class SyncTeamPresetRecord(
@@ -3449,8 +3867,17 @@ class OverlayService : LifecycleService() {
         val leadPokemonName: String,
         val orderedDisplayNames: List<String>,
         val cardPartyName: String,
-        val lastSeenOnPartyScreenMs: Long
+        val lastSeenOnPartyScreenMs: Long,
+        val detectedMegaActive: Boolean? = null
     )
+    internal var rawCurrentPreset: TeamPreset? = null
+    @Volatile internal var activeBattleMegaOverride: Boolean? = null
+    @Volatile internal var partyScanLockedMegaOverride: Boolean? = null
+    @Volatile internal var manualHudMegaOverride: Boolean? = null
+    @Volatile internal var lastAutoDetectedMegaSource: String = ""
+    @Volatile internal var oppMegaDetectedInBattle: Boolean = false
+    @Volatile internal var pendingLiveMegaStateVote: Boolean? = null
+    @Volatile internal var pendingLiveMegaVoteCount: Int = 0
     @Volatile internal var autoTeamScanEnabled: Boolean = true
     @Volatile internal var forcePartyScanUntilMs: Long = 0L
     @Volatile internal var lastFrameWasChoosePartyScreen: Boolean = false
@@ -6137,7 +6564,8 @@ class OverlayService : LifecycleService() {
         val ivs: String? = null,
         val plusMoveLevel: Int? = 4,
         val isBestBuddy: Boolean? = null,
-        val builtPokemonId: String? = null
+        val builtPokemonId: String? = null,
+        val megaFormName: String? = null
     )
     data class TeamPreset(
         val id: String,
@@ -6169,6 +6597,7 @@ class OverlayService : LifecycleService() {
         runV602ScannerDefaultsMigrationStatic(prefs)
         runV702OverlayTransparencyMigrationStatic(prefs)
         runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
+        runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
         oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
@@ -6923,16 +7352,11 @@ class OverlayService : LifecycleService() {
             )
             val json = gson.toJson(defaults)
             prefs.edit().putString(PREFS_KEY_PERSISTENT_TEAMS, json).apply()
-            currentPreset = defaults[0]
-            activeUserPokemonName = defaults[0].pokemon[0].name
+            applyResolvedCurrentPreset(defaults[0], defaults[0].league, megaOverride = null, persistLeagueChange = false)
         } else {
             val selectedId = prefs.getString("gbl_selected_preset_id", existing[0].id)
-            currentPreset = existing.find { it.id == selectedId } ?: existing[0]
-            if (activeUserPokemonName.isNullOrBlank() ||
-                currentPreset?.pokemon?.none { it.name.equals(activeUserPokemonName, ignoreCase = true) } == true
-            ) {
-                activeUserPokemonName = currentPreset?.pokemon?.getOrNull(0)?.name
-            }
+            val chosen = existing.find { it.id == selectedId } ?: existing[0]
+            applyResolvedCurrentPreset(chosen, chosen.league, megaOverride = null, persistLeagueChange = false)
         }
     }
 
@@ -7525,8 +7949,12 @@ class OverlayService : LifecycleService() {
                             it.id.equals(requestedTeamName.trim(), ignoreCase = true)
                     }
                     if (matched != null && matched.pokemon.isNotEmpty()) {
-                        currentPreset = matched
+                        activeBattleMegaOverride = null
+                        manualHudMegaOverride = null
+                        pendingLiveMegaStateVote = null
+                        pendingLiveMegaVoteCount = 0
                         activeUserPokemonName = matched.pokemon.first().name
+                        applyResolvedCurrentPreset(matched, matched.league, megaOverride = null, persistLeagueChange = false)
                         prefs.edit().putString("gbl_selected_preset_id", matched.id).apply()
                     }
                 }
@@ -7535,8 +7963,12 @@ class OverlayService : LifecycleService() {
                     try {
                         val incoming = gson.fromJson(presetJson, TeamPreset::class.java)
                         if (incoming != null && incoming.pokemon.isNotEmpty()) {
-                            currentPreset = incoming
+                            activeBattleMegaOverride = null
+                            manualHudMegaOverride = null
+                            pendingLiveMegaStateVote = null
+                            pendingLiveMegaVoteCount = 0
                             activeUserPokemonName = incoming.pokemon.first().name
+                            applyResolvedCurrentPreset(incoming, incoming.league, megaOverride = null, persistLeagueChange = false)
                         }
                     } catch (_: Exception) {}
                 }
@@ -7565,8 +7997,12 @@ class OverlayService : LifecycleService() {
                             lockedPartyLeadOverrideName = null
                             activePartyPreview = null
                             pendingPartySettleObs = null
-                            currentPreset = incoming
+                            activeBattleMegaOverride = null
+                            manualHudMegaOverride = null
+                            pendingLiveMegaStateVote = null
+                            pendingLiveMegaVoteCount = 0
                             activeUserPokemonName = incoming.pokemon.first().name
+                            applyResolvedCurrentPreset(incoming, incoming.league, megaOverride = null, persistLeagueChange = false)
                             loadInitialDataIntoOverlay()
                         }
                     } catch (_: Exception) {}
@@ -8846,54 +9282,197 @@ class OverlayService : LifecycleService() {
         return explicitLeague to finalCap
     }
 
+    internal fun isPlayerMegaCurrentlyActive(): Boolean {
+        val raw = rawCurrentPreset ?: return false
+        if (raw.pokemon.none { !it.megaFormName.isNullOrBlank() }) return false
+        val override = activeBattleMegaOverride
+        if (override != null) return override
+        val activeLg = currentPreset?.league ?: raw.league
+        return isMegaAllowedInLeagueStatic(activeLg, if (isPrefsInitialized) prefs else null)
+    }
+
+    internal fun resolveCounterpartLeagueForMegaState(preset: TeamPreset, megaActive: Boolean): String {
+        val assigned = getEffectiveAssignedLeaguesStatic(preset)
+        val curLeague = normalizeLeagueKeyStatic(preset.league.ifBlank { "MASTER LEAGUE" })
+        val prefsOrNull = if (isPrefsInitialized) prefs else null
+        val curIsMega = isMegaAllowedInLeagueStatic(curLeague, prefsOrNull)
+        if (curIsMega == megaActive) return preset.league
+        val targetCap = getLeagueCpCapStatic(curLeague, prefsOrNull)
+        val sameCapAssigned = assigned.firstOrNull { lg ->
+            getLeagueCpCapStatic(lg, prefsOrNull) == targetCap &&
+                isMegaAllowedInLeagueStatic(lg, prefsOrNull) == megaActive
+        }
+        if (sameCapAssigned != null) return sameCapAssigned
+        return preset.league
+    }
+
+    internal fun applyResolvedCurrentPreset(
+        rawPreset: TeamPreset,
+        targetLeague: String = rawPreset.league,
+        megaOverride: Boolean? = activeBattleMegaOverride,
+        persistLeagueChange: Boolean = false
+    ) {
+        val normTarget = normalizeLeagueKeyStatic(targetLeague.ifBlank { rawPreset.league })
+        val prefsOrNull = if (isPrefsInitialized) prefs else null
+        val effectiveMega = if (rawPreset.pokemon.any { !it.megaFormName.isNullOrBlank() }) {
+            megaOverride ?: isMegaAllowedInLeagueStatic(normTarget, prefsOrNull)
+        } else {
+            false
+        }
+        val prevSlots = currentPreset?.pokemon.orEmpty()
+        val prevActiveName = activeUserPokemonName
+        var prevActiveIdx = prevSlots.indexOfFirst { it.name.equals(prevActiveName, ignoreCase = true) }
+        if (prevActiveIdx < 0 && !prevActiveName.isNullOrBlank()) {
+            val prevBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(prevActiveName))
+            prevActiveIdx = prevSlots.indexOfFirst {
+                FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(prevBase, ignoreCase = true)
+            }
+        }
+        val effSlots = rawPreset.pokemon.map { slot ->
+            resolveEffectiveTeamMemberForLeagueStatic(slot, normTarget, effectiveMega)
+        }
+        val canonicalRaw = rawPreset.copy(league = normTarget)
+        rawCurrentPreset = canonicalRaw
+        currentPreset = canonicalRaw.copy(pokemon = effSlots)
+        if (prevActiveIdx in effSlots.indices) {
+            activeUserPokemonName = effSlots[prevActiveIdx].name
+        } else if (activeUserPokemonName.isNullOrBlank() || effSlots.none { it.name.equals(activeUserPokemonName, ignoreCase = true) }) {
+            activeUserPokemonName = effSlots.firstOrNull()?.name
+        }
+        val lockOv = lockedPartyLeadOverrideName
+        if (lockedPartyLeadOverridePresetId == rawPreset.id && !lockOv.isNullOrBlank()) {
+            val lockBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(lockOv))
+            val mappedLock = effSlots.firstOrNull {
+                FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(lockBase, ignoreCase = true)
+            }
+            if (mappedLock != null) {
+                lockedPartyLeadOverrideName = mappedLock.name
+            }
+        }
+        if (persistLeagueChange) {
+            updateSavedPresetActiveLeague(rawPreset.id, normTarget)
+        }
+        val resolvedSnapshot = currentPreset
+        lifecycleScope.launch(Dispatchers.Default) {
+            try {
+                OverlayService.precomputeActiveTeamTop200MatrixStatic(resolvedSnapshot)
+                Handler(Looper.getMainLooper()).post {
+                    recalculateAndPushBattleData()
+                }
+            } catch (_: Exception) {}
+        }
+        recalculateAndPushBattleData()
+    }
+
+    internal fun applyAutoDetectedMegaState(megaActive: Boolean, source: String, observedCp: Int? = null) {
+        if (manualHudMegaOverride != null) return
+        val raw = rawCurrentPreset ?: return
+        val megaSlot = raw.pokemon.firstOrNull { !it.megaFormName.isNullOrBlank() } ?: return
+        if (isPlayerMegaCurrentlyActive() == megaActive) return
+        activeBattleMegaOverride = megaActive
+        lastAutoDetectedMegaSource = source
+        val nextLeague = resolveCounterpartLeagueForMegaState(raw, megaActive)
+        applyResolvedCurrentPreset(raw, nextLeague, megaOverride = megaActive, persistLeagueChange = true)
+        val cpTag = if (observedCp != null && observedCp >= 100) " (CP $observedCp)" else ""
+        val metaTag = formatShortMetaBadgeStatic(nextLeague)
+        if (megaActive) {
+            showBattleToast("🧬 ${megaSlot.megaFormName} Detected$cpTag → $metaTag")
+        } else {
+            showBattleToast("🧬 ${megaSlot.name} Base Form$cpTag → $metaTag")
+        }
+    }
+
     internal fun updateSavedPresetActiveLeague(presetId: String, nextLeague: String): TeamPreset? {
         if (!isPrefsInitialized) return null
         val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
         val key = if (isShow6) PREFS_KEY_SHOW6_PRESETS_OF_3 else PREFS_KEY_PERSISTENT_TEAMS
         val raw = prefs.getString(key, null) ?: return null
         return try {
-            val type = object : TypeToken<List<TeamPreset>>() {}.type
-            val list: MutableList<TeamPreset> = (gson.fromJson<List<TeamPreset>>(raw, type) ?: return null).toMutableList()
+            val type = object : TypeToken<List<com.gbl.overlay.TeamPreset>>() {}.type
+            val list: MutableList<com.gbl.overlay.TeamPreset> =
+                (gson.fromJson<List<com.gbl.overlay.TeamPreset>>(raw, type) ?: return null).toMutableList()
             val idx = list.indexOfFirst { it.id == presetId }
             if (idx < 0) return null
             val existing = list[idx]
-            val mergedAssigned = (getEffectiveAssignedLeaguesStatic(existing) + normalizeLeagueKeyStatic(nextLeague)).distinct()
-            val updated = existing.copy(
-                league = nextLeague,
-                assignedLeagues = mergedAssigned,
-                updatedAt = System.currentTimeMillis()
-            )
+            val normNext = normalizeLeagueKeyStatic(nextLeague)
+            val mergedAssigned = (getEffectiveAssignedLeaguesStatic(existing) + normNext).distinct()
+            val snap = existing.metaPoolMetrics?.entries?.firstOrNull {
+                it.key.equals(normNext, ignoreCase = true)
+            }?.value
+            val updated = if (snap != null) {
+                existing.copy(
+                    league = normNext,
+                    assignedLeagues = mergedAssigned,
+                    updatedAt = System.currentTimeMillis(),
+                    leadAggBr = snap.leadAggBr,
+                    machineAggBr = snap.machineAggBr,
+                    safeSwapBr = snap.safeSwapBr,
+                    closerSwapBr = snap.closerSwapBr,
+                    closerBr = snap.closerBr,
+                    topMetaTargetsTotal = snap.topMetaTargetsTotal,
+                    topMetaWinsCount = snap.topMetaWinsCount,
+                    keyMetaTargetsBeaten = snap.keyMetaTargetsBeaten,
+                    keyThreats = snap.keyThreats,
+                    coreBreakers = snap.coreBreakers
+                )
+            } else {
+                existing.copy(
+                    league = normNext,
+                    assignedLeagues = mergedAssigned,
+                    updatedAt = System.currentTimeMillis()
+                )
+            }
             list[idx] = updated
             prefs.edit().putString(key, gson.toJson(list)).apply()
-            updated
+            TeamPreset(
+                id = updated.id,
+                name = updated.name,
+                league = updated.league,
+                pokemon = updated.pokemon.map { sl ->
+                    TeamMember(
+                        sl.name, sl.cp, sl.fastMove, sl.chargedMove1, sl.chargedMove2,
+                        sl.ivs, sl.plusMoveLevel, sl.isBestBuddy, sl.builtPokemonId, sl.megaFormName
+                    )
+                },
+                isSelected = updated.isSelected,
+                updatedAt = updated.updatedAt,
+                archetype = updated.archetype,
+                isArchetypeManual = updated.isArchetypeManual,
+                leadAggBr = updated.leadAggBr,
+                machineAggBr = updated.machineAggBr,
+                safeSwapBr = updated.safeSwapBr,
+                closerSwapBr = updated.closerSwapBr,
+                closerBr = updated.closerBr,
+                sharedWeaknesses = updated.sharedWeaknesses,
+                combatMode = updated.combatMode,
+                assignedLeagues = updated.assignedLeagues,
+                metaPoolMetrics = updated.metaPoolMetrics
+            )
         } catch (_: Exception) {
             null
         }
     }
 
     internal fun cycleActivePresetMetaFromOverlay() {
-        val cur = currentPreset ?: return
-        val assigned = getEffectiveAssignedLeaguesStatic(cur)
+        val raw = rawCurrentPreset ?: currentPreset ?: return
+        val assigned = getEffectiveAssignedLeaguesStatic(raw)
         if (assigned.size <= 1) return
-        val curNorm = normalizeLeagueKeyStatic(cur.league)
+        val curNorm = normalizeLeagueKeyStatic(currentPreset?.league ?: raw.league)
         val curIdx = assigned.indexOfFirst { it.equals(curNorm, ignoreCase = true) }.coerceAtLeast(0)
         val nextIdx = (curIdx + 1) % assigned.size
         val nextLeague = assigned[nextIdx]
-        val updated = updateSavedPresetActiveLeague(cur.id, nextLeague) ?: cur.copy(
+        activeBattleMegaOverride = null
+        manualHudMegaOverride = null
+        pendingLiveMegaStateVote = null
+        pendingLiveMegaVoteCount = 0
+        val updatedRaw = updateSavedPresetActiveLeague(raw.id, nextLeague) ?: raw.copy(
             league = nextLeague,
             assignedLeagues = assigned,
             updatedAt = System.currentTimeMillis()
         )
-        currentPreset = updated
         activePartyPreview = null
         pendingPartySettleObs = null
-        lifecycleScope.launch(Dispatchers.Default) {
-            try {
-                OverlayService.precomputeActiveTeamTop200MatrixStatic(updated)
-                recalculateAndPushBattleData()
-            } catch (_: Exception) {}
-        }
-        recalculateAndPushBattleData()
+        applyResolvedCurrentPreset(updatedRaw, nextLeague, megaOverride = null, persistLeagueChange = false)
         showBattleToast("🏆 Active Meta: ${formatLeagueDisplayLabelStatic(nextLeague)} (${nextIdx + 1}/${assigned.size})")
     }
 
@@ -8906,13 +9485,28 @@ class OverlayService : LifecycleService() {
         ) {
             chosen = updateSavedPresetActiveLeague(chosen.id, preview.league) ?: chosen.copy(league = preview.league)
         }
-        val leadName = preview.leadPokemonName.takeIf { l ->
-            chosen.pokemon.any { it.name.equals(l, ignoreCase = true) }
-        } ?: chosen.pokemon.firstOrNull()?.name
-        currentPreset = chosen
-        activeUserPokemonName = leadName
+        val targetLeague = preview.league.ifBlank { chosen.league }
+        partyScanLockedMegaOverride = preview.detectedMegaActive
+        activeBattleMegaOverride = preview.detectedMegaActive
+        manualHudMegaOverride = null
+        pendingLiveMegaStateVote = null
+        pendingLiveMegaVoteCount = 0
+        val previewLeadBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(preview.leadPokemonName))
+        val matchedRawLead = chosen.pokemon.firstOrNull {
+            FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(previewLeadBase, ignoreCase = true)
+        }
+        val leadSlotEff = matchedRawLead?.let {
+            resolveEffectiveTeamMemberForLeagueStatic(it, targetLeague, preview.detectedMegaActive)
+        }
+        val effLeadName = leadSlotEff?.name ?: resolveEffectiveTeamMemberForLeagueStatic(
+            chosen.pokemon.first(),
+            targetLeague,
+            preview.detectedMegaActive
+        ).name
         lockedPartyLeadOverridePresetId = chosen.id
-        lockedPartyLeadOverrideName = leadName
+        lockedPartyLeadOverrideName = effLeadName
+        activeUserPokemonName = effLeadName
+        applyResolvedCurrentPreset(chosen, targetLeague, preview.detectedMegaActive, persistLeagueChange = false)
         if (isPrefsInitialized) {
             val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
             val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
@@ -8926,20 +9520,14 @@ class OverlayService : LifecycleService() {
         alreadyActivePartyUntilMs = 0L
         unmatchedPartyUntilMs = 0L
         dismissedPartySignature = ""
-        val metaSuffix = if (getEffectiveAssignedLeaguesStatic(chosen).size > 1) " [${formatShortMetaBadgeStatic(chosen.league)}]" else ""
-        lastLockedPartyBannerText = "✅ Team Locked: ${chosen.name}$metaSuffix"
+        val metaSuffix = if (getEffectiveAssignedLeaguesStatic(chosen).size > 1) " [${formatShortMetaBadgeStatic(targetLeague)}]" else ""
+        val megaTag = if (preview.detectedMegaActive == true) " 🧬Mega" else ""
+        lastLockedPartyBannerText = "✅ Team Locked: ${chosen.name}$metaSuffix$megaTag"
         lastLockedPartyBannerUntilMs = System.currentTimeMillis() + 6500L
         schedulePartyBannerExpiryPush(6600L)
-        lifecycleScope.launch(Dispatchers.Default) {
-            try {
-                OverlayService.precomputeActiveTeamTop200MatrixStatic(chosen)
-                recalculateAndPushBattleData()
-            } catch (_: Exception) {}
-        }
-        recalculateAndPushBattleData()
         OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
-        val leadHint = if (!leadName.isNullOrBlank()) " (★ $leadName)" else ""
-        showBattleToast("🔍 Team Locked ($source): ${chosen.name}$metaSuffix$leadHint")
+        val leadHint = if (effLeadName.isNotBlank()) " (★ $effLeadName)" else ""
+        showBattleToast("🔍 Team Locked ($source): ${chosen.name}$metaSuffix$megaTag$leadHint")
     }
 
     internal fun commitPendingPartyScanIfEligible(source: String) {
@@ -9114,7 +9702,7 @@ class OverlayService : LifecycleService() {
                     .replace('O', '0').replace('o', '0')
                     .replace('I', '1').replace('i', '1').replace('l', '1').replace('L', '1')
                     .replace('S', '5').replace('s', '5')
-                slotCps[col] = fixed.toIntOrNull()?.takeIf { it in 10..6500 } ?: -1
+                slotCps[col] = fixed.toIntOrNull()?.takeIf { it in 10..8000 } ?: -1
             }
             val nElems = nickElemsByCol[col].sortedBy { it.first }
             if (nElems.isNotEmpty()) {
@@ -9188,6 +9776,7 @@ class OverlayService : LifecycleService() {
         var bestPreset: TeamPreset? = null
         var bestPerm: IntArray? = null
         var bestResolvedLeague = targetLeague
+        var bestDetectedMega: Boolean? = null
         var bestScore = Int.MIN_VALUE
 
         val normCardName = customPartyName.lowercase().replace(Regex("[^a-z0-9]"), "")
@@ -9198,7 +9787,7 @@ class OverlayService : LifecycleService() {
                 (normPresetTitle == normCardName || normPresetTitle.contains(normCardName) || normCardName.contains(normPresetTitle))
 
             val assignedForPreset = getEffectiveAssignedLeaguesStatic(preset)
-            val resolvedPresetLeague = resolveActiveMetaForPresetStatic(preset, explicitLeagueKey, prefsOrNull)
+            var resolvedPresetLeague = resolveActiveMetaForPresetStatic(preset, explicitLeagueKey, prefsOrNull)
 
             for (perm in perms) {
                 var directMatches = 0
@@ -9206,7 +9795,7 @@ class OverlayService : LifecycleService() {
                 var allLegal = true
                 for (col in 0..2) {
                     val pSlot = preset.pokemon[perm[col]]
-                    val pBase = FormResolver.extractBaseSpecies(pSlot.name).lowercase()
+                    val pBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(pSlot.name)).lowercase()
                     val cpLegal = slotCps[col] < 100 || isBaseSpeciesCpLegalForParty(pBase, slotCps[col], allMeta, maxCpCache)
                     if (!cpLegal) {
                         allLegal = false
@@ -9225,6 +9814,8 @@ class OverlayService : LifecycleService() {
                 if (directMatches < 3 && !(directMatches == 2 && rescueIdx >= 0)) continue
 
                 var score = 0
+                var permDetectedMega: Boolean? = null
+                var permResolvedLeague = resolvedPresetLeague
                 if (exactTitleMatch) score += 500 else if (fuzzyTitleMatch) score += 300
                 if (perm[0] == 0 && perm[1] == 1 && perm[2] == 2) score += 160
                 if (perm[0] == 0) score += 80
@@ -9235,13 +9826,58 @@ class OverlayService : LifecycleService() {
 
                 for (col in 0..2) {
                     val pSlot = preset.pokemon[perm[col]]
-                    val pBase = FormResolver.extractBaseSpecies(pSlot.name).lowercase()
-                    if (slotCps[col] >= 100 && kotlin.math.abs(pSlot.cp - slotCps[col]) <= 2) score += 60
+                    val pBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(pSlot.name)).lowercase()
+                    val slotMegaForm = pSlot.megaFormName?.takeIf { it.isNotBlank() }
+                    val expectedMegaCp = if (slotMegaForm != null) {
+                        val megaRefLeague = assignedForPreset.firstOrNull { isMegaAllowedInLeagueStatic(it, prefsOrNull) }
+                            ?: when (effectiveCpCap) {
+                                1500 -> "MEGA GREAT LEAGUE"
+                                2500 -> "MEGA ULTRA LEAGUE"
+                                else -> "MEGA MASTER LEAGUE"
+                            }
+                        computeMegaFormCpFromBaseSlotStatic(pSlot.name, pSlot.cp, pSlot.ivs, pSlot.isBestBuddy == true, slotMegaForm, megaRefLeague)
+                    } else -1
+
+                    if (slotCps[col] >= 100 &&
+                        (kotlin.math.abs(pSlot.cp - slotCps[col]) <= 2 ||
+                            (expectedMegaCp >= 100 && kotlin.math.abs(expectedMegaCp - slotCps[col]) <= 5))
+                    ) {
+                        score += 60
+                    }
+
+                    if (slotMegaForm != null) {
+                        val nonMegaMaxCp = allMeta
+                            .filter {
+                                it.baseSpecies.equals(pBase, ignoreCase = true) &&
+                                    !isMegaOrPrimalSpeciesStatic(it.name) &&
+                                    !isMegaOrPrimalSpeciesStatic(it.speciesId)
+                            }
+                            .maxOfOrNull { FormResolver.computeLevel51MaxCpForVariant(it) }
+                            ?: 9999
+                        val nickMegaHint = slotNicks[col].contains("mega", ignoreCase = true) ||
+                            slotNicks[col].contains("primal", ignoreCase = true)
+                        val isMegaCpSignal = (slotCps[col] > nonMegaMaxCp + 15) ||
+                            (slotCps[col] >= 100 && expectedMegaCp >= 100 && kotlin.math.abs(expectedMegaCp - pSlot.cp) >= 80 && kotlin.math.abs(slotCps[col] - expectedMegaCp) <= 35)
+                        val isBaseCpSignal = !isMegaCpSignal && !nickMegaHint &&
+                            slotCps[col] >= 100 && expectedMegaCp >= 100 && kotlin.math.abs(expectedMegaCp - pSlot.cp) >= 120 &&
+                            kotlin.math.abs(slotCps[col] - pSlot.cp) <= 25 &&
+                            (explicitLeagueKey == null || !isMegaAllowedInLeagueStatic(explicitLeagueKey, prefsOrNull))
+                        if (isMegaCpSignal || nickMegaHint) {
+                            permDetectedMega = true
+                            permResolvedLeague = resolveCounterpartLeagueForMegaState(preset.copy(league = permResolvedLeague), true)
+                            score += 55
+                        } else if (isBaseCpSignal) {
+                            permDetectedMega = false
+                            permResolvedLeague = resolveCounterpartLeagueForMegaState(preset.copy(league = permResolvedLeague), false)
+                            score += 35
+                        }
+                    }
+
                     val pIsShadow = pSlot.name.contains("shadow", ignoreCase = true)
                     val pStrip = pSlot.name.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
                     val (resolvedFormDisp, resolvedIsShad) = resolvePartySlotFormAndShadow(
                         baseSpecies = pBase,
-                        targetLeague = resolvedPresetLeague,
+                        targetLeague = permResolvedLeague,
                         effectiveCpCap = effectiveCpCap,
                         observedCp = slotCps[col],
                         visual = slotVisuals.getOrNull(col),
@@ -9257,17 +9893,18 @@ class OverlayService : LifecycleService() {
                     bestScore = score
                     bestPreset = preset
                     bestPerm = perm
-                    bestResolvedLeague = resolvedPresetLeague
+                    bestResolvedLeague = permResolvedLeague
+                    bestDetectedMega = permDetectedMega
                 }
             }
         }
 
         val resolvedLeadName = if (bestPreset != null && bestPerm != null) {
-            bestPreset.pokemon[bestPerm[0]].name
+            resolveEffectiveTeamMemberForLeagueStatic(bestPreset.pokemon[bestPerm[0]], bestResolvedLeague, bestDetectedMega).name
         } else {
             slotDisplayNames.firstOrNull { it.isNotBlank() }.orEmpty()
         }
-        val signature = "$effectiveCpCap|${bestResolvedLeague.lowercase()}|${customPartyName.lowercase()}|${bestPreset?.id ?: slotDisplayNames.joinToString("/")}|$resolvedLeadName"
+        val signature = "$effectiveCpCap|${bestResolvedLeague.lowercase()}|${bestDetectedMega?.toString() ?: "auto"}|${customPartyName.lowercase()}|${bestPreset?.id ?: slotDisplayNames.joinToString("/")}|$resolvedLeadName"
         val prevObs = pendingPartySettleObs
         val nextCount = if (prevObs != null && prevObs.signature == signature && (obsDoneMs - prevObs.observedAtMs) in 0L..6000L) {
             (prevObs.count + 1).coerceAtMost(10)
@@ -9283,12 +9920,14 @@ class OverlayService : LifecycleService() {
                 recordPendingPogoPartyRenameIfNeededStatic(prefsOrNull, gson, bestPreset, customPartyName, bestResolvedLeague)
             }
             val orderedNames = listOf(
-                bestPreset.pokemon[bestPerm[0]].name,
-                bestPreset.pokemon[bestPerm[1]].name,
-                bestPreset.pokemon[bestPerm[2]].name
+                resolveEffectiveTeamMemberForLeagueStatic(bestPreset.pokemon[bestPerm[0]], bestResolvedLeague, bestDetectedMega).name,
+                resolveEffectiveTeamMemberForLeagueStatic(bestPreset.pokemon[bestPerm[1]], bestResolvedLeague, bestDetectedMega).name,
+                resolveEffectiveTeamMemberForLeagueStatic(bestPreset.pokemon[bestPerm[2]], bestResolvedLeague, bestDetectedMega).name
             )
+            val megaMatchesCurrent = bestDetectedMega == null || bestDetectedMega == isPlayerMegaCurrentlyActive()
             val isAlreadyActiveLead = bestPreset.id == currentPreset?.id &&
                 activeUserPokemonName.equals(resolvedLeadName, ignoreCase = true) &&
+                megaMatchesCurrent &&
                 normalizeLeagueKeyStatic(currentPreset?.league.orEmpty()).equals(normalizeLeagueKeyStatic(bestResolvedLeague), ignoreCase = true)
             if (isAlreadyActiveLead) {
                 activePartyPreview = null
@@ -9312,7 +9951,8 @@ class OverlayService : LifecycleService() {
                     leadPokemonName = resolvedLeadName,
                     orderedDisplayNames = orderedNames,
                     cardPartyName = customPartyName,
-                    lastSeenOnPartyScreenMs = obsDoneMs
+                    lastSeenOnPartyScreenMs = obsDoneMs,
+                    detectedMegaActive = bestDetectedMega
                 )
                 alreadyActivePartyUntilMs = 0L
                 unmatchedPartyUntilMs = 0L
@@ -10880,10 +11520,21 @@ class OverlayService : LifecycleService() {
                     val activeGoPreset = currentPreset ?: preset
                     val activeGoLeague = activeGoPreset?.league ?: activeLeague
                     val goCandidate = findPokemonInText(goMatch.groupValues[1].trim())
-                    val isUserTeamMon = goCandidate != null && activeGoPreset?.pokemon?.any { uMon ->
-                        FormResolver.extractBaseSpecies(uMon.name).equals(goCandidate.baseSpecies, ignoreCase = true)
+                    val isUserTeamMon = goCandidate != null && (rawCurrentPreset?.pokemon ?: activeGoPreset?.pokemon)?.any { uMon ->
+                        FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(uMon.name)).equals(goCandidate.baseSpecies, ignoreCase = true)
                     } == true
                     val isExplicitOppSendOut = raw.contains("sent out", ignoreCase = true)
+                    if (goCandidate != null && isUserTeamMon && !isExplicitOppSendOut &&
+                        (raw.contains("primal", ignoreCase = true) || raw.contains("mega", ignoreCase = true))
+                    ) {
+                        val hasMatchingMegaSlot = rawCurrentPreset?.pokemon?.any { uMon ->
+                            !uMon.megaFormName.isNullOrBlank() &&
+                                FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(uMon.name)).equals(goCandidate.baseSpecies, ignoreCase = true)
+                        } == true
+                        if (hasMatchingMegaSlot) {
+                            applyAutoDetectedMegaState(true, "GO_BANNER")
+                        }
+                    }
                     val isNewMidBattleOpp = detectedOpponents.isEmpty() || isWaitingForOpponent ||
                         (goCandidate != null && !goCandidate.baseSpecies.equals(activeOpponentSpecies, ignoreCase = true))
                     if (goCandidate != null && (!isUserTeamMon || isExplicitOppSendOut) && isNewMidBattleOpp) {
@@ -18159,6 +18810,12 @@ class OverlayService : LifecycleService() {
                     recalculateAndPushBattleData()
                 }
             }
+            if (isMegaOrPrimalSpeciesStatic(matched.name)) {
+                oppMegaDetectedInBattle = true
+                if (!isPlayerMegaCurrentlyActive() && rawCurrentPreset?.pokemon?.any { !it.megaFormName.isNullOrBlank() } == true) {
+                    applyAutoDetectedMegaState(true, "OPP_MEGA")
+                }
+            }
     }
 
     /**
@@ -18167,9 +18824,26 @@ class OverlayService : LifecycleService() {
      */
     internal fun executePlayerSwitch(newSlotName: String, fromOcrFrame: Boolean = false) {
         val preset = currentPreset ?: return
+        val newBaseNorm = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(newSlotName))
         val newSlotIdx = preset.pokemon.indexOfFirst { it.name.equals(newSlotName, ignoreCase = true) }
+            .takeIf { it >= 0 }
+            ?: preset.pokemon.indexOfFirst {
+                FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(newBaseNorm, ignoreCase = true)
+            }
+        val resolvedSlotName = if (newSlotIdx in preset.pokemon.indices) preset.pokemon[newSlotIdx].name else newSlotName
+        val curSlotIdx = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }
+            .takeIf { it >= 0 }
+            ?: preset.pokemon.indexOfFirst {
+                val aBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(activeUserPokemonName.orEmpty()))
+                aBase.isNotEmpty() && FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(aBase, ignoreCase = true)
+            }
+        val isSameActiveSlot = (resolvedSlotName.equals(activeUserPokemonName, ignoreCase = true)) ||
+            (newSlotIdx in 0..2 && newSlotIdx == curSlotIdx)
 
-        if (newSlotName.equals(activeUserPokemonName, ignoreCase = true) && !isPostFaintSwitchPromptActive) {
+        if (isSameActiveSlot && !isPostFaintSwitchPromptActive) {
+            if (!activeUserPokemonName.equals(resolvedSlotName, ignoreCase = true)) {
+                activeUserPokemonName = resolvedSlotName
+            }
             lastConfirmedPlayerFrameTimeMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
             if (!playerSwitchValidityLatched) {
                 playerSwitchValidityLatched = true
@@ -18193,7 +18867,7 @@ class OverlayService : LifecycleService() {
         if (fromOcrFrame &&
             !playerSwitchValidityLatched &&
             provisionalPlayerPrevName.isNotEmpty() &&
-            newSlotName.equals(provisionalPlayerPrevName, ignoreCase = true) &&
+            resolvedSlotName.equals(provisionalPlayerPrevName, ignoreCase = true) &&
             (currentFrameTimestampMs - lastPlayerSwitchFrameMs) <= 2600L
         ) {
             if (provisionalUserPrevSlotIdx in 0..2) {
@@ -18223,7 +18897,7 @@ class OverlayService : LifecycleService() {
         }
 
         if (isWaitingForOpponent) {
-            activeUserPokemonName = newSlotName
+            activeUserPokemonName = resolvedSlotName
             playerFaintedSlots.fill(false)
             playerPokeballCount = 3
             playerSwapEndTimeMs = 0L
@@ -18238,7 +18912,7 @@ class OverlayService : LifecycleService() {
         proactiveRolledBackAnchorMs = 0L
         val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
         val prevPlayerPokemon = activeUserPokemonName ?: preset.pokemon.firstOrNull()?.name ?: ""
-        val prevSlotIdx = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        val prevSlotIdx = curSlotIdx.coerceAtLeast(0)
         // v3.42: Start Swap Clock halfway between last frame with old Pokémon and first frame with new Pokémon.
         // Never classify a manual low-HP swap (e.g. swapping out at 22% HP) as a faint unless the post-faint prompt appeared,
         // the Pokéball count actually dropped, or the swap clock was still locked!
@@ -18286,7 +18960,7 @@ class OverlayService : LifecycleService() {
         provisionalUserPrevDefStage = if (prevSlotIdx in 0..2) playerSlotDefStage[prevSlotIdx] else 0
         playerSwitchValidityLatched = !fromOcrFrame
         isPostFaintSwitchPromptActive = false
-        activeUserPokemonName = newSlotName
+        activeUserPokemonName = resolvedSlotName
         lastUserSwitchInWallMs = System.currentTimeMillis()
         if (newSlotIdx in 0..2) {
             playerSlotEverOnField[newSlotIdx] = true
@@ -18367,7 +19041,7 @@ class OverlayService : LifecycleService() {
                     actor = "user",
                     t = elapsedSec,
                     pokemonFainted = prevPlayerPokemon.ifEmpty { null },
-                    pokemonIn = newSlotName,
+                    pokemonIn = resolvedSlotName,
                     pokemonOut = prevPlayerPokemon.ifEmpty { null },
                     userShieldsRemaining = playerShieldsRemaining,
                     oppShieldsRemaining = oppShieldsRemaining,
@@ -18396,7 +19070,7 @@ class OverlayService : LifecycleService() {
             prevStableRightChargeFillPct = 0
             recalculateAndPushBattleData()
             val faintedLabel = prevPlayerPokemon.ifEmpty { "Player" }
-            showBattleToast("💀 Player Faint Swap: $faintedLabel → $newSlotName")
+            showBattleToast("💀 Player Faint Swap: $faintedLabel → $resolvedSlotName")
         } else {
             // True Manual Swap: start 50s Swap Clock at midpoint between last old-mon frame and first new-mon frame
             playerSwapEndTimeBeforeSwitch = playerSwapEndTimeMs
@@ -18445,7 +19119,7 @@ class OverlayService : LifecycleService() {
                 rightChargeFillDebounceStartMs[newSlotIdx] = 0L
                 val switchLeague = currentPreset?.league ?: "GREAT LEAGUE"
                 val switchSlotMember = currentPreset?.pokemon?.getOrNull(newSlotIdx)
-                val switchMonName = switchSlotMember?.name ?: newSlotName
+                val switchMonName = switchSlotMember?.name ?: resolvedSlotName
                 val switchMeta = getPokemonMeta(switchMonName, switchLeague, switchMonName.contains("Shadow", ignoreCase = true))
                 val switchType = switchMeta.types.firstOrNull() ?: "normal"
                 val swC1Name = switchSlotMember?.chargedMove1?.takeIf { it.isNotBlank() } ?: switchMeta.chargedMove1
@@ -18496,7 +19170,7 @@ class OverlayService : LifecycleService() {
                     type = "SWAP",
                     actor = "user",
                     t = elapsedSec,
-                    pokemonIn = newSlotName,
+                    pokemonIn = resolvedSlotName,
                     pokemonOut = prevPlayerPokemon.ifEmpty { null },
                     userShieldsRemaining = playerShieldsRemaining,
                     oppShieldsRemaining = oppShieldsRemaining,
@@ -18520,11 +19194,11 @@ class OverlayService : LifecycleService() {
                 actor = "user",
                 prevSlotIdx = prevSlotIdx,
                 newSlotIdx = newSlotIdx,
-                newFormattedName = newSlotName,
+                newFormattedName = resolvedSlotName,
                 nowMs = nowMs
             )
             recalculateAndPushBattleData()
-            showBattleToast("🔄 Player Switch: $newSlotName")
+            showBattleToast("🔄 Player Switch: $resolvedSlotName")
         }
     }
 
@@ -19501,6 +20175,126 @@ class OverlayService : LifecycleService() {
         return bestFuzzyScore
     }
 
+    private fun detectPlayerMegaStateFromLiveOcr(
+        playerTopLines: List<Text.Line>,
+        playerMoveLines: List<Text.Line>,
+        matchedSlotIdx: Int
+    ) {
+        if (manualHudMegaOverride != null) return
+        val raw = rawCurrentPreset ?: return
+        val megaSlotIdx = raw.pokemon.indexOfFirst { !it.megaFormName.isNullOrBlank() }.takeIf { it >= 0 } ?: return
+        if (matchedSlotIdx != megaSlotIdx) {
+            pendingLiveMegaStateVote = null
+            pendingLiveMegaVoteCount = 0
+            return
+        }
+        val megaSlot = raw.pokemon[megaSlotIdx]
+        val megaFormName = megaSlot.megaFormName?.takeIf { it.isNotBlank() } ?: return
+        val activeLg = currentPreset?.league ?: raw.league
+        val prefsOrNull = if (isPrefsInitialized) prefs else null
+
+        var observedCp = -1
+        var hasMegaNameplate = false
+        val cpRegex = Regex("\\bCP\\s*(\\d{3,4})\\b", RegexOption.IGNORE_CASE)
+        for (line in playerTopLines) {
+            val txt = line.text.trim()
+            if (txt.isEmpty()) continue
+            val low = txt.lowercase()
+            if (low.contains("mega") || low.contains("primal")) {
+                hasMegaNameplate = true
+            }
+            if (observedCp < 0) {
+                val m = cpRegex.find(txt)
+                val cpVal = m?.groupValues?.getOrNull(1)?.toIntOrNull()
+                if (cpVal != null && cpVal in 100..8000) {
+                    observedCp = cpVal
+                }
+            }
+        }
+
+        val plusMove = resolveMegaPlusMoveStatic(megaFormName, activeLg, prefsOrNull)
+        val hasPlusMove = if (plusMove != null && playerMoveLines.isNotEmpty()) {
+            val normPlus = normalizeOcrToken(plusMove, rnAsM = true)
+            normPlus.length >= 4 && playerMoveLines.any {
+                normalizeOcrToken(it.text, rnAsM = true).contains(normPlus)
+            }
+        } else {
+            false
+        }
+
+        val baseLv51Cp = computeEffectiveCombatStats(
+            getPokemonMeta(megaSlot.name, "MASTER LEAGUE", false),
+            "MASTER LEAGUE",
+            null,
+            "15/15/15",
+            true
+        ).defaultCp
+        val baseMaxCpLv51 = maxOf(megaSlot.cp, baseLv51Cp)
+        val megaLeague = resolveCounterpartLeagueForMegaState(raw, true)
+        val expectedMegaCp = computeMegaFormCpFromBaseSlotStatic(
+            baseName = megaSlot.name,
+            baseCp = megaSlot.cp,
+            baseIvs = megaSlot.ivs,
+            isBestBuddy = megaSlot.isBestBuddy == true,
+            megaFormName = megaFormName,
+            league = megaLeague
+        )
+
+        if (observedCp in 100..8000 && observedCp > baseMaxCpLv51 + 40) {
+            pendingLiveMegaStateVote = null
+            pendingLiveMegaVoteCount = 0
+            applyAutoDetectedMegaState(true, "LIVE_CP_SPIKE", observedCp)
+            return
+        }
+
+        var voteMega: Boolean? = null
+        var voteSource = "LIVE_OCR"
+        when {
+            hasMegaNameplate -> {
+                voteMega = true
+                voteSource = "LIVE_NAMEPLATE"
+            }
+            hasPlusMove -> {
+                voteMega = true
+                voteSource = "LIVE_PLUS_MOVE"
+            }
+            observedCp in 100..8000 && expectedMegaCp > baseMaxCpLv51 + 80 && observedCp >= expectedMegaCp - 220 -> {
+                voteMega = true
+                voteSource = "LIVE_MEGA_CP"
+            }
+            !oppMegaDetectedInBattle &&
+                isPlayerMegaCurrentlyActive() &&
+                observedCp in 100..8000 &&
+                kotlin.math.abs(observedCp - megaSlot.cp) <= 25 &&
+                expectedMegaCp > megaSlot.cp + 120 -> {
+                voteMega = false
+                voteSource = "LIVE_BASE_CP"
+            }
+        }
+
+        if (voteMega == null) {
+            pendingLiveMegaStateVote = null
+            pendingLiveMegaVoteCount = 0
+            return
+        }
+        if (voteMega == isPlayerMegaCurrentlyActive()) {
+            pendingLiveMegaStateVote = null
+            pendingLiveMegaVoteCount = 0
+            return
+        }
+        if (pendingLiveMegaStateVote == voteMega) {
+            pendingLiveMegaVoteCount++
+        } else {
+            pendingLiveMegaStateVote = voteMega
+            pendingLiveMegaVoteCount = 1
+        }
+        if (pendingLiveMegaVoteCount >= 2) {
+            pendingLiveMegaStateVote = null
+            pendingLiveMegaVoteCount = 0
+            applyAutoDetectedMegaState(voteMega, voteSource, observedCp.takeIf { it in 100..8000 })
+        }
+    }
+
     /**
      * Detects player switches automatically via Top-Left Player Nameplate OR Bottom Charged Move buttons.
      * Evaluates ALL 3 team Pokémon simultaneously across all lines to find the strictly best match
@@ -19509,6 +20303,12 @@ class OverlayService : LifecycleService() {
     internal fun handlePlayerSwitchLines(playerTopLines: List<Text.Line>, playerMoveLines: List<Text.Line>) {
         val preset = currentPreset ?: return
         if (preset.pokemon.isEmpty()) return
+        val curActiveIdx = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }
+            .takeIf { it >= 0 }
+            ?: preset.pokemon.indexOfFirst {
+                val aBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(activeUserPokemonName.orEmpty()))
+                aBase.isNotEmpty() && FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(aBase, ignoreCase = true)
+            }.coerceAtLeast(0)
 
         // 0. v3.34: Detect "Switch in a new Pokémon?" Post-Faint Prompt in bottom region (0.70h..0.95h)
         if (!isWaitingForOpponent && playerMoveLines.isNotEmpty()) {
@@ -19519,7 +20319,6 @@ class OverlayService : LifecycleService() {
                 combinedBottomLower.contains("new pokémon")
 
             // Also check if 2 distinct alive bench species names appear simultaneously in the bottom card area
-            val curActiveIdx = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }.coerceAtLeast(0)
             val benchMatchedSlots = mutableSetOf<Int>()
             for (line in playerMoveLines) {
                 val text = line.text.trim()
@@ -19627,7 +20426,9 @@ class OverlayService : LifecycleService() {
             val bestScore = slotBestScores.values.minOrNull()!!
             val winningSlots = slotBestScores.filterValues { it == bestScore }.keys.toList()
             if (winningSlots.size == 1) {
-                val winningSlot = preset.pokemon[winningSlots[0]]
+                val winIdx = winningSlots[0]
+                detectPlayerMegaStateFromLiveOcr(playerTopLines, playerMoveLines, winIdx)
+                val winningSlot = (currentPreset ?: preset).pokemon.getOrElse(winIdx) { preset.pokemon[winIdx] }
                 executePlayerSwitch(winningSlot.name, fromOcrFrame = true)
                 return
             }
@@ -19693,9 +20494,18 @@ class OverlayService : LifecycleService() {
             }
 
             if (bestSlot != null && bestScore >= 3 && bestScore > secondBestScore) {
-                executePlayerSwitch(bestSlot.name, fromOcrFrame = true)
+                val bestSlotIdx = preset.pokemon.indexOf(bestSlot)
+                if (bestSlotIdx in 0..2) {
+                    detectPlayerMegaStateFromLiveOcr(playerTopLines, playerMoveLines, bestSlotIdx)
+                }
+                val resolvedBestSlot = (currentPreset ?: preset).pokemon.getOrNull(bestSlotIdx) ?: bestSlot
+                executePlayerSwitch(resolvedBestSlot.name, fromOcrFrame = true)
                 return
             }
+        }
+
+        if (playerTopLines.isNotEmpty() || validMoveLines.isNotEmpty()) {
+            detectPlayerMegaStateFromLiveOcr(playerTopLines, playerMoveLines, curActiveIdx)
         }
 
         if (!playerSwitchValidityLatched && (currentFrameTimestampMs - lastPlayerSwitchFrameMs) >= 1400L) {
@@ -19799,6 +20609,23 @@ class OverlayService : LifecycleService() {
         commitPendingPartyScanIfEligible("BATTLE_START")
         stoppedBattleDiscardDvr = false
         stoppedBattleFlagBugReport = false
+        oppMegaDetectedInBattle = false
+        pendingLiveMegaStateVote = null
+        pendingLiveMegaVoteCount = 0
+        manualHudMegaOverride = null
+        lastAutoDetectedMegaSource = ""
+        activeBattleMegaOverride = partyScanLockedMegaOverride
+        val rawBeforeStart = rawCurrentPreset
+        val partyMegaLock = partyScanLockedMegaOverride
+        if (rawBeforeStart != null && partyMegaLock != null) {
+            val targetStartLg = resolveCounterpartLeagueForMegaState(rawBeforeStart, partyMegaLock)
+            applyResolvedCurrentPreset(
+                rawBeforeStart,
+                targetStartLg,
+                megaOverride = partyMegaLock,
+                persistLeagueChange = false
+            )
+        }
 
         battleResetEpoch++
         lastBattleResetTimeMs = System.currentTimeMillis()
@@ -19837,9 +20664,15 @@ class OverlayService : LifecycleService() {
         isOpponentShadow = false
         availableOpponentForms = emptyList()
         currentFormIndex = 0
-        val overrideLead = lockedPartyLeadOverrideName?.takeIf { ov ->
-            lockedPartyLeadOverridePresetId == currentPreset?.id &&
-                currentPreset?.pokemon?.any { it.name.equals(ov, ignoreCase = true) } == true
+        val overrideLead = lockedPartyLeadOverrideName?.takeIf {
+            lockedPartyLeadOverridePresetId == currentPreset?.id
+        }?.let { ov ->
+            val ovBase = FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(ov))
+            currentPreset?.pokemon?.firstOrNull { it.name.equals(ov, ignoreCase = true) }?.name
+                ?: currentPreset?.pokemon?.firstOrNull {
+                    ovBase.isNotEmpty() &&
+                        FormResolver.extractBaseSpecies(stripMegaOrPrimalToBaseNameStatic(it.name)).equals(ovBase, ignoreCase = true)
+                }?.name
         }
         activeUserPokemonName = overrideLead ?: currentPreset?.pokemon?.firstOrNull()?.name ?: activeUserPokemonName
 
@@ -20417,6 +21250,13 @@ class OverlayService : LifecycleService() {
         leadConfirmedByGoBanner = false
         cutsceneOppSwapCandidateSpecies = ""
         cutsceneOppSwapConfirmFrames = 0
+        partyScanLockedMegaOverride = null
+        activeBattleMegaOverride = null
+        manualHudMegaOverride = null
+        oppMegaDetectedInBattle = false
+        pendingLiveMegaStateVote = null
+        pendingLiveMegaVoteCount = 0
+        lastAutoDetectedMegaSource = ""
         hideShieldDecisionOverlay()
         lastRecommendedAction = ""
         lastRecommendedGoal = ""
@@ -22065,7 +22905,16 @@ class OverlayService : LifecycleService() {
         if (sharedPrefs != null) {
             prefs = sharedPrefs
         }
-        currentPreset = preset
+        partyScanLockedMegaOverride = null
+        activeBattleMegaOverride = null
+        manualHudMegaOverride = null
+        oppMegaDetectedInBattle = false
+        pendingLiveMegaStateVote = null
+        pendingLiveMegaVoteCount = 0
+        rawCurrentPreset = preset
+        currentPreset = preset.copy(
+            pokemon = preset.pokemon.map { resolveEffectiveTeamMemberForLeagueStatic(it, preset.league) }
+        )
         oppCountMode = oppCountModeVal
         enable4ChargedMoves = enable4ChargedVal
         detectedOpponents.clear()
@@ -22856,6 +23705,11 @@ class OverlayService : LifecycleService() {
         val playerSwapRemainingSec = if (playerSwapEndTimeMs > nowMs) ((playerSwapEndTimeMs - nowMs + 999L) / 1000L).toInt() else 0
         val oppSwapRemainingSec = if (oppSwapEndTimeMs > nowMs) ((oppSwapEndTimeMs - nowMs + 999L) / 1000L).toInt() else 0
         val waitingActiveUserHp = if (playerFaintedSlots[activeUserSlotIndex.coerceIn(0, 2)]) 0 else playerSlotHpPct[activeUserSlotIndex.coerceIn(0, 2)].coerceIn(0, 100)
+        val rawForMega = rawCurrentPreset ?: currentPreset
+        val megaSlotForHud = rawForMega?.pokemon?.firstOrNull { !it.megaFormName.isNullOrBlank() }
+        val hasMegaCapableSlot = megaSlotForHud != null
+        val isPlayerMegaActive = isPlayerMegaCurrentlyActive()
+        val megaSlotLabel = megaSlotForHud?.megaFormName.orEmpty()
 
         if (isWaitingForOpponent || activeOpponentName == "Waiting...") {
             val effectiveWaitingScanMs = if (isBattleActive && lastScanDurationMs > 0L) {
@@ -23042,7 +23896,10 @@ class OverlayService : LifecycleService() {
                     stateMap
                 },
                 "aiAdviceHudPosition" to aiAdviceHudPosition,
-                "assignedLeagues" to (currentPreset?.let { getEffectiveAssignedLeaguesStatic(it) } ?: emptyList<String>()),
+                "assignedLeagues" to (rawForMega?.let { getEffectiveAssignedLeaguesStatic(it) } ?: emptyList<String>()),
+                "hasMegaCapableSlot" to hasMegaCapableSlot,
+                "isPlayerMegaActive" to isPlayerMegaActive,
+                "megaSlotLabel" to megaSlotLabel,
                 "overlayHudMode" to overlayHudMode,
                 "compactHudShowMatrix" to compactHudShowMatrix,
                 "compactHudConfig" to buildCompactHudConfigMap(),
@@ -24946,6 +25803,10 @@ class OverlayService : LifecycleService() {
             "compactHudConfig" to buildCompactHudConfigMap(),
             "activeLeague" to activeLeague,
             "activeTeamName" to (currentPreset?.name ?: ""),
+            "assignedLeagues" to (rawForMega?.let { getEffectiveAssignedLeaguesStatic(it) } ?: emptyList<String>()),
+            "hasMegaCapableSlot" to hasMegaCapableSlot,
+            "isPlayerMegaActive" to isPlayerMegaActive,
+            "megaSlotLabel" to megaSlotLabel,
             "isLogOnlyStealthMode" to isLogOnlyStealthMode,
             "isOverlayMinimized" to false,
             "maxHorizonTurns" to maxHorizonTurns,
@@ -25434,20 +26295,18 @@ class OverlayService : LifecycleService() {
                     pendingPartySettleObs = null
                     alreadyActivePartyUntilMs = 0L
                     unmatchedPartyUntilMs = 0L
-                    currentPreset = chosen
+                    activeBattleMegaOverride = null
+                    partyScanLockedMegaOverride = null
+                    manualHudMegaOverride = null
+                    oppMegaDetectedInBattle = false
+                    pendingLiveMegaStateVote = null
+                    pendingLiveMegaVoteCount = 0
+                    lastAutoDetectedMegaSource = ""
                     activeUserPokemonName = chosen.pokemon.firstOrNull()?.name
                     val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
                     val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
                     prefs.edit().putString(selKey, presetId).apply()
-                    lifecycleScope.launch(Dispatchers.Default) {
-                        try {
-                            OverlayService.precomputeActiveTeamTop200MatrixStatic(chosen)
-                            Handler(Looper.getMainLooper()).post {
-                                recalculateAndPushBattleData()
-                            }
-                        } catch (_: Exception) {}
-                    }
-                    recalculateAndPushBattleData()
+                    applyResolvedCurrentPreset(chosen, chosen.league, megaOverride = null, persistLeagueChange = false)
                     showBattleToast("Loaded Team: ${chosen.name}")
                 }
             }
@@ -25899,6 +26758,27 @@ class OverlayService : LifecycleService() {
         fun cycleActivePresetMeta() {
             Handler(Looper.getMainLooper()).post {
                 this@OverlayService.cycleActivePresetMetaFromOverlay()
+            }
+        }
+
+        @JavascriptInterface
+        fun togglePlayerMegaState() {
+            Handler(Looper.getMainLooper()).post {
+                val raw = rawCurrentPreset ?: return@post
+                val megaSlot = raw.pokemon.firstOrNull { !it.megaFormName.isNullOrBlank() } ?: return@post
+                val nextMega = !isPlayerMegaCurrentlyActive()
+                manualHudMegaOverride = nextMega
+                activeBattleMegaOverride = nextMega
+                pendingLiveMegaStateVote = null
+                pendingLiveMegaVoteCount = 0
+                val nextLeague = resolveCounterpartLeagueForMegaState(raw, nextMega)
+                applyResolvedCurrentPreset(raw, nextLeague, megaOverride = nextMega, persistLeagueChange = true)
+                val metaTag = formatShortMetaBadgeStatic(nextLeague)
+                if (nextMega) {
+                    showBattleToast("🧬 ${megaSlot.megaFormName} Active → $metaTag")
+                } else {
+                    showBattleToast("🧬 ${megaSlot.name} Base Form → $metaTag")
+                }
             }
         }
     }

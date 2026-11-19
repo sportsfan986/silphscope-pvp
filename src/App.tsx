@@ -123,6 +123,16 @@ import {
   isMegaOrPrimalSpecies,
   hasMultipleMegas,
   resolveMegaPlusMove,
+  stripMegaOrPrimalToBaseName,
+  canonicalizeMegaFormDisplayName,
+  formatShortMegaVariantChipLabel,
+  formatCardMegaBadgeText,
+  getAvailableMegaFormsForSpecies,
+  computeMegaFormCpFromBaseSlot,
+  resolveEffectiveMemberForLeague,
+  isMegaAllowedInLeague,
+  extractBaseSpeciesKey,
+  findPokemonByName,
   resolveNonStandardObservedMoves,
   type CrowdEloMetaSnapshotWeb,
   CURRENT_USER_ELO_STORAGE_KEY,
@@ -2162,7 +2172,12 @@ export default function App() {
     appCombatMode === 'show6' ? setShow6SelectedPreset3Id : setGblSelectedPresetId;
 
   const activePreset = useMemo(() => {
-    return presets.find((p) => p.id === selectedPresetId) || presets[0] || INITIAL_PRESETS[0];
+    const raw = presets.find((p) => p.id === selectedPresetId) || presets[0] || INITIAL_PRESETS[0];
+    if (!raw || !Array.isArray(raw.pokemon)) return raw;
+    return {
+      ...raw,
+      pokemon: raw.pokemon.map((m) => resolveEffectiveMemberForLeague(m, raw.league))
+    };
   }, [presets, selectedPresetId]);
 
   const getEffectiveAssignedLeagues = (preset: TeamPreset): LeagueType[] => {
@@ -2555,6 +2570,251 @@ export default function App() {
 
     try {
       localStorage.setItem('gbl_v761_multi_meta_migrated_v1', '1');
+    } catch {}
+  }, []);
+
+  // v7.73+: One-time idempotent migration merging Standard + Mega teams with identical base trio & moveset
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('gbl_v773_mega_std_merged_v1') === '1') return;
+    } catch {
+      return;
+    }
+    const nowMs = Date.now();
+    const collectedDupIds: string[] = [];
+
+    const canonicalizeNonMegaSlot = (rawName: string, league: string) => {
+      const baseName = stripMegaOrPrimalToBaseName(rawName);
+      const baseKey = extractBaseSpeciesKey(baseName.toLowerCase());
+      const nonMegaRec = getRecommendedMovesForPokemon(baseName, league);
+      const resolvedNonMega =
+        nonMegaRec && !isMegaOrPrimalSpecies(nonMegaRec.name) ? nonMegaRec : undefined;
+      const entry = findPokemonByName(resolvedNonMega?.name || baseName);
+      const cleanId =
+        entry && !isMegaOrPrimalSpecies(entry.name)
+          ? (entry.speciesId || baseKey).toLowerCase().replace(/_shadow$/i, '')
+          : baseKey || baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanDisp =
+        resolvedNonMega?.name ||
+        (entry && !isMegaOrPrimalSpecies(entry.name) ? entry.name : baseName);
+      return { idKey: cleanId, dispName: cleanDisp };
+    };
+
+    const mergeMegaStdBucket = (
+      bucketPresets: TeamPreset[],
+      bucketLogs: WebBattleLogEntry[],
+      bucketSelectedId: string,
+      mode: 'gbl' | 'show6'
+    ) => {
+      if (bucketPresets.length < 2) {
+        return { changed: false, nextPresets: bucketPresets, nextLogs: bucketLogs, nextSelectedId: bucketSelectedId };
+      }
+      const logCounts = new Map<string, number>();
+      bucketLogs.forEach((l) => {
+        if (l.presetId) logCounts.set(l.presetId, (logCounts.get(l.presetId) || 0) + 1);
+      });
+      const groups = new Map<string, TeamPreset[]>();
+      const ungrouped: TeamPreset[] = [];
+      for (const p of bucketPresets) {
+        if (!p.pokemon || p.pokemon.length < 3) {
+          ungrouped.push(p);
+          continue;
+        }
+        const cpCap = getLeagueCpCap(p.league);
+        const slotSig = p.pokemon
+          .slice(0, 3)
+          .map((m) => {
+            const { idKey } = canonicalizeNonMegaSlot(m.name || '', p.league);
+            return [
+              idKey,
+              (m.fastMove || '').trim().toLowerCase(),
+              (m.chargedMove1 || '').trim().toLowerCase(),
+              (m.chargedMove2 || '').trim().toLowerCase()
+            ].join('|');
+          })
+          .join('||');
+        const key = `${mode}|${cpCap}|${slotSig}`;
+        const list = groups.get(key) || [];
+        list.push(p);
+        groups.set(key, list);
+      }
+
+      if (!Array.from(groups.values()).some((g) => g.length >= 2)) {
+        return { changed: false, nextPresets: bucketPresets, nextLogs: bucketLogs, nextSelectedId: bucketSelectedId };
+      }
+
+      const redirectMap = new Map<string, string>();
+      const nextPresets: TeamPreset[] = [...ungrouped];
+      let anyMutated = false;
+
+      for (const group of groups.values()) {
+        if (group.length === 1) {
+          nextPresets.push(group[0]);
+          continue;
+        }
+        const megaSlotFormByIdx = new Map<number, string>();
+        let groupConflict = false;
+        for (const p of group) {
+          for (let i = 0; i < 3; i++) {
+            const sl = p.pokemon[i];
+            if (!sl) continue;
+            const megaCand = sl.megaFormName?.trim()
+              ? canonicalizeMegaFormDisplayName(sl.megaFormName)
+              : isMegaOrPrimalSpecies(sl.name)
+              ? canonicalizeMegaFormDisplayName(sl.name)
+              : '';
+            if (megaCand) {
+              const prev = megaSlotFormByIdx.get(i);
+              if (prev && prev.toLowerCase() !== megaCand.toLowerCase()) {
+                groupConflict = true;
+              } else {
+                megaSlotFormByIdx.set(i, megaCand);
+              }
+            }
+          }
+        }
+        if (groupConflict || megaSlotFormByIdx.size !== 1) {
+          nextPresets.push(...group);
+          continue;
+        }
+
+        anyMutated = true;
+        const scored = [...group].sort((a, b) => {
+          const aSel = a.id === bucketSelectedId || a.isSelected ? 1 : 0;
+          const bSel = b.id === bucketSelectedId || b.isSelected ? 1 : 0;
+          if (bSel !== aSel) return bSel - aSel;
+          const aLogs = logCounts.get(a.id) || 0;
+          const bLogs = logCounts.get(b.id) || 0;
+          if (bLogs !== aLogs) return bLogs - aLogs;
+          const aStd = a.pokemon.every((m) => !isMegaOrPrimalSpecies(m.name)) ? 1 : 0;
+          const bStd = b.pokemon.every((m) => !isMegaOrPrimalSpecies(m.name)) ? 1 : 0;
+          if (bStd !== aStd) return bStd - aStd;
+          return (b.updatedAt || 0) - (a.updatedAt || 0);
+        });
+        const survivor = scored[0];
+        const combinedAssigned: LeagueType[] = [];
+        const seen = new Set<string>();
+        const pushMeta = (lg?: LeagueType) => {
+          if (!lg) return;
+          const n = normalizeLeagueName(lg);
+          const low = n.toLowerCase();
+          if (!seen.has(low)) {
+            seen.add(low);
+            combinedAssigned.push(n);
+          }
+        };
+        pushMeta(survivor.league);
+        scored.forEach((item) => getEffectiveAssignedLeagues(item).forEach(pushMeta));
+
+        const mergedSlots: TeamMember[] = [0, 1, 2].map((i) => {
+          const cands = group.map((g) => g.pokemon[i]).filter(Boolean);
+          const baseCand =
+            cands.find((c) => !isMegaOrPrimalSpecies(c.name) && Boolean(c.ivs)) ||
+            cands.find((c) => !isMegaOrPrimalSpecies(c.name)) ||
+            cands[0];
+          const chosenMega = megaSlotFormByIdx.get(i);
+          const { dispName } = canonicalizeNonMegaSlot(baseCand.name, survivor.league);
+          const bestIvs = cands.find((c) => Boolean(c.ivs))?.ivs;
+          const bestBuiltId = cands.find((c) => Boolean(c.builtPokemonId))?.builtPokemonId;
+          const bestPlus = cands.find((c) => c.plusMoveLevel !== undefined)?.plusMoveLevel ?? 4;
+          const bestBb = cands.some((c) => Boolean(c.isBestBuddy)) ? true : baseCand.isBestBuddy;
+          const baseCp =
+            !isMegaOrPrimalSpecies(baseCand.name) && baseCand.cp >= 100
+              ? baseCand.cp
+              : getRecommendedMovesForPokemon(dispName, survivor.league, bestIvs, Boolean(bestBb))?.cp || baseCand.cp;
+          return {
+            ...baseCand,
+            id: `p${i + 1}`,
+            name: dispName,
+            cp: baseCp,
+            ivs: bestIvs,
+            plusMoveLevel: bestPlus,
+            isBestBuddy: bestBb,
+            builtPokemonId: bestBuiltId,
+            megaFormName: chosenMega || undefined
+          };
+        });
+
+        const stems = new Map<string, { label: string; count: number }>();
+        scored.forEach((item) => {
+          const st = stripLeagueAffixFromTeamNameWeb(item.name);
+          if (st.length >= 2) {
+            const lk = st.toLowerCase();
+            const cur = stems.get(lk) || { label: st, count: 0 };
+            cur.count += 1;
+            stems.set(lk, cur);
+          }
+        });
+        const bestStem = Array.from(stems.values()).sort((a, b) => b.count - a.count)[0];
+        const fallbackClean = stripLeagueAffixFromTeamNameWeb(survivor.name);
+        const cleanName = bestStem && bestStem.count >= 2 ? bestStem.label : fallbackClean || survivor.name;
+
+        nextPresets.push({
+          ...survivor,
+          name: cleanName,
+          assignedLeagues: combinedAssigned,
+          pokemon: mergedSlots,
+          metaPoolMetrics: undefined,
+          isSelected: group.some((g) => g.isSelected || g.id === bucketSelectedId),
+          updatedAt: Math.max(nowMs, ...group.map((g) => g.updatedAt || 0))
+        });
+        for (let i = 1; i < scored.length; i++) {
+          const dupId = scored[i].id;
+          if (dupId && dupId !== survivor.id) {
+            redirectMap.set(dupId, survivor.id);
+            collectedDupIds.push(dupId);
+          }
+        }
+      }
+
+      if (!anyMutated || redirectMap.size === 0) {
+        return { changed: false, nextPresets: bucketPresets, nextLogs: bucketLogs, nextSelectedId: bucketSelectedId };
+      }
+      const nextLogs = bucketLogs.map((l) => {
+        const targetId = l.presetId ? redirectMap.get(l.presetId) : undefined;
+        if (!targetId) return l;
+        return { ...l, presetId: targetId, updatedAt: nowMs };
+      });
+      const nextSelectedId = redirectMap.get(bucketSelectedId) || bucketSelectedId;
+      return { changed: true, nextPresets, nextLogs, nextSelectedId };
+    };
+
+    const gblRes = mergeMegaStdBucket(gblPresets, gblBattleLogs, gblSelectedPresetId, 'gbl');
+    if (gblRes.changed) {
+      setGblPresets(gblRes.nextPresets);
+      setGblBattleLogs(gblRes.nextLogs);
+      setGblSelectedPresetId(gblRes.nextSelectedId);
+      try {
+        localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(gblRes.nextPresets));
+        localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(gblRes.nextLogs));
+        localStorage.setItem('gbl_selected_preset_id', gblRes.nextSelectedId);
+      } catch {}
+    }
+
+    const s6Res = mergeMegaStdBucket(show6Presets3, show6BattleLogs, show6SelectedPreset3Id, 'show6');
+    if (s6Res.changed) {
+      setShow6Presets3(s6Res.nextPresets);
+      setShow6BattleLogs(s6Res.nextLogs);
+      setShow6SelectedPreset3Id(s6Res.nextSelectedId);
+      try {
+        localStorage.setItem('gbl_show6_presets_of_3_v1', JSON.stringify(s6Res.nextPresets));
+        localStorage.setItem('gbl_show6_battle_logs_v1', JSON.stringify(s6Res.nextLogs));
+        localStorage.setItem('gbl_show6_selected_preset3_id', s6Res.nextSelectedId);
+      } catch {}
+    }
+
+    if (collectedDupIds.length > 0) {
+      setDeletedTeamIds((prev) => {
+        const next = Array.from(new Set([...prev, ...collectedDupIds]));
+        try {
+          localStorage.setItem('gbl_deleted_team_ids_v1', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+
+    try {
+      localStorage.setItem('gbl_v773_mega_std_merged_v1', '1');
     } catch {}
   }, []);
 
@@ -3733,6 +3993,7 @@ export default function App() {
   const [p1PlusLevel, setP1PlusLevel] = useState<number>(4);
   const [p1BestBuddy, setP1BestBuddy] = useState<boolean>(false);
   const [p1BuiltId, setP1BuiltId] = useState<string | undefined>(undefined);
+  const [p1MegaForm, setP1MegaForm] = useState<string | undefined>(undefined);
 
   const [p2Name, setP2Name] = useState('Feraligatr');
   const [p2Cp, setP2Cp] = useState(1498);
@@ -3743,6 +4004,7 @@ export default function App() {
   const [p2PlusLevel, setP2PlusLevel] = useState<number>(4);
   const [p2BestBuddy, setP2BestBuddy] = useState<boolean>(false);
   const [p2BuiltId, setP2BuiltId] = useState<string | undefined>(undefined);
+  const [p2MegaForm, setP2MegaForm] = useState<string | undefined>(undefined);
 
   const [p3Name, setP3Name] = useState('Mandibuzz');
   const [p3Cp, setP3Cp] = useState(1496);
@@ -3753,6 +4015,7 @@ export default function App() {
   const [p3PlusLevel, setP3PlusLevel] = useState<number>(4);
   const [p3BestBuddy, setP3BestBuddy] = useState<boolean>(false);
   const [p3BuiltId, setP3BuiltId] = useState<string | undefined>(undefined);
+  const [p3MegaForm, setP3MegaForm] = useState<string | undefined>(undefined);
 
   // Clipboard Copy State
   const [copiedFile, setCopiedFile] = useState(false);
@@ -5409,6 +5672,7 @@ export default function App() {
     setP1PlusLevel(top3[0].plusMoveLevel ?? 4);
     setP1BestBuddy(false);
     setP1BuiltId(undefined);
+    setP1MegaForm(top3[0].megaFormName || undefined);
 
     setP2Name(top3[1].name);
     setP2Cp(top3[1].cp);
@@ -5419,6 +5683,7 @@ export default function App() {
     setP2PlusLevel(top3[1].plusMoveLevel ?? 4);
     setP2BestBuddy(false);
     setP2BuiltId(undefined);
+    setP2MegaForm(top3[1].megaFormName || undefined);
 
     setP3Name(top3[2].name);
     setP3Cp(top3[2].cp);
@@ -5429,6 +5694,7 @@ export default function App() {
     setP3PlusLevel(top3[2].plusMoveLevel ?? 4);
     setP3BestBuddy(false);
     setP3BuiltId(undefined);
+    setP3MegaForm(top3[2].megaFormName || undefined);
   };
 
   const applyBuiltSpecimenToModalSlot = (slotIdx: 1 | 2 | 3, entry: BuiltPokemonEntry) => {
@@ -5443,6 +5709,9 @@ export default function App() {
       setP1PlusLevel(entry.plusMoveLevel ?? 4);
       setP1BestBuddy(Boolean(entry.isBestBuddy));
       setP1BuiltId(entry.id);
+      if (p1MegaForm && !getAvailableMegaFormsForSpecies(display).some((m) => m.toLowerCase() === p1MegaForm.toLowerCase())) {
+        setP1MegaForm(undefined);
+      }
     } else if (slotIdx === 2) {
       setP2Name(display);
       setP2Cp(entry.cp);
@@ -5453,6 +5722,9 @@ export default function App() {
       setP2PlusLevel(entry.plusMoveLevel ?? 4);
       setP2BestBuddy(Boolean(entry.isBestBuddy));
       setP2BuiltId(entry.id);
+      if (p2MegaForm && !getAvailableMegaFormsForSpecies(display).some((m) => m.toLowerCase() === p2MegaForm.toLowerCase())) {
+        setP2MegaForm(undefined);
+      }
     } else {
       setP3Name(display);
       setP3Cp(entry.cp);
@@ -5463,6 +5735,9 @@ export default function App() {
       setP3PlusLevel(entry.plusMoveLevel ?? 4);
       setP3BestBuddy(Boolean(entry.isBestBuddy));
       setP3BuiltId(entry.id);
+      if (p3MegaForm && !getAvailableMegaFormsForSpecies(display).some((m) => m.toLowerCase() === p3MegaForm.toLowerCase())) {
+        setP3MegaForm(undefined);
+      }
     }
   };
 
@@ -5539,6 +5814,9 @@ export default function App() {
       setP1C2(c2);
       setP1Cp(cp);
       setP1BuiltId(undefined);
+      if (p1MegaForm && !getAvailableMegaFormsForSpecies(opt.name).some((m) => m.toLowerCase() === p1MegaForm.toLowerCase())) {
+        setP1MegaForm(undefined);
+      }
     } else if (slotIdx === 2) {
       setP2Name(opt.name);
       setP2Fast(fast);
@@ -5546,6 +5824,9 @@ export default function App() {
       setP2C2(c2);
       setP2Cp(cp);
       setP2BuiltId(undefined);
+      if (p2MegaForm && !getAvailableMegaFormsForSpecies(opt.name).some((m) => m.toLowerCase() === p2MegaForm.toLowerCase())) {
+        setP2MegaForm(undefined);
+      }
     } else {
       setP3Name(opt.name);
       setP3Fast(fast);
@@ -5553,6 +5834,9 @@ export default function App() {
       setP3C2(c2);
       setP3Cp(cp);
       setP3BuiltId(undefined);
+      if (p3MegaForm && !getAvailableMegaFormsForSpecies(opt.name).some((m) => m.toLowerCase() === p3MegaForm.toLowerCase())) {
+        setP3MegaForm(undefined);
+      }
     }
     setActiveAutocompleteSlot(null);
     setAutocompleteHighlightIdx(0);
@@ -5621,6 +5905,7 @@ export default function App() {
       setP1PlusLevel(s1.plusMoveLevel ?? 4);
       setP1BestBuddy(Boolean(s1.isBestBuddy));
       setP1BuiltId(s1.builtPokemonId);
+      setP1MegaForm(s1.megaFormName || undefined);
     }
     if (s2) {
       setP2Name(s2.name);
@@ -5632,6 +5917,7 @@ export default function App() {
       setP2PlusLevel(s2.plusMoveLevel ?? 4);
       setP2BestBuddy(Boolean(s2.isBestBuddy));
       setP2BuiltId(s2.builtPokemonId);
+      setP2MegaForm(s2.megaFormName || undefined);
     }
     if (s3) {
       setP3Name(s3.name);
@@ -5643,6 +5929,7 @@ export default function App() {
       setP3PlusLevel(s3.plusMoveLevel ?? 4);
       setP3BestBuddy(Boolean(s3.isBestBuddy));
       setP3BuiltId(s3.builtPokemonId);
+      setP3MegaForm(s3.megaFormName || undefined);
     }
     setModalCloneTargetLeague(preset.league);
     setIsNewPresetOpen(true);
@@ -5661,11 +5948,18 @@ export default function App() {
       plusMoveLevel: number,
       isBestBuddy: boolean,
       builtPokemonId: string | undefined,
+      megaFormName: string | undefined,
       fallback: TeamMember
     ): TeamMember => {
       const finalName = rawName.trim() || fallback.name;
       const cleanIvs = rawIvs.trim() || undefined;
       const rec = getRecommendedMovesForPokemon(finalName, newPresetLeague, cleanIvs, isBestBuddy);
+      const validMega =
+        megaFormName && megaFormName.trim()
+          ? getAvailableMegaFormsForSpecies(finalName).find(
+              (m) => m.toLowerCase() === megaFormName.trim().toLowerCase()
+            )
+          : undefined;
       return {
         id,
         name: finalName,
@@ -5676,13 +5970,14 @@ export default function App() {
         ivs: cleanIvs,
         plusMoveLevel: Math.max(0, Math.min(4, plusMoveLevel ?? 4)),
         isBestBuddy: isBestBuddy || undefined,
-        builtPokemonId
+        builtPokemonId,
+        megaFormName: validMega || undefined
       };
     };
     return [
-      resolveSlot('p1', p1Name, p1Cp, p1Fast, p1C1, p1C2, p1Ivs, p1PlusLevel, p1BestBuddy, p1BuiltId, top3[0]),
-      resolveSlot('p2', p2Name, p2Cp, p2Fast, p2C1, p2C2, p2Ivs, p2PlusLevel, p2BestBuddy, p2BuiltId, top3[1]),
-      resolveSlot('p3', p3Name, p3Cp, p3Fast, p3C1, p3C2, p3Ivs, p3PlusLevel, p3BestBuddy, p3BuiltId, top3[2])
+      resolveSlot('p1', p1Name, p1Cp, p1Fast, p1C1, p1C2, p1Ivs, p1PlusLevel, p1BestBuddy, p1BuiltId, p1MegaForm, top3[0]),
+      resolveSlot('p2', p2Name, p2Cp, p2Fast, p2C1, p2C2, p2Ivs, p2PlusLevel, p2BestBuddy, p2BuiltId, p2MegaForm, top3[1]),
+      resolveSlot('p3', p3Name, p3Cp, p3Fast, p3C1, p3C2, p3Ivs, p3PlusLevel, p3BestBuddy, p3BuiltId, p3MegaForm, top3[2])
     ];
   };
 
@@ -5698,6 +5993,7 @@ export default function App() {
       setP1PlusLevel(m1.plusMoveLevel ?? 4);
       setP1BestBuddy(Boolean(m1.isBestBuddy));
       setP1BuiltId(m1.builtPokemonId);
+      setP1MegaForm(m1.megaFormName || undefined);
     }
     if (m2) {
       setP2Name(m2.name);
@@ -5709,6 +6005,7 @@ export default function App() {
       setP2PlusLevel(m2.plusMoveLevel ?? 4);
       setP2BestBuddy(Boolean(m2.isBestBuddy));
       setP2BuiltId(m2.builtPokemonId);
+      setP2MegaForm(m2.megaFormName || undefined);
     }
     if (m3) {
       setP3Name(m3.name);
@@ -5720,11 +6017,14 @@ export default function App() {
       setP3PlusLevel(m3.plusMoveLevel ?? 4);
       setP3BestBuddy(Boolean(m3.isBestBuddy));
       setP3BuiltId(m3.builtPokemonId);
+      setP3MegaForm(m3.megaFormName || undefined);
     }
   };
 
   const modalLiveEvaluation = useMemo(() => {
-    const members = buildModalMembersArray();
+    const members = buildModalMembersArray().map((m) =>
+      resolveEffectiveMemberForLeague(m, newPresetLeague)
+    );
     if (siteView !== 'app' || !isNewPresetOpen) {
       return {
         orderedPokemon: members,
@@ -5761,9 +6061,9 @@ export default function App() {
   }, [
     siteView,
     isNewPresetOpen,
-    p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2, p1PlusLevel, p1BestBuddy,
-    p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2, p2PlusLevel, p2BestBuddy,
-    p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2, p3PlusLevel, p3BestBuddy,
+    p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2, p1PlusLevel, p1BestBuddy, p1MegaForm,
+    p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2, p2PlusLevel, p2BestBuddy, p2MegaForm,
+    p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2, p3PlusLevel, p3BestBuddy, p3MegaForm,
     newPresetLeague,
     manualArchetypeOverride,
     battleLogs,
@@ -5773,8 +6073,11 @@ export default function App() {
 
   const handleAutoDetectAndOrderModal = () => {
     const members = buildModalMembersArray();
+    const effectiveMembers = members.map((m) =>
+      resolveEffectiveMemberForLeague(m, newPresetLeague)
+    );
     const res = evaluateOrAutoOrderTeam(
-      members,
+      effectiveMembers,
       newPresetLeague,
       battleLogs,
       activeSeasonBounds.startMs,
@@ -5782,7 +6085,23 @@ export default function App() {
       true,
       manualArchetypeOverride
     );
-    applyOrderedMembersToModalForm(res.orderedPokemon);
+    const canonicalPool = [...members];
+    const canonicalOrdered: TeamMember[] = [];
+    for (const ord of res.orderedPokemon) {
+      const ordBase = stripMegaOrPrimalToBaseName(ord.name).toLowerCase();
+      const idx = canonicalPool.findIndex((cand) => {
+        if (cand.id && ord.id && cand.id === ord.id) return true;
+        if (stripMegaOrPrimalToBaseName(cand.name).toLowerCase() === ordBase) return true;
+        return Boolean(cand.megaFormName) && stripMegaOrPrimalToBaseName(cand.megaFormName).toLowerCase() === ordBase;
+      });
+      if (idx >= 0) {
+        canonicalOrdered.push(canonicalPool.splice(idx, 1)[0]);
+      } else if (canonicalPool.length > 0) {
+        canonicalOrdered.push(canonicalPool.shift()!);
+      }
+    }
+    const finalCanonical = canonicalOrdered.length === members.length ? canonicalOrdered : members;
+    applyOrderedMembersToModalForm(finalCanonical);
     if (editingPresetId) {
       setPresets((prev) =>
         prev.map((p) => {
@@ -5790,7 +6109,7 @@ export default function App() {
           return {
             ...p,
             league: newPresetLeague,
-            pokemon: res.orderedPokemon,
+            pokemon: finalCanonical,
             archetype: res.archetype,
             isArchetypeManual: !!manualArchetypeOverride,
             leadAggBr: res.leadAggBr,
@@ -5844,7 +6163,9 @@ export default function App() {
     setIsSuggestingUpgrades(true);
     setTimeout(() => {
       try {
-        const members = buildModalMembersArray();
+        const members = buildModalMembersArray().map((m) =>
+          resolveEffectiveMemberForLeague(m, newPresetLeague)
+        );
         const res = recommendTop3UpgradesPerRole(
           members,
           newPresetLeague,
@@ -5869,7 +6190,7 @@ export default function App() {
     next[slotIdx - 1] = { ...sug.candidate, id: `p${slotIdx}` };
     applyOrderedMembersToModalForm(next);
     const updatedRecs = recommendTop3UpgradesPerRole(
-      next,
+      next.map((m) => resolveEffectiveMemberForLeague(m, newPresetLeague)),
       newPresetLeague,
       battleLogs,
       activeSeasonBounds.startMs,
@@ -5888,7 +6209,9 @@ export default function App() {
     setIsSimulatingMovesets(true);
     setTimeout(() => {
       try {
-        const members = buildModalMembersArray();
+        const members = buildModalMembersArray().map((m) =>
+          resolveEffectiveMemberForLeague(m, newPresetLeague)
+        );
         const res = recommendTop3AlternateMovesetsForTeam(
           members,
           newPresetLeague,
@@ -5925,7 +6248,7 @@ export default function App() {
     }
     applyOrderedMembersToModalForm(next);
     const updatedMoves = recommendTop3AlternateMovesetsForTeam(
-      next,
+      next.map((m) => resolveEffectiveMemberForLeague(m, newPresetLeague)),
       newPresetLeague,
       battleLogs,
       activeSeasonBounds.startMs,
@@ -6730,7 +7053,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.72 • Android Native Overlay
+                  v7.73 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -12344,6 +12667,10 @@ export default function App() {
                           const slotMetricBr = index === 0 ? leadBr : index === 1 ? safeSwapBr : closerSwapBr;
                           const slotTierInfo =
                             index === 0 ? leadTierInfo : index === 1 ? slot2SwapTierInfo : slot3SwapTierInfo;
+                          const effMember = resolveEffectiveMemberForLeague(member, preset.league);
+                          const isMegaActivePool = isMegaAllowedInLeague(preset.league);
+                          const megaBadgeTxt = formatCardMegaBadgeText(member.megaFormName, isMegaActivePool);
+                          const slotPlusMove = resolveMegaPlusMove(effMember.name, preset.league);
 
                           return (
                             <div
@@ -12357,14 +12684,23 @@ export default function App() {
                                 </span>
                               </div>
                               <div className="font-bold text-xs text-white mt-1 truncate">
-                                {member.name}
-                                {resolveMegaPlusMove(member.name, preset.league) && (
+                                <MegaMetaText text={effMember.name} iconHeightPx={11} />
+                                {megaBadgeTxt && (
+                                  <span
+                                    className={`ml-1 text-[9px] font-mono font-bold ${
+                                      isMegaActivePool ? 'text-fuchsia-300' : 'text-purple-300'
+                                    }`}
+                                  >
+                                    [<MegaMetaText text={megaBadgeTxt} iconHeightPx={9} />]
+                                  </span>
+                                )}
+                                {slotPlusMove && (
                                   <span
                                     className={`ml-1 text-[9px] font-mono font-bold ${
                                       (member.plusMoveLevel ?? 4) <= 0 ? 'text-slate-400' : 'text-amber-300'
                                     }`}
                                   >
-                                    [+ {resolveMegaPlusMove(member.name, preset.league)}{' '}
+                                    [+ {slotPlusMove}{' '}
                                     {(member.plusMoveLevel ?? 4) <= 0 ? 'Off' : `Lv${member.plusMoveLevel ?? 4}`}]
                                   </span>
                                 )}
@@ -12375,7 +12711,7 @@ export default function App() {
                                 ) : (
                                   <span className="text-slate-400">PvPoke IVs</span>
                                 )}
-                                <span className="text-sky-400 font-bold">CP {member.cp}</span>
+                                <span className="text-sky-400 font-bold">CP {effMember.cp}</span>
                               </div>
                             </div>
                           );
@@ -13174,11 +13510,81 @@ export default function App() {
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
                         />
                       </div>
-                      {resolveMegaPlusMove(p1Name, newPresetLeague) && (
+                      {(() => {
+                        const availMegas = getAvailableMegaFormsForSpecies(p1Name);
+                        if (availMegas.length === 0) return null;
+                        const activeMega = availMegas.find(
+                          (mf) => mf.toLowerCase() === (p1MegaForm || '').toLowerCase()
+                        );
+                        const estMegaCp = activeMega
+                          ? computeMegaFormCpFromBaseSlot(
+                              { name: p1Name, cp: p1Cp, ivs: p1Ivs, isBestBuddy: p1BestBuddy },
+                              activeMega,
+                              newPresetLeague
+                            )
+                          : null;
+                        const handlePickMega = (mf?: string) => {
+                          setP1MegaForm(mf);
+                          if (mf) {
+                            setP2MegaForm(undefined);
+                            setP3MegaForm(undefined);
+                          }
+                          if (isMegaOrPrimalSpecies(p1Name)) {
+                            const baseOnly = stripMegaOrPrimalToBaseName(p1Name);
+                            setP1Name(baseOnly);
+                            const baseRec = getRecommendedMovesForPokemon(baseOnly, newPresetLeague, p1Ivs, p1BestBuddy);
+                            if (baseRec?.cp) setP1Cp(baseRec.cp);
+                          }
+                        };
+                        return (
+                          <div className="px-2.5 py-1.5 rounded-lg bg-fuchsia-950/40 border border-fuchsia-500/40 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
+                              <span className={activeMega ? 'text-fuchsia-200' : 'text-purple-200'}>
+                                {activeMega
+                                  ? `${activeMega}${estMegaCp ? ` (CP ${estMegaCp} in Mega Pools)` : ''}`
+                                  : 'Mega / Primal in Mega Leagues: Off'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handlePickMega(undefined)}
+                                className={`py-1 px-2 rounded text-[10px] font-mono font-bold border transition ${
+                                  !activeMega
+                                    ? 'bg-slate-700 border-slate-400 text-white'
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                Off
+                              </button>
+                              {availMegas.map((mf) => {
+                                const isSel = activeMega?.toLowerCase() === mf.toLowerCase();
+                                const shortLbl = formatShortMegaVariantChipLabel(mf);
+                                const chipText = shortLbl === 'Mega' ? 'Mega Evo' : shortLbl;
+                                return (
+                                  <button
+                                    key={`p1-mega-${mf}`}
+                                    type="button"
+                                    onClick={() => handlePickMega(mf)}
+                                    className={`py-1 px-2 rounded text-[10px] font-mono font-bold border transition ${
+                                      isSel
+                                        ? 'bg-fuchsia-700 border-fuchsia-300 text-white shadow'
+                                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+                                    }`}
+                                  >
+                                    <MegaMetaText text={chipText} iconHeightPx={9.5} />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {resolveMegaPlusMove(p1MegaForm || p1Name, newPresetLeague) && (
                         <div className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/50 space-y-1.5">
                           <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
                             <span className={p1PlusLevel <= 0 ? 'text-slate-400' : 'text-purple-200'}>
-                              🔥 +3rd Move: {resolveMegaPlusMove(p1Name, newPresetLeague)} •{' '}
+                              🔥 +3rd Move: {resolveMegaPlusMove(p1MegaForm || p1Name, newPresetLeague)} •{' '}
                               {p1PlusLevel <= 0
                                 ? 'Off (Not Unlocked)'
                                 : `Lv${p1PlusLevel} (${(1.0 + (p1PlusLevel - 1) * 0.1).toFixed(1)}x Power)`}
@@ -13475,11 +13881,81 @@ export default function App() {
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
                         />
                       </div>
-                      {resolveMegaPlusMove(p2Name, newPresetLeague) && (
+                      {(() => {
+                        const availMegas = getAvailableMegaFormsForSpecies(p2Name);
+                        if (availMegas.length === 0) return null;
+                        const activeMega = availMegas.find(
+                          (mf) => mf.toLowerCase() === (p2MegaForm || '').toLowerCase()
+                        );
+                        const estMegaCp = activeMega
+                          ? computeMegaFormCpFromBaseSlot(
+                              { name: p2Name, cp: p2Cp, ivs: p2Ivs, isBestBuddy: p2BestBuddy },
+                              activeMega,
+                              newPresetLeague
+                            )
+                          : null;
+                        const handlePickMega = (mf?: string) => {
+                          setP2MegaForm(mf);
+                          if (mf) {
+                            setP1MegaForm(undefined);
+                            setP3MegaForm(undefined);
+                          }
+                          if (isMegaOrPrimalSpecies(p2Name)) {
+                            const baseOnly = stripMegaOrPrimalToBaseName(p2Name);
+                            setP2Name(baseOnly);
+                            const baseRec = getRecommendedMovesForPokemon(baseOnly, newPresetLeague, p2Ivs, p2BestBuddy);
+                            if (baseRec?.cp) setP2Cp(baseRec.cp);
+                          }
+                        };
+                        return (
+                          <div className="px-2.5 py-1.5 rounded-lg bg-fuchsia-950/40 border border-fuchsia-500/40 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
+                              <span className={activeMega ? 'text-fuchsia-200' : 'text-purple-200'}>
+                                {activeMega
+                                  ? `${activeMega}${estMegaCp ? ` (CP ${estMegaCp} in Mega Pools)` : ''}`
+                                  : 'Mega / Primal in Mega Leagues: Off'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handlePickMega(undefined)}
+                                className={`py-1 px-2 rounded text-[10px] font-mono font-bold border transition ${
+                                  !activeMega
+                                    ? 'bg-slate-700 border-slate-400 text-white'
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                Off
+                              </button>
+                              {availMegas.map((mf) => {
+                                const isSel = activeMega?.toLowerCase() === mf.toLowerCase();
+                                const shortLbl = formatShortMegaVariantChipLabel(mf);
+                                const chipText = shortLbl === 'Mega' ? 'Mega Evo' : shortLbl;
+                                return (
+                                  <button
+                                    key={`p2-mega-${mf}`}
+                                    type="button"
+                                    onClick={() => handlePickMega(mf)}
+                                    className={`py-1 px-2 rounded text-[10px] font-mono font-bold border transition ${
+                                      isSel
+                                        ? 'bg-fuchsia-700 border-fuchsia-300 text-white shadow'
+                                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+                                    }`}
+                                  >
+                                    <MegaMetaText text={chipText} iconHeightPx={9.5} />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {resolveMegaPlusMove(p2MegaForm || p2Name, newPresetLeague) && (
                         <div className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/50 space-y-1.5">
                           <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
                             <span className={p2PlusLevel <= 0 ? 'text-slate-400' : 'text-purple-200'}>
-                              🔥 +3rd Move: {resolveMegaPlusMove(p2Name, newPresetLeague)} •{' '}
+                              🔥 +3rd Move: {resolveMegaPlusMove(p2MegaForm || p2Name, newPresetLeague)} •{' '}
                               {p2PlusLevel <= 0
                                 ? 'Off (Not Unlocked)'
                                 : `Lv${p2PlusLevel} (${(1.0 + (p2PlusLevel - 1) * 0.1).toFixed(1)}x Power)`}
@@ -13776,11 +14252,81 @@ export default function App() {
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
                         />
                       </div>
-                      {resolveMegaPlusMove(p3Name, newPresetLeague) && (
+                      {(() => {
+                        const availMegas = getAvailableMegaFormsForSpecies(p3Name);
+                        if (availMegas.length === 0) return null;
+                        const activeMega = availMegas.find(
+                          (mf) => mf.toLowerCase() === (p3MegaForm || '').toLowerCase()
+                        );
+                        const estMegaCp = activeMega
+                          ? computeMegaFormCpFromBaseSlot(
+                              { name: p3Name, cp: p3Cp, ivs: p3Ivs, isBestBuddy: p3BestBuddy },
+                              activeMega,
+                              newPresetLeague
+                            )
+                          : null;
+                        const handlePickMega = (mf?: string) => {
+                          setP3MegaForm(mf);
+                          if (mf) {
+                            setP1MegaForm(undefined);
+                            setP2MegaForm(undefined);
+                          }
+                          if (isMegaOrPrimalSpecies(p3Name)) {
+                            const baseOnly = stripMegaOrPrimalToBaseName(p3Name);
+                            setP3Name(baseOnly);
+                            const baseRec = getRecommendedMovesForPokemon(baseOnly, newPresetLeague, p3Ivs, p3BestBuddy);
+                            if (baseRec?.cp) setP3Cp(baseRec.cp);
+                          }
+                        };
+                        return (
+                          <div className="px-2.5 py-1.5 rounded-lg bg-fuchsia-950/40 border border-fuchsia-500/40 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
+                              <span className={activeMega ? 'text-fuchsia-200' : 'text-purple-200'}>
+                                {activeMega
+                                  ? `${activeMega}${estMegaCp ? ` (CP ${estMegaCp} in Mega Pools)` : ''}`
+                                  : 'Mega / Primal in Mega Leagues: Off'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handlePickMega(undefined)}
+                                className={`py-1 px-2 rounded text-[10px] font-mono font-bold border transition ${
+                                  !activeMega
+                                    ? 'bg-slate-700 border-slate-400 text-white'
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                Off
+                              </button>
+                              {availMegas.map((mf) => {
+                                const isSel = activeMega?.toLowerCase() === mf.toLowerCase();
+                                const shortLbl = formatShortMegaVariantChipLabel(mf);
+                                const chipText = shortLbl === 'Mega' ? 'Mega Evo' : shortLbl;
+                                return (
+                                  <button
+                                    key={`p3-mega-${mf}`}
+                                    type="button"
+                                    onClick={() => handlePickMega(mf)}
+                                    className={`py-1 px-2 rounded text-[10px] font-mono font-bold border transition ${
+                                      isSel
+                                        ? 'bg-fuchsia-700 border-fuchsia-300 text-white shadow'
+                                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+                                    }`}
+                                  >
+                                    <MegaMetaText text={chipText} iconHeightPx={9.5} />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {resolveMegaPlusMove(p3MegaForm || p3Name, newPresetLeague) && (
                         <div className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/50 space-y-1.5">
                           <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
                             <span className={p3PlusLevel <= 0 ? 'text-slate-400' : 'text-purple-200'}>
-                              🔥 +3rd Move: {resolveMegaPlusMove(p3Name, newPresetLeague)} •{' '}
+                              🔥 +3rd Move: {resolveMegaPlusMove(p3MegaForm || p3Name, newPresetLeague)} •{' '}
                               {p3PlusLevel <= 0
                                 ? 'Off (Not Unlocked)'
                                 : `Lv${p3PlusLevel} (${(1.0 + (p3PlusLevel - 1) * 0.1).toFixed(1)}x Power)`}
@@ -19105,7 +19651,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.72 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.73 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

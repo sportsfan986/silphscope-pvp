@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.73',
+    codename: 'Multi-Meta Mega/Primal Slot Tracking, Live Mega Auto-Detection & Standard/Mega Auto-Merge',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Unifies Standard and Mega/Primal teams with per-slot Mega designations (max 1 per team), automatic Mega form/CP resolution across multi-meta pools, live Mega/Primal OCR auto-detection with a 1-tap HUD toggle, and a one-time idempotent Standard/Mega team auto-merge.',
+    icon: '🧬',
+    accentColor: '#E879F9',
+    highlights: [
+      'Added per-slot Mega/Primal picker chips (`megaFormName`) in Android & Web Team Editors with dynamic CP scaling, sprite switching, and per-meta simulation in both Standard (GL/UL/ML) and Mega (MGL/MUL/MML) pools',
+      'Wired live Mega/Primal auto-detection on CHOOSE YOUR PARTY and combat frames (up to 8000 CP, nameplate OCR, Super Mega + move buttons, Go banners, and Mega opponents) with a 1-tap Mega ON/OFF pill in overlay.html',
+      'Added an idempotent v7.73+ Standard/Mega team auto-merge migration on Android and Web plus trailing space-separated form sprite parsing (e.g. Dialga Origin)'
+    ]
+  },
+  {
     version: 'v7.72',
     codename: 'Direct In-App APK Downloads (/direct) & Full Android 2B Icon Suite',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Routes Android in-app updates straight to the signed APK via dl.silphscopepvp.com/direct and upgrades the unified 2B Split-Arc Duel Scope icon across the 0.84x launcher foreground, Android 13+ monochrome themed layer, full-scale in-app header logo, and notification bar.',
     icon: '🚀',

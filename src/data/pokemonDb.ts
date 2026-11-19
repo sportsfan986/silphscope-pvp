@@ -83,6 +83,7 @@ export interface TeamMember {
   plusMoveLevel?: number;
   isBestBuddy?: boolean;
   builtPokemonId?: string;
+  megaFormName?: string;
 }
 
 export interface BuiltPokemonEntry {
@@ -883,17 +884,210 @@ export function isMegaOrPrimalSpecies(name: string | undefined): boolean {
   );
 }
 
-export function countMegaOrPrimalInRoster(members: Array<{ name: string } | string>): number {
+export function countMegaOrPrimalInRoster(
+  members: Array<{ name: string; megaFormName?: string } | string>
+): number {
   let count = 0;
   for (const m of members || []) {
     const n = typeof m === "string" ? m : m?.name || "";
-    if (isMegaOrPrimalSpecies(n)) count++;
+    const mf = typeof m === "string" ? "" : m?.megaFormName || "";
+    if (isMegaOrPrimalSpecies(n) || Boolean(mf)) count++;
   }
   return count;
 }
 
-export function hasMultipleMegas(members: Array<{ name: string } | string>): boolean {
+export function hasMultipleMegas(
+  members: Array<{ name: string; megaFormName?: string } | string>
+): boolean {
   return countMegaOrPrimalInRoster(members) > 1;
+}
+
+const NON_MEGA_REGIONAL_ALT_TOKENS = [
+  "alolan",
+  "galarian",
+  "hisuian",
+  "paldean",
+  "origin",
+  "therian",
+  "crowned",
+  "apex",
+  "armored",
+  "dusk mane",
+  "dawn wings",
+  "complete",
+  "10%",
+  "unbound",
+  "confined",
+  "resolute",
+  "bloodmoon",
+  "hero",
+  "zen",
+  "ash",
+  "black",
+  "white"
+];
+
+export function stripMegaOrPrimalToBaseName(name: string | undefined): string {
+  let s = String(name || "").trim();
+  if (!s) return "";
+  s = s.replace(/\s*\((?:Mega(?:\s+[XY])?|Primal)\)\s*$/i, "").trim();
+  s = s.replace(/^Mega\s+(.+?)\s+([XY])$/i, "$1").trim();
+  s = s.replace(/^(?:Mega|Primal)\s+/i, "").trim();
+  return s;
+}
+
+export function canonicalizeMegaFormDisplayName(rawName: string | undefined): string {
+  const s = String(rawName || "").trim();
+  if (!s) return "";
+  const pMatch = s.match(/^(.+?)\s*\((Primal|Mega(?:\s+[XY])?)\)$/i);
+  if (pMatch) {
+    const base = pMatch[1].trim();
+    const formTok = pMatch[2].trim().toLowerCase();
+    const canonForm =
+      formTok === "primal"
+        ? "Primal"
+        : formTok.endsWith("x")
+        ? "Mega X"
+        : formTok.endsWith("y")
+        ? "Mega Y"
+        : "Mega";
+    return `${base} (${canonForm})`;
+  }
+  const megaXY = s.match(/^Mega\s+(.+?)\s+([XY])$/i);
+  if (megaXY) {
+    return `${megaXY[1].trim()} (Mega ${megaXY[2].toUpperCase()})`;
+  }
+  const megaPrefix = s.match(/^Mega\s+(.+)$/i);
+  if (megaPrefix) {
+    return `${megaPrefix[1].trim()} (Mega)`;
+  }
+  const primalPrefix = s.match(/^Primal\s+(.+)$/i);
+  if (primalPrefix) {
+    return `${primalPrefix[1].trim()} (Primal)`;
+  }
+  return s;
+}
+
+export function formatShortMegaVariantChipLabel(megaFormName: string | undefined): string {
+  const u = String(megaFormName || "").trim().toUpperCase();
+  if (u.includes("PRIMAL")) return "Primal";
+  if (/\bMEGA\s*X\b|_MEGA_X/.test(u)) return "Mega X";
+  if (/\bMEGA\s*Y\b|_MEGA_Y/.test(u)) return "Mega Y";
+  return "Mega";
+}
+
+export function formatCardMegaBadgeText(megaFormName: string | undefined, isActiveNow: boolean): string {
+  if (!megaFormName) return "";
+  if (isActiveNow) return "Mega Active";
+  const shortLbl = formatShortMegaVariantChipLabel(megaFormName);
+  if (shortLbl === "Primal") return "Mega Primal";
+  if (shortLbl === "Mega X") return "Mega X";
+  if (shortLbl === "Mega Y") return "Mega Y";
+  return "Mega Evo";
+}
+
+export function getAvailableMegaFormsForSpecies(speciesName: string | undefined): string[] {
+  const trimmed = String(speciesName || "").trim();
+  if (!trimmed || /\bshadow\b/i.test(trimmed)) return [];
+  const strippedLower = stripMegaOrPrimalToBaseName(trimmed).toLowerCase();
+  if (NON_MEGA_REGIONAL_ALT_TOKENS.some((tok) => strippedLower.includes(tok))) {
+    return [];
+  }
+  const baseKey = extractBaseSpeciesKey(strippedLower);
+  if (!baseKey) return [];
+
+  const seenIds = new Map<string, string>();
+  for (const p of Object.values(POKEMON_DATABASE)) {
+    const isMegaOrPrimal = isMegaOrPrimalSpecies(p.name) || isMegaOrPrimalSpecies(p.speciesId);
+    if (!isMegaOrPrimal) continue;
+    const pBase = extractBaseSpeciesKey(p.name, p.speciesId, p.baseSpecies);
+    if (pBase !== baseKey) continue;
+    const cleanId = (p.speciesId || "").toLowerCase().replace(/_shadow$/i, "");
+    if (!seenIds.has(cleanId)) {
+      seenIds.set(cleanId, canonicalizeMegaFormDisplayName(p.name));
+    }
+  }
+  return Array.from(seenIds.values()).sort();
+}
+
+export function computeMegaFormCpFromBaseSlot(
+  slot: Pick<TeamMember, "name" | "cp" | "ivs" | "isBestBuddy">,
+  megaFormName: string,
+  league: string
+): number {
+  const megaEntry = findPokemonByName(megaFormName);
+  if (!megaEntry) return slot.cp;
+  const baseEntry = findPokemonByName(slot.name);
+  const leagueCap = getLeagueCpCap(league);
+  if (baseEntry?.isRawBaseStats && megaEntry.isRawBaseStats && slot.cp >= 100) {
+    const ivs = parseIvTriplet(slot.ivs, league, baseEntry);
+    const uBaseAtk = Math.max(20, baseEntry.baseStats.atk + ivs[0]);
+    const uBaseDef = Math.max(20, baseEntry.baseStats.def + ivs[1]);
+    const uBaseHp = Math.max(20, baseEntry.baseStats.hp + ivs[2]);
+    const maxLvl = slot.isBestBuddy ? 51 : 50;
+    let bestCpm = 0.8403;
+    let bestDiff = Number.MAX_SAFE_INTEGER;
+    for (let lvl = maxLvl; lvl >= 1; lvl -= 0.5) {
+      const cpm = CPM_TABLE[lvl];
+      if (!cpm) continue;
+      const lvlCp = Math.max(10, Math.floor((uBaseAtk * Math.sqrt(uBaseDef * uBaseHp) * cpm * cpm) / 10));
+      const diff = Math.abs(lvlCp - slot.cp);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestCpm = cpm;
+        if (diff === 0) break;
+      }
+    }
+    if (bestDiff > 2 && !slot.isBestBuddy) {
+      for (const lvl of [51, 50.5]) {
+        const cpm = CPM_TABLE[lvl];
+        if (!cpm) continue;
+        const lvlCp = Math.max(10, Math.floor((uBaseAtk * Math.sqrt(uBaseDef * uBaseHp) * cpm * cpm) / 10));
+        const diff = Math.abs(lvlCp - slot.cp);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCpm = cpm;
+        }
+      }
+    }
+    const mAtk = Math.max(20, megaEntry.baseStats.atk + ivs[0]);
+    const mDef = Math.max(20, megaEntry.baseStats.def + ivs[1]);
+    const mHp = Math.max(20, megaEntry.baseStats.hp + ivs[2]);
+    const rawMegaCp = Math.max(10, Math.floor((mAtk * Math.sqrt(mDef * mHp) * bestCpm * bestCpm) / 10));
+    if (leagueCap >= 10000 || rawMegaCp <= leagueCap) {
+      return rawMegaCp;
+    }
+  }
+  const scaled = computeEffectiveStatsForLeague(
+    megaEntry,
+    league,
+    undefined,
+    slot.ivs,
+    false,
+    Boolean(slot.isBestBuddy)
+  );
+  return scaled.resolvedCp;
+}
+
+export function resolveEffectiveMemberForLeague(
+  slot: TeamMember,
+  league: string | undefined,
+  forceMegaActive?: boolean | null
+): TeamMember {
+  const megaName = slot?.megaFormName?.trim();
+  if (!megaName) return slot;
+  const megaActive =
+    forceMegaActive !== undefined && forceMegaActive !== null
+      ? forceMegaActive
+      : isMegaAllowedInLeague(league);
+  if (!megaActive) return slot;
+  const canonMega = canonicalizeMegaFormDisplayName(megaName);
+  const megaCp = computeMegaFormCpFromBaseSlot(slot, canonMega, league || "MASTER LEAGUE");
+  return {
+    ...slot,
+    name: canonMega,
+    cp: megaCp
+  };
 }
 
 export function isMegaAllowedInLeague(league: string | undefined): boolean {
@@ -3255,18 +3449,50 @@ export function lookupPokemonDex(nameOrId: string): number | undefined {
   );
 }
 
+export function buildAlternateMegaPrimalQueryName(cleanName: string): string {
+  const s = String(cleanName || "").trim();
+  if (!s) return "";
+  if (/^Mega\s+(.+?)(?:\s+([XY]))?$/i.test(s)) {
+    return s.replace(/^Mega\s+(.+?)(?:\s+([XY]))?$/i, (_, base, xy) =>
+      xy ? `${base.trim()} (Mega ${xy.toUpperCase()})` : `${base.trim()} (Mega)`
+    );
+  }
+  if (/^Primal\s+(.+)$/i.test(s)) {
+    return s.replace(/^Primal\s+(.+)$/i, (_, base) => `${base.trim()} (Primal)`);
+  }
+  if (/^(.+?)\s*\(Mega(?:\s+([XY]))?\)$/i.test(s)) {
+    return s.replace(/^(.+?)\s*\(Mega(?:\s+([XY]))?\)$/i, (_, base, xy) =>
+      xy ? `Mega ${base.trim()} ${xy.toUpperCase()}` : `Mega ${base.trim()}`
+    );
+  }
+  if (/^(.+?)\s*\(Primal\)$/i.test(s)) {
+    return s.replace(/^(.+?)\s*\(Primal\)$/i, (_, base) => `Primal ${base.trim()}`);
+  }
+  return "";
+}
+
 export function findPokemonByName(name: string): PokemonStats | undefined {
   if (!name) return undefined;
   const trimmed = name.trim();
-  const clean = trimmed.replace(/^Shadow\s+/i, "").trim();
+  const clean = trimmed.replace(/^Shadow\s+/i, "").replace(/\s*\(Shadow\)$/i, "").trim();
+  const altForm = buildAlternateMegaPrimalQueryName(clean);
+  const cleanLow = clean.toLowerCase();
+  const altLow = altForm.toLowerCase();
+  const noParenLow = cleanLow.replace(/[()]/g, "").replace(/\s+/g, " ").trim();
   return (
     POKEMON_DATABASE[trimmed] ||
     POKEMON_DATABASE[clean] ||
-    Object.values(POKEMON_DATABASE).find(
-      (p) =>
-        p.name.toLowerCase() === trimmed.toLowerCase() ||
-        p.name.toLowerCase() === clean.toLowerCase()
-    )
+    (altForm ? POKEMON_DATABASE[altForm] : undefined) ||
+    Object.values(POKEMON_DATABASE).find((p) => {
+      const pLow = p.name.toLowerCase();
+      return (
+        pLow === trimmed.toLowerCase() ||
+        pLow === cleanLow ||
+        (altLow && pLow === altLow) ||
+        pLow.replace(/[()]/g, "").replace(/\s+/g, " ").trim() === noParenLow ||
+        p.speciesId.toLowerCase() === cleanLow.replace(/\s+/g, "_")
+      );
+    })
   );
 }
 
@@ -6907,11 +7133,7 @@ export function getRecommendedMovesForPokemon(
     "keldeo": "Keldeo (Resolute)"
   };
   const cleanName = aliasMap[rawClean.toLowerCase()] || rawClean;
-  const megaAlt = /^Mega\s+(.+?)(?:\s+([XY]))?$/i.test(cleanName)
-    ? cleanName.replace(/^Mega\s+(.+?)(?:\s+([XY]))?$/i, (_, base, xy) => (xy ? `${base} (Mega ${xy.toUpperCase()})` : `${base} (Mega)`))
-    : /^(.+?)\s*\(Mega(?:\s+([XY]))?\)$/i.test(cleanName)
-    ? cleanName.replace(/^(.+?)\s*\(Mega(?:\s+([XY]))?\)$/i, (_, base, xy) => (xy ? `Mega ${base.trim()} ${xy.toUpperCase()}` : `Mega ${base.trim()}`))
-    : "";
+  const megaAlt = buildAlternateMegaPrimalQueryName(cleanName);
   const entries = Object.values(POKEMON_DATABASE);
 
   const exact =

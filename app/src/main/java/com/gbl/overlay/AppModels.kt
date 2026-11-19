@@ -15,7 +15,8 @@ data class PokemonSlot(
     val ivs: String? = null,
     val plusMoveLevel: Int? = 4,
     val isBestBuddy: Boolean? = null,
-    val builtPokemonId: String? = null
+    val builtPokemonId: String? = null,
+    val megaFormName: String? = null
 )
 
 data class BuiltPokemonEntry(

@@ -1,4 +1,4 @@
-import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, type MetaPoolBrSnapshot, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
+import { type FastMove, type TeamMember, type LeagueType, type OpponentObservedMovesInput, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, stripMegaOrPrimalToBaseName, resolveEffectiveMemberForLeague, type TeamPreset, type MetaPoolBrSnapshot, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
 import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr, registerCombatSimulatorMetaHooks } from "./combatSimulator";
 
 export interface BlendedSeasonMetaDistribution {
@@ -2478,8 +2478,12 @@ export function evaluateTeamPresetMetrics(
   const cachedBlendedMeta =
     typeof cachedBlendedMetaOrEndMs === "object" ? cachedBlendedMetaOrEndMs : undefined;
   const reorderSlots = reorderSlotsArg ?? false;
+  const activeLgNorm = normalizeLeagueName(preset.league || "GREAT LEAGUE");
+  const effectiveActivePokemon = preset.pokemon.map((m) =>
+    resolveEffectiveMemberForLeague(m, activeLgNorm)
+  );
 
-  const res = evaluateOrAutoOrderTeam(preset.pokemon, preset.league, {
+  const res = evaluateOrAutoOrderTeam(effectiveActivePokemon, preset.league, {
     reorderSlots,
     manualArchetypeOverride: reorderSlots
       ? undefined
@@ -2490,8 +2494,32 @@ export function evaluateTeamPresetMetrics(
     currentSeason,
     cachedBlendedMeta
   });
-  const finalMons = reorderSlots ? res.orderedPokemon : preset.pokemon;
-  const activeLgNorm = normalizeLeagueName(preset.league || "GREAT LEAGUE");
+  let finalMons: TeamMember[] = preset.pokemon;
+  if (reorderSlots) {
+    const canonicalPool = [...preset.pokemon];
+    const remapped: TeamMember[] = [];
+    for (const ord of res.orderedPokemon) {
+      const ordBase = stripMegaOrPrimalToBaseName(ord.name).toLowerCase();
+      const idx = canonicalPool.findIndex((cand) => {
+        if (cand.id && ord.id && cand.id === ord.id) return true;
+        if (stripMegaOrPrimalToBaseName(cand.name).toLowerCase() === ordBase) return true;
+        return (
+          Boolean(cand.megaFormName) &&
+          stripMegaOrPrimalToBaseName(cand.megaFormName).toLowerCase() === ordBase
+        );
+      });
+      if (idx >= 0) {
+        remapped.push(canonicalPool.splice(idx, 1)[0]);
+      } else if (canonicalPool.length > 0) {
+        remapped.push(canonicalPool.shift()!);
+      }
+    }
+    if (remapped.length === preset.pokemon.length) {
+      finalMons = remapped;
+    } else {
+      finalMons = res.orderedPokemon;
+    }
+  }
   const allAssignedNorms: string[] = [];
   const seenLg = new Set<string>();
   for (const rawLg of [activeLgNorm, ...(Array.isArray(preset.assignedLeagues) ? preset.assignedLeagues : [])]) {
@@ -2505,10 +2533,14 @@ export function evaluateTeamPresetMetrics(
   }
   const metaPoolMetrics: Record<string, MetaPoolBrSnapshot> = {};
   for (const lgNorm of allAssignedNorms) {
+    const poolMons =
+      lgNorm.toLowerCase() === activeLgNorm.toLowerCase()
+        ? effectiveActivePokemon
+        : finalMons.map((m) => resolveEffectiveMemberForLeague(m, lgNorm));
     const rPool =
       lgNorm.toLowerCase() === activeLgNorm.toLowerCase()
         ? res
-        : evaluateOrAutoOrderTeam(finalMons, lgNorm, {
+        : evaluateOrAutoOrderTeam(poolMons, lgNorm, {
             reorderSlots: false,
             manualArchetypeOverride: res.archetype,
             seasonBattleLogs,

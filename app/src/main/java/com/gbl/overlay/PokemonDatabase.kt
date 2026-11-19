@@ -1180,7 +1180,26 @@ internal object PokemonStaticData {
         PokemonMeta("Delphox (Mega)", "delphox_mega", "delphox", "Mega", listOf("fire", "psychic"), 4915, "Fire Spin", 3, "Blast Burn", "Psyshock", 50, 38, atk = 331.0, def = 235.0, hp = 181, glRank = 38, ulRank = 24, mlRank = 18, chargedMove3 = "Flame Charge", isRawBaseStats = true),
         PokemonMeta("Greninja (Mega)", "greninja_mega", "greninja", "Mega", listOf("water", "dark"), 3964, "Water Shuriken", 3, "Hydro Cannon", "Night Slash", 44, 34, atk = 299.0, def = 180.0, hp = 176, glRank = 8, ulRank = 6, mlRank = 16, chargedMove3 = "Brutal Swing", isRawBaseStats = true),
         PokemonMeta("Malamar (Mega)", "malamar_mega", "malamar", "Mega", listOf("dark", "psychic"), 3540, "Psywave", 1, "Foul Play", "Superpower", 36, 42, atk = 208.0, def = 222.0, hp = 200, glRank = 4, ulRank = 5, mlRank = 32, chargedMove3 = "Hyper Beam", isRawBaseStats = true),
-        PokemonMeta("Falinks (Mega)", "falinks_mega", "falinks", "Mega", listOf("fighting"), 3920, "Counter", 2, "Superpower", "Megahorn", 42, 48, atk = 267.0, def = 229.0, hp = 163, glRank = 18, ulRank = 15, mlRank = 42, chargedMove3 = "Brick Break", isRawBaseStats = true)
+        PokemonMeta("Falinks (Mega)", "falinks_mega", "falinks", "Mega", listOf("fighting"), 3920, "Counter", 2, "Superpower", "Megahorn", 42, 48, atk = 267.0, def = 229.0, hp = 163, glRank = 18, ulRank = 15, mlRank = 42, chargedMove3 = "Brick Break", isRawBaseStats = true),
+        // --- Core Mega & Primal Fallback Species (Overridden by PvPoke gamemaster.json when synced) ---
+        PokemonMeta("Kyogre (Primal)", "kyogre_primal", "kyogre", "Primal", listOf("water"), 6672, "Waterfall", 3, "Origin Pulse", "Surf", 56, 40, atk = 353.0, def = 268.0, hp = 218, glRank = 200, ulRank = 90, mlRank = 3, chargedMove3 = "Avalanche", isRawBaseStats = true),
+        PokemonMeta("Groudon (Primal)", "groudon_primal", "groudon", "Primal", listOf("ground", "fire"), 6672, "Mud Shot", 2, "Precipice Blades", "Fire Punch", 55, 26, atk = 353.0, def = 268.0, hp = 218, glRank = 180, ulRank = 80, mlRank = 2, chargedMove3 = "Earthquake", isRawBaseStats = true),
+        PokemonMeta("Rayquaza (Mega)", "rayquaza_mega", "rayquaza", "Mega", listOf("dragon", "flying"), 6458, "Dragon Tail", 3, "Breaking Swipe", "Dragon Ascent", 30, 52, atk = 377.0, def = 210.0, hp = 227, glRank = 220, ulRank = 110, mlRank = 1, chargedMove3 = "Outrage", isRawBaseStats = true),
+        PokemonMeta("Gyarados (Mega)", "gyarados_mega", "gyarados", "Mega", listOf("water", "dark"), 5332, "Dragon Breath", 1, "Aqua Tail", "Crunch", 28, 36, atk = 292.0, def = 247.0, hp = 216, glRank = 35, ulRank = 12, mlRank = 4, chargedMove3 = "Outrage", isRawBaseStats = true),
+        PokemonMeta("Garchomp (Mega)", "garchomp_mega", "garchomp", "Mega", listOf("dragon", "ground"), 6132, "Mud Shot", 2, "Earth Power", "Outrage", 48, 48, atk = 339.0, def = 222.0, hp = 239, glRank = 120, ulRank = 45, mlRank = 5, chargedMove3 = "Sand Tomb", isRawBaseStats = true),
+        PokemonMeta("Gardevoir (Mega)", "gardevoir_mega", "gardevoir", "Mega", listOf("psychic", "fairy"), 5101, "Charm", 3, "Triple Axel", "Shadow Ball", 38, 46, atk = 326.0, def = 229.0, hp = 169, glRank = 60, ulRank = 30, mlRank = 7, chargedMove3 = "Dazzling Gleam", isRawBaseStats = true),
+        PokemonMeta("Metagross (Mega)", "metagross_mega", "metagross", "Mega", listOf("steel", "psychic"), 5573, "Bullet Punch", 2, "Meteor Mash", "Earthquake", 48, 52, atk = 300.0, def = 289.0, hp = 190, glRank = 90, ulRank = 32, mlRank = 8, chargedMove3 = "Psychic", isRawBaseStats = true),
+        PokemonMeta("Swampert (Mega)", "swampert_mega", "swampert", "Mega", listOf("water", "ground"), 4975, "Mud Shot", 2, "Hydro Cannon", "Earthquake", 38, 52, atk = 283.0, def = 218.0, hp = 225, glRank = 18, ulRank = 10, mlRank = 9, chargedMove3 = "Sludge Wave", isRawBaseStats = true),
+        PokemonMeta("Tyranitar (Mega)", "tyranitar_mega", "tyranitar", "Mega", listOf("rock", "dark"), 6045, "Dragon Breath", 1, "Brutal Swing", "Stone Edge", 34, 48, atk = 309.0, def = 276.0, hp = 225, glRank = 80, ulRank = 25, mlRank = 10, chargedMove3 = "Crunch", isRawBaseStats = true),
+        PokemonMeta("Charizard (Mega X)", "charizard_mega_x", "charizard", "Mega X", listOf("fire", "dragon"), 4353, "Dragon Breath", 1, "Blast Burn", "Dragon Claw", 50, 34, atk = 273.0, def = 213.0, hp = 186, glRank = 22, ulRank = 14, mlRank = 32, chargedMove3 = "Fire Blast", isRawBaseStats = true),
+        PokemonMeta("Blastoise (Mega)", "blastoise_mega", "blastoise", "Mega", listOf("water"), 4455, "Rollout", 3, "Hydro Cannon", "Ice Beam", 44, 42, atk = 264.0, def = 237.0, hp = 188, glRank = 16, ulRank = 11, mlRank = 34, chargedMove3 = "Flash Cannon", isRawBaseStats = true),
+        PokemonMeta("Gengar (Mega)", "gengar_mega", "gengar", "Mega", listOf("ghost", "poison"), 4902, "Shadow Claw", 2, "Shadow Punch", "Shadow Ball", 32, 46, atk = 349.0, def = 199.0, hp = 155, glRank = 42, ulRank = 26, mlRank = 22, chargedMove3 = "Focus Blast", isRawBaseStats = true),
+        PokemonMeta("Scizor (Mega)", "scizor_mega", "scizor", "Mega", listOf("bug", "steel"), 4634, "Bullet Punch", 2, "Night Slash", "Iron Head", 32, 38, atk = 279.0, def = 250.0, hp = 172, glRank = 24, ulRank = 16, mlRank = 28, chargedMove3 = "Trailblaze", isRawBaseStats = true),
+        PokemonMeta("Gallade (Mega)", "gallade_mega", "gallade", "Mega", listOf("psychic", "fighting"), 5109, "Psycho Cut", 2, "Close Combat", "Leaf Blade", 48, 34, atk = 326.0, def = 230.0, hp = 169, glRank = 48, ulRank = 28, mlRank = 26, chargedMove3 = "Psychic", isRawBaseStats = true),
+        PokemonMeta("Latias (Mega)", "latias_mega", "latias", "Mega", listOf("dragon", "psychic"), 5428, "Dragon Breath", 1, "Outrage", "Psychic", 48, 42, atk = 289.0, def = 297.0, hp = 190, glRank = 30, ulRank = 14, mlRank = 14, chargedMove3 = "Thunder", isRawBaseStats = true),
+        PokemonMeta("Latios (Mega)", "latios_mega", "latios", "Mega", listOf("dragon", "psychic"), 5661, "Dragon Breath", 1, "Dragon Claw", "Psychic", 34, 42, atk = 335.0, def = 241.0, hp = 190, glRank = 70, ulRank = 35, mlRank = 16, chargedMove3 = "Luster Purge", isRawBaseStats = true),
+        PokemonMeta("Aggron (Mega)", "aggron_mega", "aggron", "Mega", listOf("steel"), 4844, "Dragon Tail", 3, "Heavy Slam", "Stone Edge", 38, 48, atk = 247.0, def = 331.0, hp = 172, glRank = 20, ulRank = 9, mlRank = 24, chargedMove3 = "Thunder", isRawBaseStats = true),
+        PokemonMeta("Audino (Mega)", "audino_mega", "audino", "Mega", listOf("normal", "fairy"), 2856, "Charge Beam", 3, "Body Slam", "Disarming Voice", 32, 38, atk = 147.0, def = 239.0, hp = 230, glRank = 3, ulRank = 20, mlRank = 140, chargedMove3 = "Hyper Beam", isRawBaseStats = true)
     )
 
     val FALLBACK_SPECIES_FAST_POOL: Map<String, List<String>> = mapOf(
@@ -2725,9 +2744,35 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
         return resolved
     }
 
+    val altFormQuery = when {
+        Regex("^Mega\\s+(.+?)\\s+([XY])$", RegexOption.IGNORE_CASE).matches(cleanNoShadow) ->
+            Regex("^Mega\\s+(.+?)\\s+([XY])$", RegexOption.IGNORE_CASE).replace(cleanNoShadow) { m ->
+                "${m.groupValues[1].trim()} (Mega ${m.groupValues[2].uppercase()})"
+            }
+        Regex("^Mega\\s+(.+)$", RegexOption.IGNORE_CASE).matches(cleanNoShadow) ->
+            Regex("^Mega\\s+(.+)$", RegexOption.IGNORE_CASE).replace(cleanNoShadow) { m ->
+                "${m.groupValues[1].trim()} (Mega)"
+            }
+        Regex("^Primal\\s+(.+)$", RegexOption.IGNORE_CASE).matches(cleanNoShadow) ->
+            Regex("^Primal\\s+(.+)$", RegexOption.IGNORE_CASE).replace(cleanNoShadow) { m ->
+                "${m.groupValues[1].trim()} (Primal)"
+            }
+        Regex("^(.+?)\\s*\\(Mega(?:\\s+([XY]))?\\)$", RegexOption.IGNORE_CASE).matches(cleanNoShadow) ->
+            Regex("^(.+?)\\s*\\(Mega(?:\\s+([XY]))?\\)$", RegexOption.IGNORE_CASE).replace(cleanNoShadow) { m ->
+                val xy = m.groupValues[2].uppercase()
+                if (xy.isNotEmpty()) "Mega ${m.groupValues[1].trim()} $xy" else "Mega ${m.groupValues[1].trim()}"
+            }
+        Regex("^(.+?)\\s*\\(Primal\\)$", RegexOption.IGNORE_CASE).matches(cleanNoShadow) ->
+            Regex("^(.+?)\\s*\\(Primal\\)$", RegexOption.IGNORE_CASE).replace(cleanNoShadow) { m ->
+                "Primal ${m.groupValues[1].trim()}"
+            }
+        else -> ""
+    }
+
     val exactByName = allMeta.find {
         it.name.equals(trimmed, ignoreCase = true) ||
             it.name.equals(cleanNoShadow, ignoreCase = true) ||
+            (altFormQuery.isNotEmpty() && it.name.equals(altFormQuery, ignoreCase = true)) ||
             (cleanNoShadow.contains("zygarde", ignoreCase = true) && cleanNoShadow.contains("complete", ignoreCase = true) && it.speciesId.equals("zygarde_complete", ignoreCase = true))
     }
     if (exactByName != null) {

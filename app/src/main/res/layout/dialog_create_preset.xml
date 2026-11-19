@@ -629,6 +629,35 @@
                         android:hint="Charged 2" />
                 </LinearLayout>
 
+                <!-- Slot 1 Mega / Primal in Mega Leagues Selector -->
+                <LinearLayout
+                    android:id="@+id/layout_p1_mega_toggle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="5dp"
+                    android:background="#2e1065"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="5dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/text_p1_mega_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Mega / Primal in Mega Leagues: Off"
+                        android:textColor="#e879f9"
+                        android:textStyle="bold"
+                        android:textSize="10sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <LinearLayout
+                        android:id="@+id/container_p1_mega_chips"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </LinearLayout>
+
                 <!-- Slot 1 Super Mega Plus Move Level Selector -->
                 <LinearLayout
                     android:id="@+id/layout_p1_plus_level"
@@ -965,6 +994,35 @@
                         android:hint="Charged 2" />
                 </LinearLayout>
 
+                <!-- Slot 2 Mega / Primal in Mega Leagues Selector -->
+                <LinearLayout
+                    android:id="@+id/layout_p2_mega_toggle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="5dp"
+                    android:background="#2e1065"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="5dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/text_p2_mega_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Mega / Primal in Mega Leagues: Off"
+                        android:textColor="#e879f9"
+                        android:textStyle="bold"
+                        android:textSize="10sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <LinearLayout
+                        android:id="@+id/container_p2_mega_chips"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </LinearLayout>
+
                 <!-- Slot 2 Super Mega Plus Move Level Selector -->
                 <LinearLayout
                     android:id="@+id/layout_p2_plus_level"
@@ -1298,6 +1356,35 @@
                         android:textColorHint="#94a3b8"
                         android:textSize="11.5sp"
                         android:hint="Charged 2" />
+                </LinearLayout>
+
+                <!-- Slot 3 Mega / Primal in Mega Leagues Selector -->
+                <LinearLayout
+                    android:id="@+id/layout_p3_mega_toggle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="5dp"
+                    android:background="#2e1065"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="5dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/text_p3_mega_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Mega / Primal in Mega Leagues: Off"
+                        android:textColor="#e879f9"
+                        android:textStyle="bold"
+                        android:textSize="10sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <LinearLayout
+                        android:id="@+id/container_p3_mega_chips"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
                 </LinearLayout>
 
                 <!-- Slot 3 Super Mega Plus Move Level Selector -->

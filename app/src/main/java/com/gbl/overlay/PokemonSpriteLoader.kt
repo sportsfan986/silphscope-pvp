@@ -397,6 +397,12 @@ object PokemonSpriteLoader {
                 if (parenMatch != null) {
                     remainder = parenMatch.groupValues[1].trim()
                     formTokens.add(parenMatch.groupValues[2].trim())
+                } else {
+                    val suffixFormMatch = Regex("^(.+?)\\s+(Alolan|Galarian|Hisuian|Paldean|Origin|Altered|Therian|Incarnate|Crowned|Armored|Complete|Black|White|Primal|Mega(?:\\s+[XY])?)$", RegexOption.IGNORE_CASE).matchEntire(remainder)
+                    if (suffixFormMatch != null) {
+                        remainder = suffixFormMatch.groupValues[1].trim()
+                        formTokens.add(suffixFormMatch.groupValues[2].trim())
+                    }
                 }
                 baseSlug = sanitizeAlnum(remainder)
                 val combinedRawForm = formTokens.joinToString("")

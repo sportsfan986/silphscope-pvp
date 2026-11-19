@@ -2,6 +2,15 @@
 
 ---
 
+## v7.73 (2026-11-19) — Multi-Meta Mega/Primal Slot Tracking, Live Mega Auto-Detection & Standard/Mega Auto-Merge
+*Feature & smart automation release (`v7.73`, `versionCode = 1773`) enabling unified Standard + Mega teams with per-slot Mega/Primal designations, live battle & Party-screen Mega auto-detection with a 1-tap HUD toggle, one-time idempotent Standard/Mega team auto-merging across accounts, and trailing form sprite resolution.*
+
+- **Per-Slot Mega/Primal Designation & Multi-Meta Form Switching (`AppModels.kt`, `pokemonDb.ts`, `teamAndMetaEngine.ts`, `MainActivity.kt`, `src/App.tsx`, `dialog_create_preset.xml`)**: Added canonical `megaFormName` tracking (max 1 Mega/Primal per trio) inside Edit Team on both Android and Web, resolving effective species forms, sprites, `+3rd Move` Super Mega rows, and scaled CPs dynamically across Standard (`GL`/`UL`/`ML`) and Mega (`MGL`/`MUL`/`MML`) pools while preserving canonical base team definitions.
+- **Live Mega Auto-Detection & 1-Tap HUD Toggle (`OverlayService.kt`, `overlay.html`, `PokemonDatabase.kt`)**: Added automatic Mega/Primal state detection on `"CHOOSE YOUR PARTY"` and live GBL combat via CP jump detection (supporting up to `8000 CP` for Lv50/51 Primal Kyogre & Mega Mewtwo), Mega/Primal nameplate OCR, `"Go, Primal/Mega ...!"` banners, Super Mega `+` move buttons, and Mega/Primal opponents, paired with a compact 1-tap `Mega ON` / `Mega OFF` pill in the floating HUD and automatic League/Mega League switching.
+- **One-Time Standard + Mega Team Auto-Merge Migration & Sprite Form Fix (`OverlayService.kt`, `src/App.tsx`, `PokemonSpriteLoader.kt`)**: Added an idempotent `v7.73+` migration on Android and Web (`gbl_v773_mega_std_merged_v1`) that merges duplicate Standard + Mega teams sharing the same 3 Pokémon and moveset, combines assigned metas and battle logs, tombstones merged duplicates cleanly in D1 Sync, and resolves trailing form names like `Dialga Origin` to Showdown sprites.
+
+---
+
 ## v7.72 (2026-11-18) — Direct In-App APK Downloads (`/direct`) & Full Android 2B Icon Suite
 *Release update & branding parity patch (`v7.72`, `versionCode = 1772`) routing Android's in-app updater directly to the latest signed `.apk` asset via `dl.silphscopepvp.com/direct` and upgrading the unified 2B Split-Arc Duel Scope icon across launcher, Pixel monochrome themed icons, in-app header, and foreground notification bar.*
 
