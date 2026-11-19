@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.64"
-        const val APP_VERSION_CODE = 1764
+        const val APP_VERSION = "7.70"
+        const val APP_VERSION_CODE = 1770
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -2424,7 +2424,8 @@ class OverlayService : LifecycleService() {
             val chargedMove4: String = "",
             val isRawBaseStats: Boolean = false,
             val defaultIvsGl: String = "1/15/15",
-            val defaultIvsUl: String = "1/15/15"
+            val defaultIvsUl: String = "1/15/15",
+            val dex: Int = 0
         )
 
         val RECOMMENDED_CHARGED_MOVES: Map<String, Triple<String, String, String>> get() = PokemonStaticData.RECOMMENDED_CHARGED_MOVES
@@ -2851,6 +2852,7 @@ class OverlayService : LifecycleService() {
 
         val LIVE_RANKINGS_MAP = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<String, PokemonRankingEntry>>()
         val DYNAMIC_MOVE_ID_TO_NAME = java.util.concurrent.ConcurrentHashMap<String, String>()
+        val DYNAMIC_SPECIES_DEX_MAP = java.util.concurrent.ConcurrentHashMap<String, Int>()
         val DYNAMIC_SHADOW_ELIGIBLE_KEYS: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         const val PVPOKE_OTA_REFRESH_TTL_MS: Long = 24L * 60L * 60L * 1000L
 

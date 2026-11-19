@@ -24,7 +24,7 @@ const LANGUAGE_SERVER_EXE =
   process.env.ANTIGRAVITY_AGENTAPI_EXE ||
   "C:/Users/Chris/AppData/Local/Programs/antigravity/resources/bin/language_server.exe";
 
-const ORCHESTRATOR_MODEL = "gemini-pro-orchestrator";
+const ORCHESTRATOR_MODEL = "gemini-pro-orchestrator-neon";
 const DIGEST_FRESH_MS = 4 * 60 * 60 * 1000;
 
 const CACHE_DIR = path.resolve(ROOT_DIR, ".aistudio", "telemetry_cache");
@@ -171,7 +171,7 @@ function buildDailyNewChatPrompt(digest, todayDate) {
     manualPreview,
     `- **Release Status**: ${unreleasedText}`,
     ``,
-    `## Mandatory Orchestrator Instructions (${ORCHESTRATOR_MODEL} — Orchestrator Carbon)`,
+    `## Mandatory Orchestrator Instructions (${ORCHESTRATOR_MODEL} — Orchestrator Neon)`,
     `1. **Read Cached Audit Outputs Only First (Plan Mode Read-Only)**: Read \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/morning_briefing.md\` and inspect targeted sections of \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/nightly_audit_digest.json\`. The 4:00 AM Stage 0 task has already synced Cloudflare, run the 7-day retroactive fix verification, and executed paid-tier pixel rescans (and the delayed Telegram summary sends separately at 6:00 AM)—do **NOT** re-run telemetry sync scripts or dump whole raw \`.mp4\` files. Note: \`write_file\` is blocked while Plan Mode is on—complete all read-only diagnosis first, then call \`exit_plan_mode\` so the execution model writes the issue document and runs Q&A.`,
     `2. **Delegate All Visual Image / Contact-Sheet OCR to Flash**: If any pre-rendered contact sheets or keyframes in \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/preprocessed/<battleId>/\` need visual inspection or text confirmation, delegate via \`invoke_subagent(TypeName: "research", Model: "flash")\`. Never inspect raw images directly in the planning context.`,
     `3. **Focused Root-Cause Diagnosis**: Diagnose open Stage 3 (\`Pro\`/\`VIP\` critical & user-flagged reports) plus up to \`${stage2Cap}\` Stage 2 items, reading only targeted preprocessed \`digest.json\`, frame windows of \`_deep_trace.jsonl\`, or specific Kotlin/TS functions needed to verify each root cause.`,

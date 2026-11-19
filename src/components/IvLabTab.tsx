@@ -46,6 +46,7 @@ import {
 } from "../data/gblData";
 import type { GblSeasonInfo, WebBattleLogEntry } from "./AppThemeAndModels";
 import { IvTripletInput, type IvTripletChangePayload } from "./IvTripletInput";
+import { PokemonSprite } from "./PokemonSprite";
 
 export interface IvLabTabProps {
   appCombatMode: AppCombatMode;
@@ -632,6 +633,7 @@ export function IvLabTab({
                   Target Species (Auto-Pins 🏆 Rank #1 Benchmark)
                 </label>
                 <div className="flex items-center gap-2">
+                  <PokemonSprite name={committedSpecies} size={28} />
                   <div className="relative flex-1">
                     <input
                       type="text"
@@ -667,8 +669,11 @@ export function IvLabTab({
                             }}
                             className="w-full px-3 py-2 text-left hover:bg-slate-800 flex items-center justify-between gap-2"
                           >
-                            <span className="text-xs font-bold text-white">{opt.name}</span>
-                            <span className="text-[10px] font-mono text-cyan-300">
+                            <span className="flex items-center gap-2 min-w-0">
+                              <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                              <span className="text-xs font-bold text-white truncate">{opt.name}</span>
+                            </span>
+                            <span className="text-[10px] font-mono text-cyan-300 shrink-0">
                               CP {opt.cp} • {opt.formBadge}
                             </span>
                           </button>
@@ -1992,8 +1997,11 @@ export function IvLabTab({
                         }}
                         className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center justify-between gap-2"
                       >
-                        <span className="text-xs font-bold text-white">{opt.name}</span>
-                        <span className="text-[10px] font-mono text-indigo-300">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                          <span className="text-xs font-bold text-white truncate">{opt.name}</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-indigo-300 shrink-0">
                           CP {opt.cp}
                         </span>
                       </button>
@@ -2180,7 +2188,7 @@ export function IvLabTab({
                   className="rounded-2xl border border-slate-800 bg-slate-900 p-3.5 space-y-2.5 shadow-lg"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-extrabold text-white truncate">
                           {formatSpeciesDisplayName(item.speciesName, item.isShadow)}
@@ -2210,6 +2218,12 @@ export function IvLabTab({
                         ) : null}
                       </div>
                     </div>
+                    <PokemonSprite
+                      name={item.speciesName}
+                      isShadow={item.isShadow}
+                      size={38}
+                      className="shrink-0 mt-0.5"
+                    />
                   </div>
 
                   <div className="text-[10.5px] text-slate-400 font-mono truncate">

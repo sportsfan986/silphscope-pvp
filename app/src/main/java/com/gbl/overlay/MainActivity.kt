@@ -947,6 +947,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyThemeRecursively(view: android.view.View, theme: AppThemePalette, hasWatermark: Boolean) {
+        if (view.tag == PokemonSpriteLoader.SPRITE_WIDGET_TAG) {
+            return
+        }
         if (view.id == R.id.view_swatch_bg ||
             view.id == R.id.view_swatch_surface ||
             view.id == R.id.view_swatch_accent ||
@@ -11065,6 +11068,8 @@ class MainActivity : AppCompatActivity() {
             val textArchetype = itemView.findViewById<TextView>(R.id.text_preset_archetype_badge)
             val textLeague = itemView.findViewById<TextView>(R.id.text_preset_league)
             val textMetricsBadges = itemView.findViewById<TextView>(R.id.text_preset_metrics_badges)
+            val containerTeamSprites = itemView.findViewById<LinearLayout>(R.id.container_preset_team_sprites)
+            val textSingleMetaSubline = itemView.findViewById<TextView>(R.id.text_preset_single_meta_subline)
             val containerMetaPools = itemView.findViewById<LinearLayout>(R.id.container_preset_meta_pools)
             val textPokemon = itemView.findViewById<TextView>(R.id.text_preset_pokemon)
             val radioSelected = itemView.findViewById<RadioButton>(R.id.radio_selected)
@@ -11180,13 +11185,28 @@ class MainActivity : AppCompatActivity() {
                 ""
             }
 
+            containerTeamSprites?.let { strip ->
+                strip.removeAllViews()
+                preset.pokemon.take(3).forEachIndexed { sIdx, slot ->
+                    val spriteView = PokemonSpriteLoader.createSpriteView(this, slot.name, 26)
+                    val lp = (spriteView.layoutParams as? LinearLayout.LayoutParams)
+                        ?: LinearLayout.LayoutParams((26 * density).toInt(), (26 * density).toInt())
+                    if (sIdx > 0) {
+                        lp.marginStart = (3 * density).toInt()
+                    }
+                    spriteView.layoutParams = lp
+                    strip.addView(spriteView)
+                }
+            }
+
             if (assignedMetas.size > 1 && containerMetaPools != null) {
+                textSingleMetaSubline?.visibility = android.view.View.GONE
                 val topLine = (wlPrefixHtml + sharedWeakBadge.removePrefix("  •  ")).removeSuffix("<br>")
-                if (topLine.isNotBlank()) {
-                    textMetricsBadges?.visibility = android.view.View.VISIBLE
-                    textMetricsBadges?.text = android.text.Html.fromHtml(topLine, android.text.Html.FROM_HTML_MODE_LEGACY)
+                textMetricsBadges?.visibility = android.view.View.VISIBLE
+                textMetricsBadges?.text = if (topLine.isNotBlank()) {
+                    android.text.Html.fromHtml(topLine, android.text.Html.FROM_HTML_MODE_LEGACY)
                 } else {
-                    textMetricsBadges?.visibility = android.view.View.GONE
+                    ""
                 }
                 containerMetaPools.visibility = android.view.View.VISIBLE
                 containerMetaPools.removeAllViews()
@@ -11252,13 +11272,16 @@ class MainActivity : AppCompatActivity() {
             } else {
                 containerMetaPools?.visibility = android.view.View.GONE
                 textMetricsBadges?.visibility = android.view.View.VISIBLE
-                val metricsHtml = wlPrefixHtml +
+                val topSingleHtml = wlPrefixHtml +
                     "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
-                    "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta<br>" +
+                    "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta"
+                textMetricsBadges?.text = android.text.Html.fromHtml(topSingleHtml.removeSuffix("<br>"), android.text.Html.FROM_HTML_MODE_LEGACY)
+                val subSingleHtml =
                     "Lead BR: <font color='$leadHex'>${preset.leadAggBr} ($leadTier)</font>  •  " +
                     "Swap BR: <font color='$swap2Hex'>#2 ${preset.safeSwapBr} ($swap2Tier)</font> / <font color='$swap3Hex'>#3 ${preset.closerSwapBr} ($swap3Tier)</font>  •  " +
                     "Closer BR: <font color='$closeHex'>${preset.closerBr} ($closeTier)</font>$sharedWeakBadge"
-                textMetricsBadges?.text = android.text.Html.fromHtml(metricsHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
+                textSingleMetaSubline?.visibility = android.view.View.VISIBLE
+                textSingleMetaSubline?.text = android.text.Html.fromHtml(subSingleHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
             }
 
             val roleLabels = when {
@@ -11616,16 +11639,47 @@ class MainActivity : AppCompatActivity() {
         override fun getItemId(position: Int): Long = position.toLong()
 
         override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup?): android.view.View {
-            val container = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setBackgroundColor(0xFF0F172A.toInt())
-                val padH = (12 * resources.displayMetrics.density).toInt()
-                val padV = (8 * resources.displayMetrics.density).toInt()
-                setPadding(padH, padV, padH, padV)
+            val density = resources.displayMetrics.density
+            val container: LinearLayout
+            val spriteBox: FrameLayout
+            val textCol: LinearLayout
+
+            val reused = convertView as? LinearLayout
+            if (reused != null &&
+                reused.orientation == LinearLayout.HORIZONTAL &&
+                reused.childCount == 2 &&
+                reused.getChildAt(0) is FrameLayout &&
+                reused.getChildAt(1) is LinearLayout
+            ) {
+                container = reused
+                spriteBox = reused.getChildAt(0) as FrameLayout
+                textCol = reused.getChildAt(1) as LinearLayout
+                textCol.removeAllViews()
+            } else {
+                container = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setBackgroundColor(0xFF0F172A.toInt())
+                    val padH = (12 * density).toInt()
+                    val padV = (8 * density).toInt()
+                    setPadding(padH, padV, padH, padV)
+                }
+                spriteBox = PokemonSpriteLoader.createSpriteView(this@MainActivity, "", 28).apply {
+                    val sz = (28 * density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(sz, sz).apply {
+                        marginEnd = (8 * density).toInt()
+                    }
+                }
+                textCol = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                container.addView(spriteBox)
+                container.addView(textCol)
             }
-            container.removeAllViews()
 
             val item = items[position]
+            PokemonSpriteLoader.bindSpriteView(spriteBox, item.name, 28, isShadowOverride = item.isShadow)
 
             val topRow = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -11660,8 +11714,8 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(0xFF94A3B8.toInt())
             }
 
-            container.addView(topRow)
-            container.addView(movesTv)
+            textCol.addView(topRow)
+            textCol.addView(movesTv)
             applyCurrentAppThemeToSubtree(container)
             return container
         }
@@ -17143,6 +17197,18 @@ class MainActivity : AppCompatActivity() {
                         val seenTag = if (core.logPairCount > 0) " • Seen ${core.logPairCount}x" else ""
                         val srcBadge = core.roleArchetype
 
+                        val coreSz = (20 * density).toInt()
+                        val spriteA = PokemonSpriteLoader.createSpriteView(this@MainActivity, core.monA, 20).apply {
+                            layoutParams = LinearLayout.LayoutParams(coreSz, coreSz).apply {
+                                marginEnd = (2 * density).toInt()
+                            }
+                        }
+                        val spriteB = PokemonSpriteLoader.createSpriteView(this@MainActivity, core.monB, 20).apply {
+                            layoutParams = LinearLayout.LayoutParams(coreSz, coreSz).apply {
+                                marginEnd = (6 * density).toInt()
+                            }
+                        }
+
                         val leftTv = TextView(this@MainActivity).apply {
                             text = "#${idx + 1}  ${core.monA}  +  ${core.monB}"
                             setTextColor(0xFFF8FAFC.toInt())
@@ -17162,6 +17228,8 @@ class MainActivity : AppCompatActivity() {
                             textSize = 10.5f
                             setTypeface(typeface, android.graphics.Typeface.BOLD)
                         }
+                        row.addView(spriteA)
+                        row.addView(spriteB)
                         row.addView(leftTv)
                         row.addView(rightTv)
                         coresContainer.addView(row)
@@ -17204,6 +17272,12 @@ class MainActivity : AppCompatActivity() {
                         val rankTag = if (pvpRank < 900) "PvP #$pvpRank" else "Unranked"
                         val seenTag = if (entry.logSeenCount > 0) " • Seen ${entry.logSeenCount}x" else ""
 
+                        val metaSz = (22 * density).toInt()
+                        val metaSprite = PokemonSpriteLoader.createSpriteView(this@MainActivity, entry.name, 22).apply {
+                            layoutParams = LinearLayout.LayoutParams(metaSz, metaSz).apply {
+                                marginEnd = (6 * density).toInt()
+                            }
+                        }
                         val leftTv = TextView(this@MainActivity).apply {
                             text = "#${idx + 1}  ${entry.name}  ($rankTag)"
                             setTextColor(0xFFF8FAFC.toInt())
@@ -17223,6 +17297,7 @@ class MainActivity : AppCompatActivity() {
                             textSize = 10f
                             setTypeface(typeface, android.graphics.Typeface.BOLD)
                         }
+                        row.addView(metaSprite)
                         row.addView(leftTv)
                         row.addView(rightTv)
                         pokemonContainer.addView(row)
@@ -18213,6 +18288,12 @@ class MainActivity : AppCompatActivity() {
                 refreshIvLabPageUi()
             }
         }
+        val targetSpriteView = PokemonSpriteLoader.createSpriteView(this, ivLabSpeciesName, 28).apply {
+            layoutParams = LinearLayout.LayoutParams(ivDp(28), ivDp(28)).apply {
+                setMargins(0, 0, ivDp(6), 0)
+            }
+        }
+        spInputRow.addView(targetSpriteView)
         spInputRow.addView(acSpecies)
         spInputRow.addView(btnApplySpecies)
         speciesCard.addView(spInputRow)
@@ -19777,10 +19858,23 @@ class MainActivity : AppCompatActivity() {
                 ).apply { setMargins(0, 0, 0, ivDp(8)) }
             }
 
+            val headerRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.TOP
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            val infoCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
             val displaySp = IvMatrixEngine.formatSpeciesDisplayName(entry.speciesName, entry.isShadow)
             val labelPill = entry.label?.takeIf { it.isNotBlank() }?.let { "  [$it]" } ?: ""
             val bbStr = if (entry.isBestBuddy) "  🎀 Lv51" else ""
-            card.addView(TextView(this).apply {
+            infoCol.addView(TextView(this).apply {
                 text = "$displaySp$labelPill$bbStr"
                 textSize = 13.5f
                 setTypeface(null, android.graphics.Typeface.BOLD)
@@ -19788,7 +19882,7 @@ class MainActivity : AppCompatActivity() {
             })
             val rankStr = entry.statProductRank?.let { "  •  R#$it (${String.format(java.util.Locale.US, "%.1f%%", entry.statProductPct ?: 100.0)})" } ?: ""
             val dispBuiltLg = OverlayService.formatLeagueDisplayLabelStatic(entry.league)
-            card.addView(TextView(this).apply {
+            infoCol.addView(TextView(this).apply {
                 text = "$dispBuiltLg  •  IVs ${entry.ivs}  •  CP ${entry.cp}  •  Lv ${formatIvLevelStr(entry.level)}$rankStr"
                 textSize = 11.5f
                 setTextColor(theme.accentColor)
@@ -19796,13 +19890,21 @@ class MainActivity : AppCompatActivity() {
             })
             val movesText = listOf(entry.fastMove, entry.chargedMove1, entry.chargedMove2).filter { it.isNotBlank() }.joinToString(" / ")
             if (movesText.isNotBlank()) {
-                card.addView(TextView(this).apply {
+                infoCol.addView(TextView(this).apply {
                     text = "Moves: $movesText"
                     textSize = 11f
                     setTextColor(theme.secondaryTextColor)
                     setPadding(0, 0, 0, ivDp(6))
                 })
             }
+            val builtSprite = PokemonSpriteLoader.createSpriteView(this, entry.speciesName, 36, isShadowOverride = entry.isShadow).apply {
+                layoutParams = LinearLayout.LayoutParams(ivDp(36), ivDp(36)).apply {
+                    setMargins(ivDp(8), ivDp(2), 0, 0)
+                }
+            }
+            headerRow.addView(infoCol)
+            headerRow.addView(builtSprite)
+            card.addView(headerRow)
 
             val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             btnRow.addView(Button(this).apply {

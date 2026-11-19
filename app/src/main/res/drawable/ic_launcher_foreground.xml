@@ -6,120 +6,126 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Hexagonal Shield Fill -->
-    <path
-        android:fillColor="#101827"
-        android:pathData="M54,23 L80,35.5 L80,63.5 L54,84.5 L28,63.5 L28,35.5 Z" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.78"
+        android:scaleY="0.78">
 
-    <!-- Hexagonal Shield Cyan-Blue Glowing Border -->
-    <path
-        android:pathData="M54,23 L80,35.5 L80,63.5 L54,84.5 L28,63.5 L28,35.5 Z"
-        android:strokeWidth="2.8"
-        android:strokeLineJoin="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="28"
-                android:startY="25"
-                android:endX="80"
-                android:endY="82"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#38BDF8" />
-                <item android:offset="0.55" android:color="#2563EB" />
-                <item android:offset="1.0" android:color="#1D4ED8" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        <!-- Dark Sapphire Optical Lens Base -->
+        <path
+            android:fillColor="#0B1526"
+            android:strokeColor="#1E293B"
+            android:strokeWidth="2"
+            android:pathData="M54,54m-36,0a36,36 0,1 1,72 0a36,36 0,1 1,-72 0" />
 
-    <!-- Gold Crossed Swords (X) at Top of Shield -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#F59E0B"
-        android:strokeWidth="2.2"
-        android:strokeLineCap="round"
-        android:pathData="M50,31.5 L58,39.5 M58,31.5 L50,39.5" />
-    <path
-        android:fillColor="#FBBF24"
-        android:pathData="M54,35.5m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0" />
+        <!-- Left Arc: Player Energy Gauge (Cyan to Blue) -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeWidth="5.2"
+            android:strokeLineCap="round"
+            android:pathData="M33,83.3 A36,36 0 0,1 38,21.8">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="25"
+                    android:startY="83"
+                    android:endX="38"
+                    android:endY="21"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#38BDF8" />
+                    <item android:offset="1.0" android:color="#2563EB" />
+                </gradient>
+            </aapt:attr>
+        </path>
 
-    <!-- 3x3 Battle Matrix Dots -->
-    <!-- Row 1: Green, Green, Red -->
-    <path
-        android:fillColor="#22C55E"
-        android:pathData="M45.5,45.5m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
-    <path
-        android:fillColor="#22C55E"
-        android:pathData="M54,45.5m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
-    <path
-        android:fillColor="#EF4444"
-        android:pathData="M62.5,45.5m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
+        <!-- Right Arc: Opponent Energy Gauge (Amber to Orange to Red) -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeWidth="5.2"
+            android:strokeLineCap="round"
+            android:pathData="M70,21.8 A36,36 0 0,1 77.5,81">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="70"
+                    android:startY="21"
+                    android:endX="78"
+                    android:endY="81"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FACC15" />
+                    <item android:offset="0.55" android:color="#F97316" />
+                    <item android:offset="1.0" android:color="#EF4444" />
+                </gradient>
+            </aapt:attr>
+        </path>
 
-    <!-- Row 2: Green, Red, Red -->
-    <path
-        android:fillColor="#22C55E"
-        android:pathData="M45.5,53.2m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
-    <path
-        android:fillColor="#EF4444"
-        android:pathData="M54,53.2m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
-    <path
-        android:fillColor="#EF4444"
-        android:pathData="M62.5,53.2m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
+        <!-- Top 12 o'clock Crown: Gold Crossed Swords + Glint + Flanking Pips -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FACC15"
+            android:strokeWidth="3"
+            android:strokeLineCap="round"
+            android:pathData="M47,14 L61,25 M61,14 L47,25" />
+        <path
+            android:fillColor="#FEF08A"
+            android:pathData="M54,19.5m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M40.5,19.5m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M67.5,19.5m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
 
-    <!-- Row 3: Sky Blue, Slate, Slate -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M45.5,60.9m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
-    <path
-        android:fillColor="#475569"
-        android:pathData="M54,60.9m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
-    <path
-        android:fillColor="#475569"
-        android:pathData="M62.5,60.9m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
+        <!-- Center 3x3 Matchup Matrix -->
+        <!-- Row 1: Green, Green, Red -->
+        <path
+            android:fillColor="#22C55E"
+            android:pathData="M39.8,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#22C55E"
+            android:pathData="M51.6,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M63.4,37.6 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
 
-    <!-- Bottom 5-Node Turn Timeline Connector Line -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#475569"
-        android:strokeWidth="1.6"
-        android:pathData="M35,73.5 L73,73.5" />
+        <!-- Row 2: Green, Red, Red -->
+        <path
+            android:fillColor="#22C55E"
+            android:pathData="M39.8,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M51.6,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M63.4,49.4 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
 
-    <!-- Node 1: Cyan -->
-    <path
-        android:fillColor="#0284C7"
-        android:strokeColor="#38BDF8"
-        android:strokeWidth="1.1"
-        android:pathData="M35,73.5m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
+        <!-- Row 3: Sky Blue, Slate, Slate -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M39.8,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#475569"
+            android:pathData="M51.6,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+        <path
+            android:fillColor="#475569"
+            android:pathData="M63.4,61.2 h4.8 a2.2,2.2 0 0,1 2.2,2.2 v4.8 a2.2,2.2 0 0,1 -2.2,2.2 h-4.8 a2.2,2.2 0 0,1 -2.2,-2.2 v-4.8 a2.2,2.2 0 0,1 2.2,-2.2 z" />
 
-    <!-- Node 2: Orange -->
-    <path
-        android:fillColor="#EA580C"
-        android:strokeColor="#FB923C"
-        android:strokeWidth="1.1"
-        android:pathData="M44.5,73.5m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
+        <!-- Bottom 6 o'clock Anchor Shield -->
+        <path
+            android:fillColor="#0E2038"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="1.6"
+            android:strokeLineJoin="round"
+            android:pathData="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" />
 
-    <!-- Node 3: Cyan -->
-    <path
-        android:fillColor="#0284C7"
-        android:strokeColor="#38BDF8"
-        android:strokeWidth="1.1"
-        android:pathData="M54,73.5m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
+        <!-- Red/White Catch Bullseye -->
+        <path
+            android:fillColor="#DC2626"
+            android:strokeColor="#FCA5A5"
+            android:strokeWidth="1.8"
+            android:pathData="M76.5,80.5m-5.4,0a5.4,5.4 0,1 1,10.8 0a5.4,5.4 0,1 1,-10.8 0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M76.5,80.5m-2.2,0a2.2,2.2 0,1 1,4.4 0a2.2,2.2 0,1 1,-4.4 0" />
 
-    <!-- Node 4: Red Catch Bullseye -->
-    <path
-        android:fillColor="#DC2626"
-        android:strokeColor="#FCA5A5"
-        android:strokeWidth="1.3"
-        android:pathData="M63.5,73.5m-4.1,0a4.1,4.1 0,1 1,8.2 0a4.1,4.1 0,1 1,-8.2 0" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M63.5,73.5m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
-
-    <!-- Node 5: Dark Emerald / Gold Ring -->
-    <path
-        android:fillColor="#064E3B"
-        android:strokeColor="#FBBF24"
-        android:strokeWidth="1.2"
-        android:pathData="M73,73.5m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
-    <path
-        android:fillColor="#FBBF24"
-        android:pathData="M72.1,72.2h1.8v2.6h-1.8z" />
+    </group>
 </vector>

@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+@keyframes pokemon-arena-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-arena-float {
+  animation: pokemon-arena-float 3.2s ease-in-out infinite;
+}
+
+.animate-arena-float-delayed {
+  animation: pokemon-arena-float 3.2s ease-in-out 1.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-arena-float,
+  .animate-arena-float-delayed {
+    animation: none;
+  }
+}

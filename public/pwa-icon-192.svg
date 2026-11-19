@@ -1,38 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="192" height="192">
   <defs>
-    <radialGradient id="dialgaBgGlow" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#19304E" />
-      <stop offset="65%" stop-color="#0E1B2E" />
-      <stop offset="100%" stop-color="#050B16" />
-    </radialGradient>
-    <filter id="dialgaTealGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
+    <linearGradient id="c2bPwa192L" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="c2bPwa192R" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FACC15" />
+      <stop offset="55%" stop-color="#F97316" />
+      <stop offset="100%" stop-color="#EF4444" />
+    </linearGradient>
   </defs>
-  <!-- App Icon Base -->
-  <rect width="192" height="192" rx="42" fill="url(#dialgaBgGlow)" />
-  <rect width="190" height="190" x="1" y="1" rx="41" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-opacity="0.35" />
-  
-  <!-- Outer Temporal Hexagon -->
-  <g transform="translate(96, 96) scale(4.4) translate(-18, -18)" filter="url(#dialgaTealGlow)">
-    <polygon
-      points="18,2 31,9 31,27 18,34 5,27 5,9"
-      fill="rgba(14, 27, 46, 0.95)"
-      stroke="#2DD4BF"
-      stroke-width="2.2"
-      stroke-linejoin="round"
-    />
-    <!-- Inner Astral Gold Hexagon Ring -->
-    <polygon
-      points="18,7 26,12 26,24 18,29 10,24 10,12"
-      fill="none"
-      stroke="#FACC15"
-      stroke-width="1.8"
-      stroke-linejoin="round"
-    />
-    <!-- Origin Core Jewel -->
-    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-    <circle cx="18" cy="18" r="1.8" fill="#FFFBEB" />
-  </g>
+  <rect width="108" height="108" rx="24" fill="#08101D" />
+  <rect width="106" height="106" x="1" y="1" rx="23" fill="none" stroke="#1E3A5F" stroke-width="1.2" />
+  <circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2" />
+  <path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#c2bPwa192L)" stroke-width="4.8" stroke-linecap="round" />
+  <path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#c2bPwa192R)" stroke-width="4.8" stroke-linecap="round" />
+  <path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round" />
+  <circle cx="54" cy="19.5" r="1.6" fill="#FEF08A" />
+  <circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8" />
+  <circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444" />
+  <rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E" />
+  <rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E" />
+  <rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444" />
+  <rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E" />
+  <rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444" />
+  <rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444" />
+  <rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8" />
+  <rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569" />
+  <rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569" />
+  <path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round" />
+  <circle cx="76.5" cy="80.5" r="5.4" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8" />
+  <circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF" />
 </svg>

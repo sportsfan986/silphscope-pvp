@@ -1158,30 +1158,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               onClick={() => onSelectSubpage('vault')}
               className="flex items-center gap-2.5 text-left group cursor-pointer"
             >
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center border shadow-lg transition-transform group-hover:scale-105"
-                style={{
-                  backgroundColor: '#0E1B2E',
-                  borderColor: '#2DD4BF',
-                  boxShadow: '0 0 18px rgba(45, 212, 191, 0.25)'
-                }}
-              >
-                <svg viewBox="0 0 36 36" className="w-7 h-7">
-                  <polygon
-                    points="18,2 31,9 31,27 18,34 5,27 5,9"
-                    fill="rgba(14, 27, 46, 0.9)"
-                    stroke="#2DD4BF"
-                    strokeWidth="2.2"
-                  />
-                  <polygon
-                    points="18,7 26,12 26,24 18,29 10,24 10,12"
-                    fill="none"
-                    stroke="#FACC15"
-                    strokeWidth="1.8"
-                  />
-                  <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-                </svg>
-              </div>
+              <img
+                src={`${import.meta.env.BASE_URL}favicon.svg`}
+                alt="SilphScope PvP Icon"
+                className="w-10 h-10 rounded-xl shadow-lg border border-sky-400/45 transition-transform group-hover:scale-105"
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-black text-base sm:text-lg tracking-tight text-white">
@@ -1195,7 +1176,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.64 • Latest Release
+                    v7.70 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1424,7 +1405,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.64)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.70)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -1601,6 +1582,91 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <div className="font-extrabold text-amber-300">{activeHero.label}</div>
                   <p className="text-[11.5px] text-slate-300 leading-snug">{activeHero.caption}</p>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 1.5. 100% TOS-SAFE & BAN-PROOF GUARANTEE */}
+          <section
+            className="rounded-3xl p-6 sm:p-8 border space-y-6"
+            style={{
+              backgroundColor: '#07101E',
+              borderColor: 'rgba(45, 212, 191, 0.35)',
+              boxShadow: '0 0 30px rgba(45, 212, 191, 0.08)'
+            }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-teal-300">
+                  <span>🛡️ Verified Fair Play &amp; Safety</span>
+                  <span>•</span>
+                  <span className="text-amber-300">Poke Genie &amp; Calcy IV Compatible Architecture</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white mt-1">
+                  100% TOS-Safe &amp; Ban-Proof Guarantee
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl leading-relaxed">
+                  Your account safety is paramount. SilphScope PvP was engineered from day one to operate exclusively as a passive, non-intrusive battle aid that strictly respects Niantic Terms of Service.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="https://dl.silphscopepvp.com"
+                  className="px-4 py-2.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-md hover:brightness-110"
+                  style={{ backgroundColor: '#2DD4BF', color: '#042F2E' }}
+                >
+                  <span>📱</span>
+                  <span>Download APK (v7.70)</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onLaunchWebApp('presets')}
+                  className="px-4 py-2.5 rounded-xl font-black text-xs border border-amber-400/50 text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 transition cursor-pointer"
+                >
+                  🌐 Try Web Demo First
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-400/15 border border-teal-400/40 text-teal-300 text-lg flex items-center justify-center">
+                  🛡️
+                </div>
+                <h3 className="font-black text-sm text-white">Zero Game Injection</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Never touches Pokémon GO&apos;s code, memory, or game files. Operates as an independent OS overlay without interacting with game servers.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-400/15 border border-teal-400/40 text-teal-300 text-lg flex items-center justify-center">
+                  👁️
+                </div>
+                <h3 className="font-black text-sm text-white">Screen Pixels Only</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Uses standard Android <code className="text-teal-300">MediaProjection</code> to read screen pixels—the exact same passive visual technology used safely by Poke Genie and Calcy IV since 2016.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-300 text-lg flex items-center justify-center">
+                  🚫
+                </div>
+                <h3 className="font-black text-sm text-white">No Automation or GPS</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Zero macros, zero screen tapping, and zero GPS spoofing. It does not play the battle for you; it only provides tactical combat telemetry.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-cyan-400/15 border border-cyan-400/40 text-cyan-300 text-lg flex items-center justify-center">
+                  🌐
+                </div>
+                <h3 className="font-black text-sm text-white">Zero-Install Web Sim</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Hesitant to install an APK? Experience full turn-pacing, team building, and combat calculations directly in your mobile browser with zero downloads.
+                </p>
               </div>
             </div>
           </section>
@@ -3634,16 +3700,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center border shadow-md"
-                  style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
-                >
-                  <svg viewBox="0 0 36 36" className="w-7 h-7">
-                    <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" strokeWidth="2.2" />
-                    <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" strokeWidth="1.8" />
-                    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-                  </svg>
-                </div>
+                <img
+                  src={`${import.meta.env.BASE_URL}favicon.svg`}
+                  alt="SilphScope PvP Icon"
+                  className="w-10 h-10 rounded-xl shadow-md border border-sky-400/45"
+                />
                 <div>
                   <h3 className="font-black text-base text-white">Install SilphScope DVR</h3>
                   <p className="text-xs text-slate-300">Full-Screen DVR Vault &amp; Secondary Screen HUD</p>

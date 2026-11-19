@@ -3044,6 +3044,7 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                     val obj = el.asJsonObject
                     val speciesId = obj.optString("speciesId")?.takeIf { it.isNotBlank() } ?: continue
                     val existingStatic = existingById[speciesId.lowercase()]
+                    val dexNum: Int = obj.optInt("dex") ?: (existingStatic?.dex ?: 0)
 
                     val rawSpeciesName = obj.optString("speciesName")?.takeIf { it.isNotBlank() } ?: continue
                     val idLowerRaw = speciesId.trim().lowercase()
@@ -3228,6 +3229,15 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                     val c3Name = if (c3Id.isNotBlank()) formatMoveIdDisplay(c3Id) else ""
                     val c4Name = if (c4Id.isNotBlank()) formatMoveIdDisplay(c4Id) else ""
 
+                    if (dexNum > 0) {
+                        val cleanNameKey = speciesName.lowercase().removePrefix("shadow ").trim()
+                        val idNoShadow = speciesId.lowercase().removeSuffix("_shadow")
+                        DYNAMIC_SPECIES_DEX_MAP[speciesId.lowercase()] = dexNum
+                        DYNAMIC_SPECIES_DEX_MAP[idNoShadow] = dexNum
+                        DYNAMIC_SPECIES_DEX_MAP[cleanNameKey] = dexNum
+                        DYNAMIC_SPECIES_DEX_MAP[baseSpecies.lowercase()] = dexNum
+                    }
+
                     val baseMeta = PokemonMeta(
                         name = existingStatic?.name ?: speciesName,
                         speciesId = speciesId,
@@ -3249,7 +3259,8 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                         chargedMove4 = c4Name,
                         isRawBaseStats = true,
                         defaultIvsGl = defaultIvsGl,
-                        defaultIvsUl = defaultIvsUl
+                        defaultIvsUl = defaultIvsUl,
+                        dex = dexNum
                     )
                     parsedList.add(applyRecommendedMoves(baseMeta))
                 } catch (_: Exception) {}

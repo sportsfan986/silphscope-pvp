@@ -21,8 +21,8 @@ android {
         // devices and enforces modern foreground-service / PendingIntent security boundaries.
         minSdk = 31
         targetSdk = 35
-        versionCode = 1764
-        versionName = "7.64"
+        versionCode = 1770
+        versionName = "7.70"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -97,6 +97,7 @@ dependencies {
     // OkHttp & Gson for PvPoke gamemaster.json fetch and local cache parsing
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.11.0")
+    implementation("io.coil-kt:coil:2.7.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

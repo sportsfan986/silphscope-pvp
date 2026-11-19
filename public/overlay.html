@@ -660,6 +660,12 @@
             transform: none;
         }
 
+        .hud-btn.btn-battle-log {
+            background: rgba(16, 185, 129, 0.28);
+            border-color: rgba(52, 211, 153, 0.72);
+            color: #d1fae5;
+        }
+
         /* 3v3 Matchup Matrix (Full Opponent Names) */
         .matrix-container {
             background: rgba(var(--panel-bg-rgb), var(--subpanel-bg-alpha));
@@ -1584,6 +1590,18 @@
             background: rgba(3, 105, 161, 0.45);
             color: #7dd3fc;
         }
+        .idle-battle-log-badge {
+            padding: 0.5px 4px;
+            border-radius: 3px;
+            font-size: 6.8px;
+            font-weight: 900;
+            letter-spacing: 0.2px;
+            cursor: pointer;
+            border: 1px solid rgba(52, 211, 153, 0.65);
+            background: rgba(6, 78, 59, 0.68);
+            color: #6ee7b7;
+            flex-shrink: 0;
+        }
         .idle-team-line2 {
             display: flex;
             align-items: center;
@@ -1612,6 +1630,58 @@
             border-color: var(--primary-accent-hex, #2dd4bf);
             color: #ffffff;
             font-weight: 900;
+        }
+        .idle-auto-team-btn {
+            flex: 0 0 auto;
+            padding: 1.5px 4.5px;
+            border-radius: 3px;
+            font-size: 7px;
+            font-weight: 900;
+            letter-spacing: 0.2px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .idle-auto-team-btn.on {
+            border: 1px solid rgba(45, 212, 191, 0.72);
+            background: rgba(13, 148, 136, 0.34);
+            color: #5eead4;
+        }
+        .idle-auto-team-btn.scanning {
+            border: 1px solid rgba(250, 204, 21, 0.82);
+            background: rgba(161, 98, 7, 0.38);
+            color: #fde047;
+        }
+        .idle-auto-team-btn.off {
+            border: 1px solid rgba(100, 116, 139, 0.42);
+            background: rgba(15, 23, 42, 0.65);
+            color: #94a3b8;
+        }
+        .idle-party-preview-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 4px;
+            margin-top: 1.5px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 7.4px;
+            font-weight: 800;
+        }
+        .idle-party-preview-row.preview-match {
+            border: 1px solid rgba(45, 212, 191, 0.68);
+            background: rgba(13, 148, 136, 0.28);
+        }
+        .idle-party-preview-row.preview-active {
+            border: 1px solid rgba(52, 211, 153, 0.42);
+            background: rgba(6, 78, 59, 0.28);
+        }
+        .idle-party-preview-row.preview-unmatched {
+            border: 1px solid rgba(148, 163, 184, 0.42);
+            background: rgba(30, 41, 59, 0.55);
+        }
+        .idle-party-preview-row.preview-locked {
+            border: 1px solid rgba(52, 211, 153, 0.85);
+            background: rgba(6, 78, 59, 0.50);
         }
 
         .compact-pacing-strip {
@@ -1643,7 +1713,7 @@
                 onpointercancel="cancelMinimizeHold(event)"
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
-                title="Tap: Switch between Full ↔ Compact HUD • Hold 2s: Toggle Log-Only Stealth Mode">⚔️</button>
+                title="Tap: Switch between Full ↔ Compact HUD • Hold 2s: Toggle Log-Only Stealth Mode"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="13" height="13" style="width:13px;height:13px;display:inline-block;vertical-align:middle;flex-shrink:0;"><defs><linearGradient id="ss2bL_init" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#2563EB"/></linearGradient><linearGradient id="ss2bR_init" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FACC15"/><stop offset="55%" stop-color="#F97316"/><stop offset="100%" stop-color="#EF4444"/></linearGradient></defs><circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2"/><path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#ss2bL_init)" stroke-width="6.2" stroke-linecap="round"/><path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#ss2bR_init)" stroke-width="6.2" stroke-linecap="round"/><path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/><circle cx="54" cy="19.5" r="1.6" fill="#FEF08A"/><circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8"/><circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444"/><rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8"/><rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/><rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/><path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round"/><circle cx="76.5" cy="80.5" r="6.6" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8"/><circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF"/></svg></button>
             <span id="sky-top-opp-shad-pill" class="compact-shad-pill hidden" style="margin-left:1px;" title="Opponent Verified Shadow Status"></span>
             <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge ocr-inactive" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">OCR:---/---ms</span>
             <div class="header-badges-cluster">
@@ -1694,6 +1764,9 @@
                 </button>
                 <button id="btn-cycle-form" class="hud-btn btn-form disabled" onclick="cycleForm()" disabled title="Cycle regional or alternate form">
                     <span class="btn-row-top">Form:</span><span class="btn-row-sub">Base</span>
+                </button>
+                <button id="btn-idle-battle-log" type="button" class="hud-btn btn-battle-log hidden" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open SilphScope Battle Log">
+                    <span class="btn-row-top">📊 Battle</span><span class="btn-row-sub">Log</span>
                 </button>
                 <button id="btn-dvr-rec-one" class="hud-btn btn-dvr hidden" onclick="toggleArmOneBattleDvr()" title="Arm 1-Battle Full-Screen MP4 Video + Deep Frame Log (Auto-uploads & disarms after 1 battle)">
                     <span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>
@@ -1811,6 +1884,7 @@
                     </div>
                     <div class="section-header-line2">
                         <span id="sky-opp-fastmove" style="color:var(--secondary-accent-hex); font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;">—</span>
+                        <span id="sky-opp-bp-pill" style="display:none; flex-shrink:0;"></span>
                         <span id="sky-opp-atk-energy-pill" class="energy-slot-pill building" style="margin-left:2px; flex-shrink:0;" title="Opponent Active Pokémon Energy">0E</span>
                     </div>
                 </div>
@@ -1838,6 +1912,7 @@
                     </div>
                     <div class="section-header-line2">
                         <span id="sky-my-short" style="color:#38bdf8; font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;">Lead</span>
+                        <span id="sky-my-bp-pill" style="display:none; flex-shrink:0;"></span>
                         <span id="sky-my-atk-energy-pill" class="energy-slot-pill building" style="margin-left:2px; flex-shrink:0;" title="Your Active Pokémon Energy">0E</span>
                     </div>
                 </div>
@@ -1879,6 +1954,7 @@
             </div>
             <div style="display: flex; gap: 3px; align-items: center; margin-left: auto;">
                 <button id="btn-horizon-start-battle" class="hud-btn btn-battle" onclick="handleBattleButtonClick()" style="padding:1px 4px; font-size:8.5px;">⚔️ Start Battle</button>
+                <button id="btn-horizon-battle-log" type="button" class="hud-btn btn-battle-log hidden" onclick="stopOverlayAndGoToBattleLog()" style="padding:1px 4px; font-size:8.5px;" title="Stop overlay and open Battle Log">📊 Log</button>
             </div>
         </div>
         <div class="horizon-grid" style="font-size: 9px; color: #fdba74; margin-top:2px;">
@@ -2257,6 +2333,42 @@
         let activeOverlayThemeId = "dialga_shiny_midnight";
         let showOverlayWatermark = window.location.search.indexOf("replay=1") !== -1;
 
+        function getUnifiedSilphScopeIconSvg(sizePx) {
+            const s = sizePx || 13;
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${s}" height="${s}" style="width:${s}px;height:${s}px;display:inline-block;vertical-align:middle;flex-shrink:0;">
+                <defs>
+                    <linearGradient id="ss2bL" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#38BDF8"/>
+                        <stop offset="100%" stop-color="#2563EB"/>
+                    </linearGradient>
+                    <linearGradient id="ss2bR" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#FACC15"/>
+                        <stop offset="55%" stop-color="#F97316"/>
+                        <stop offset="100%" stop-color="#EF4444"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2"/>
+                <path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#ss2bL)" stroke-width="6.2" stroke-linecap="round"/>
+                <path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#ss2bR)" stroke-width="6.2" stroke-linecap="round"/>
+                <path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="54" cy="19.5" r="1.6" fill="#FEF08A"/>
+                <circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8"/>
+                <circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444"/>
+                <rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/>
+                <rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/>
+                <rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                <rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/>
+                <rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                <rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                <rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8"/>
+                <rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/>
+                <rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/>
+                <path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round"/>
+                <circle cx="76.5" cy="80.5" r="6.6" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8"/>
+                <circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF"/>
+            </svg>`;
+        }
+
         function getOverlayThemeIconSvg(themeId, sizePx) {
             const mappedId = (themeId === "amoled_cyan" || themeId === "amoled_matrix") ? "dialga_shiny_midnight" : themeId;
             const t = OVERLAY_THEME_PRESETS[mappedId] || OVERLAY_THEME_PRESETS["dialga_shiny_midnight"];
@@ -2339,7 +2451,7 @@
                 const myShortEl = document.getElementById("sky-my-short");
                 if (myShortEl) myShortEl.style.color = t.accentHex;
                 const minBtn = document.getElementById("btn-minimize-sword");
-                if (minBtn) minBtn.innerHTML = getOverlayThemeIconSvg(activeOverlayThemeId, 13);
+                if (minBtn) minBtn.innerHTML = getUnifiedSilphScopeIconSvg(13);
                 refreshOverlayWatermarkUi();
                 updateBattleButtonUi();
             } catch (e) {}
@@ -3090,6 +3202,34 @@
             }
         }
 
+        function toggleAutoTeamScanHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.toggleAutoTeamScan) {
+                window.AndroidOverlay.toggleAutoTeamScan();
+            }
+        }
+
+        function confirmDetectedPartyHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.confirmDetectedPartyPreset) {
+                window.AndroidOverlay.confirmDetectedPartyPreset();
+            }
+        }
+
+        function dismissDetectedPartyHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.dismissDetectedPartyPreview) {
+                window.AndroidOverlay.dismissDetectedPartyPreview();
+            }
+        }
+
+        function cycleActivePresetMetaHud(ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (window.AndroidOverlay && window.AndroidOverlay.cycleActivePresetMeta) {
+                window.AndroidOverlay.cycleActivePresetMeta();
+            }
+        }
+
         function deleteLastBattleDvrPrompt(explicitBattleId) {
             const bId = explicitBattleId !== undefined
                 ? explicitBattleId
@@ -3449,9 +3589,18 @@
                     }
                 }
 
-                // Update Form Cycle Button (2-row stacked + verified ✓ / locked 🔒 provenance)
+                // Update Form Cycle Button (2-row stacked + verified ✓ / locked 🔒 provenance) vs. Idle Battle Log Button
+                const isLiveBattleNow = !!battleData.isBattleActive;
+                const showIdleBattleLogBtn = !isReplay && !isLiveBattleNow;
                 const formBtn = document.getElementById("btn-cycle-form");
+                const idleLogBtn = document.getElementById("btn-idle-battle-log");
+                const horizLogBtn = document.getElementById("btn-horizon-battle-log");
                 if (formBtn) {
+                    if (showIdleBattleLogBtn) {
+                        formBtn.classList.add("hidden");
+                    } else {
+                        formBtn.classList.remove("hidden");
+                    }
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
                     const isFormLocked = !!battleData.oppFormLocked;
@@ -3470,6 +3619,12 @@
                         formBtn.classList.add("disabled");
                         formBtn.title = "Cycle regional or alternate form";
                     }
+                }
+                if (idleLogBtn) {
+                    idleLogBtn.classList.toggle("hidden", !showIdleBattleLogBtn);
+                }
+                if (horizLogBtn) {
+                    horizLogBtn.classList.toggle("hidden", !showIdleBattleLogBtn);
                 }
 
                 updateLeadMatchupButtonUi();
@@ -3931,16 +4086,21 @@
             const userFastTelemetry = hpTrackingEnabled ? String(rawUserFastTelemetry).replace(/\/\d+%$/, "") : rawUserFastTelemetry;
             if (myShortEl) {
                 const myHpSuffix = hpTrackingEnabled ? ` ${activeUserHpVal}%` : "";
+                const myHtml = isWaitingState
+                    ? `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)}`
+                    : `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)} · ${escapeHtml(userFastTelemetry)}`;
+                setHtmlIfChanged(myShortEl, myHtml);
+            }
+            const myBpPillEl = document.getElementById("sky-my-bp-pill");
+            if (myBpPillEl) {
                 const myBpDelta = Number(battleData.liveMyBpDeltaHp) || 0;
                 const myBpHtml = !isWaitingState && myBpDelta !== 0
                     ? (myBpDelta > 0
                         ? `<span class="bp-micro-pill bp-pos" title="Live Attack Breakpoint: +${myBpDelta} HP/hit vs Opp IVs">⚡BP+${myBpDelta}</span>`
                         : `<span class="bp-micro-pill bp-blk" title="Opp Bulkpoint holds: ${myBpDelta} HP/hit vs standard">🛡️BLK${myBpDelta}</span>`)
                     : "";
-                const myHtml = isWaitingState
-                    ? `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)}`
-                    : `${escapeHtml(my3Letter)}${escapeHtml(myHpSuffix)} · ${escapeHtml(userFastTelemetry)}${myBpHtml}`;
-                setHtmlIfChanged(myShortEl, myHtml);
+                myBpPillEl.style.display = myBpHtml ? "inline-flex" : "none";
+                setHtmlIfChanged(myBpPillEl, myBpHtml);
             }
 
             const dvrBtnEl = document.getElementById("btn-dvr-rec-one");
@@ -3987,11 +4147,18 @@
             const guidedRemSec = eloState && typeof eloState.guidedRemainingSec === "number" ? eloState.guidedRemainingSec : 0;
             const confirmTextVal = eloState && eloState.confirmBannerText ? String(eloState.confirmBannerText).trim() : "";
             const promptDueVal = !!(eloState && eloState.promptDue) && !startBattleMenuOpen;
+            const partyState = (!isReplay && battleData && battleData.partyScanState) ? battleData.partyScanState : null;
 
             if (isWaitingState) {
                 if (idleTeamBannerEl) {
+                    const wasIdleBannerHidden = idleTeamBannerEl.classList.contains("hidden");
                     idleTeamBannerEl.classList.remove("hidden");
                     const isCompactNow = isReplay ? (window.replayHudMode === "compact") : (window.liveHudMode === "compact");
+                    const cfgIdle = window.compactHudConfig || {};
+                    const showCompactFallbackLogBtn = !isReplay && isCompactNow && cfgIdle.toolbarMode === "hidden";
+                    const compactLogPillHtml = showCompactFallbackLogBtn
+                        ? `<button type="button" class="idle-battle-log-badge" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">📊 LOG</button>`
+                        : "";
                     const hudBadgeText = isCompactNow ? "📐 COMPACT HUD" : "📐 FULL HUD";
                     const hudBadgeTitle = isCompactNow
                         ? "Compact HUD Active (Tap to switch to Full HUD)"
@@ -4012,16 +4179,49 @@
                         const prefix = isActLead ? "★ " : "";
                         return `<span class="idle-poke-pill ${isActLead ? 'active-lead' : ''}" onclick="selectUserPokemonByIndex(${mIdx})" title="${isActLead ? 'Active Lead: ' : 'Tap to set as Lead: '}${escapeHtml(fullName)}">${prefix}${escapeHtml(fullName)}</span>`;
                     }).join("");
-                    setHtmlIfChanged(idleTeamBannerEl, `
+                    const autoPartyOn = partyState ? !!partyState.autoEnabled : true;
+                    const forcePartyScan = !!(partyState && partyState.forceScanActive);
+                    const autoBtnCls = forcePartyScan ? "scanning" : (autoPartyOn ? "on" : "off");
+                    const autoBtnLabel = forcePartyScan ? "🔍 Scan…" : (autoPartyOn ? "🔍 Auto" : "🔍 Off");
+                    const autoTeamBtnHtml = !isReplay
+                        ? `<button type="button" class="idle-auto-team-btn ${autoBtnCls}" onclick="toggleAutoTeamScanHud(event)" title="Auto Team Scan on 'CHOOSE YOUR PARTY' (Tap to toggle ON/OFF; turning ON scans immediately)">${autoBtnLabel}</button>`
+                        : "";
+                    let partyPreviewHtml = "";
+                    if (!isReplay && !guidedActiveVal && partyState && partyState.statusKind && partyState.statusKind !== "NONE") {
+                        const kind = String(partyState.statusKind);
+                        const pPresetName = String(partyState.matchedPresetName || "");
+                        const pDetSummary = String(partyState.detectedSummary || "");
+                        const pConfirmTxt = String(partyState.confirmText || "");
+                        if (kind === "MATCHED_PREVIEW") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-match"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#5eead4;">🔍 Party: <strong>${escapeHtml(pPresetName)}</strong> (${escapeHtml(pDetSummary)})</span><div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;"><button type="button" class="menu-btn menu-btn-win" onclick="confirmDetectedPartyHud(event)" title="Switch to this saved preset now">✓ Use</button><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss party preview">✕</button></div></div>`;
+                        } else if (kind === "ALREADY_ACTIVE") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-active"><span style="color:#6ee7b7;">✓ Party Verified: ${escapeHtml(pPresetName)}</span></div>`;
+                        } else if (kind === "UNMATCHED") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-unmatched"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1;">🔍 Unsaved Party (${escapeHtml(pDetSummary)}) — No saved preset</span><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss">✕</button></div>`;
+                        } else if (kind === "LOCKED_CONFIRM") {
+                            partyPreviewHtml = `<div class="idle-party-preview-row preview-locked"><span style="color:#6ee7b7;">${escapeHtml(pConfirmTxt || ("✅ Team Locked: " + pPresetName))}</span><button type="button" class="menu-btn menu-btn-close" onclick="dismissDetectedPartyHud(event)" title="Dismiss">✕</button></div>`;
+                        }
+                    }
+                    const assignedMetasArr = (!isReplay && Array.isArray(battleData.assignedLeagues)) ? battleData.assignedLeagues : [];
+                    const hasMultiMeta = assignedMetasArr.length > 1;
+                    const leaguePillClickAttr = hasMultiMeta ? ` onclick="cycleActivePresetMetaHud(event)" style="cursor:pointer;"` : "";
+                    const leaguePillSwitchGlyph = hasMultiMeta ? ` ⇄` : "";
+                    const leaguePillTitle = hasMultiMeta
+                        ? `Active Meta: ${escapeHtml(activeLeagueStr)} (Tap to switch: ${escapeHtml(assignedMetasArr.join(' / '))})`
+                        : `Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}`;
+                    const idleBannerChanged = setHtmlIfChanged(idleTeamBannerEl, `
                         <div class="idle-team-line1">
-                            <span class="idle-league-pill" title="Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}">🏆 ${escapeHtml(activeLeagueStr)} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
+                            <span class="idle-league-pill"${leaguePillClickAttr} title="${leaguePillTitle}">🏆 ${escapeHtml(activeLeagueStr)}${leaguePillSwitchGlyph} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
                             <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
                                 ${eloChipHtml}
+                                ${compactLogPillHtml}
                                 ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
                             </div>
                         </div>
-                        ${guidedActiveVal ? "" : `<div class="idle-team-line2">${pokePillsHtml}</div>`}
+                        ${guidedActiveVal ? "" : `<div class="idle-team-line2">${pokePillsHtml}${autoTeamBtnHtml}</div>`}
+                        ${partyPreviewHtml}
                     `);
+                    if (wasIdleBannerHidden || idleBannerChanged) scheduleNotifyHeight();
                 }
                 if (eloBannerEl) {
                     const guidedHintVal = eloState && eloState.guidedHintText ? String(eloState.guidedHintText).trim() : "";
@@ -4050,9 +4250,10 @@
                         eloBannerEl.style.borderColor = "rgba(52, 211, 153, 0.78)";
                         eloBannerEl.style.background = "rgba(6, 78, 59, 0.42)";
                         const confHtml = `
-                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; flex-wrap:wrap;">
                                 <span style="font-size:8px; font-weight:900; color:#6ee7b7;">${escapeHtml(confirmTextVal)}</span>
                                 <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
+                                    <button type="button" class="menu-btn menu-btn-win" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">📊 Battle Log</button>
                                     <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Adjust ELO manually with touch keypad">✏️ Keypad</button>
                                     <button type="button" class="menu-btn menu-btn-close" onclick="dismissEloConfirmHud(event)" title="Dismiss">✕</button>
                                 </div>
@@ -4076,6 +4277,7 @@
                                     <button type="button" class="menu-btn menu-btn-elo-scan" onclick="startGuidedEloScanHud(event)" title="Arm 250ms OCR and scroll down to CURRENT SEASON">📷 Scan ELO</button>
                                     ${sameBtnHtml}
                                     <button type="button" class="menu-btn menu-btn-lead-neu" onclick="openEloTypeDialogHud(event)" title="Enter ELO with touch keypad or mark Unranked < R20">✏️ Keypad</button>
+                                    <button type="button" class="menu-btn menu-btn-win" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">📊 Log</button>
                                     <button type="button" class="menu-btn menu-btn-close" onclick="snoozeEloPromptHud(event)" title="Snooze prompt for this set">✕ Snooze</button>
                                 </div>
                             </div>
@@ -4134,7 +4336,9 @@
                 }
             } else {
                 if (idleTeamBannerEl) {
+                    const wasIdleBannerShown = !idleTeamBannerEl.classList.contains("hidden");
                     idleTeamBannerEl.classList.add("hidden");
+                    if (wasIdleBannerShown) scheduleNotifyHeight();
                 }
                 if (eloBannerEl) {
                     const wasShown = !eloBannerEl.classList.contains("hidden");
@@ -4169,7 +4373,12 @@
                         : `<span class="bp-micro-pill bp-blk" title="Your Defense Bulkpoint holds: ${oppBpDelta} HP/hit vs Opp standard">🛡️BLK${oppBpDelta}</span>`)
                     : "";
                 if (oppMoveEl) {
-                    setHtmlIfChanged(oppMoveEl, `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}${oppFastMark}</span>${oppBpHtml}`);
+                    setHtmlIfChanged(oppMoveEl, `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}${oppFastMark}</span>`);
+                }
+                const oppBpPillEl = document.getElementById("sky-opp-bp-pill");
+                if (oppBpPillEl) {
+                    oppBpPillEl.style.display = (!isWaitingState && oppBpHtml) ? "inline-flex" : "none";
+                    setHtmlIfChanged(oppBpPillEl, !isWaitingState ? oppBpHtml : "");
                 }
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;

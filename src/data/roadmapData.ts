@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.70',
+    codename: 'High-Res Pokémon Sprites, Unified 2B Duel Scope Icon & TOS-Safe Website Upgrade',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Introduces high-res Showdown HOME sprites in the Web Simulator Battle Arena and selective zero-bloat mini sprites across Team Builder card headers, Pokémon autocomplete dropdowns, Meta, and IV Lab (powered by Coil 2.7.0 on Android), rolls out the unified 2B Split-Arc Duel Scope icon everywhere, and launches the 100% TOS-Safe website & download landing page.',
+    icon: '🖼️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Replaced Web Battle Arena emojis with 112px/128px HOME 3D sprites, subtle idle float, multi-CDN Showdown HOME/Dex + PokeAPI dex fallback, and Shadow purple aura + corner flame indicators (zero overlay sprites)',
+      'Added compact 3-Pokémon mini sprite strips in the Team Builder card header whitespace (item_team_preset.xml + Web cards) with zero card height growth',
+      'Added zero-bloat mini sprites to Android & Web Pokémon autocomplete dropdowns, Meta Top Threats/Cores rows, IV Lab Target Species, and Built Pokémon Roster cards via Coil 2.7.0 (40 MB cache) & <PokemonSprite>',
+      'Unified 2B (Split-Arc Duel Scope) icon across Android adaptive launcher, favicon/PWA SVGs, overlay emblem, and Cloudflare Vault/Download pages alongside the 100% TOS-Safe website & dl.silphscopepvp.com landing page'
+    ]
+  },
+  {
     version: 'v7.64',
     codename: 'Full-Height Right-Rail Team Card Controls & Zero Left Gutter',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Moves the 6-dot drag icon into the unified right-hand vertical rail alongside Radio, Edit, Delete, and ▲/▼ with weighted spacing spanning the card height, eliminating the left gutter completely.',
     icon: '📐',
@@ -566,21 +580,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'One-by-one contrast & readability audit across all modals, cards, badges, inputs, and HUD states',
       'Prune redundant or low-contrast themes to keep the theme selector focused and polished',
       'Propose and add fun new community-inspired themes while keeping Shiny Origin Dialga Midnight as default'
-    ]
-  },
-  {
-    id: 'web-simulator-sprite-upgrade',
-    title: 'Generate or Source Higher-Quality Sprites for Web Simulator',
-    badge: 'WEB SIMULATOR & ASSETS',
-    status: 'Planned',
-    statusColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-    category: 'Analytics & Team Builder',
-    icon: '🖼️',
-    description: 'Upgrade Pokémon sprites across the Web Simulator (battle arena, team cards, Meta & IV Lab) by sourcing crisp high-res/animated assets or generating consistent custom sprites, including accurate Shadow/form/Mega variants.',
-    keyGoals: [
-      'Evaluate high-res sprite sources (PokeAPI / HOME / Showdown / custom SVG/PNG) with fast CDN caching and fallbacks',
-      'Support accurate regional forms, Mega/Primal evolutions, and distinct Shadow visual treatments',
-      'Ensure crisp scaling and zero broken-image placeholders across light and dark themes'
     ]
   }
 ];

@@ -176,6 +176,7 @@ import {
   teamMemberToBuiltPokemon,
   getAvailableMovePoolForPokemon
 } from './data/gblData';
+import { PokemonSprite } from './components/PokemonSprite';
 import {
   BattleQualityMetadata,
   BattleTimelineEvent,
@@ -6728,7 +6729,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.64 • Android Native Overlay
+                  v7.70 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7236,9 +7237,12 @@ export default function App() {
                   <div className="flex justify-end pr-8 pt-6">
                     <div className="relative flex flex-col items-center">
                       <div className="w-32 h-32 rounded-full bg-amber-500/10 filter blur-xl absolute" />
-                      <div className="text-6xl select-none filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]">
-                        {activeOpponent.name === 'Entei' ? '🦁' : activeOpponent.name === 'Yveltal' ? '🦅' : '🐺'}
-                      </div>
+                      <PokemonSprite
+                        name={activeOpponent.name}
+                        size={112}
+                        variant="arena"
+                        animateFloat
+                      />
                       <div className="mt-1 text-center font-bold text-sm text-amber-200 [text-shadow:0_2px_4px_#000]">
                         {activeOpponent.name}
                       </div>
@@ -7252,9 +7256,14 @@ export default function App() {
                   <div className="flex justify-start pl-6 pb-6">
                     <div className="relative flex flex-col items-center">
                       <div className="w-36 h-36 rounded-full bg-sky-500/10 filter blur-xl absolute" />
-                      <div className="text-7xl select-none filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]">
-                        {userActivePokemon.name.includes('Dialga') ? '🦕' : userActivePokemon.name.includes('Luxray') ? '⚡' : '🐋'}
-                      </div>
+                      <PokemonSprite
+                        name={userActivePokemon.name}
+                        size={128}
+                        variant="arena"
+                        flipX
+                        animateFloat
+                        floatDelay
+                      />
                       <div className="mt-1 text-center font-bold text-sm text-sky-200 [text-shadow:0_2px_4px_#000]">
                         {userActivePokemon.name}
                       </div>
@@ -10036,10 +10045,13 @@ export default function App() {
                                             setShow6SlotAutocomplete(null);
                                             handleRunShow6Pick3Optimizer(show6Pick3League, next, show6Opponent6);
                                           }}
-                                          className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-sky-500/25 flex items-center justify-between"
+                                          className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-sky-500/25 flex items-center justify-between gap-2"
                                         >
-                                          <span className="truncate">{opt.name}</span>
-                                          <span className="text-[9px] font-mono text-sky-300">CP {opt.cp}</span>
+                                          <span className="flex items-center gap-1.5 min-w-0">
+                                            <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                                            <span className="truncate">{opt.name}</span>
+                                          </span>
+                                          <span className="text-[9px] font-mono text-sky-300 shrink-0">CP {opt.cp}</span>
                                         </button>
                                       ))}
                                     </div>
@@ -10136,10 +10148,13 @@ export default function App() {
                                             setShow6SlotAutocomplete(null);
                                             handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, next);
                                           }}
-                                          className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between"
+                                          className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between gap-2"
                                         >
-                                          <span className="truncate">{opt.name}</span>
-                                          <span className="text-[9px] font-mono text-amber-300">CP {opt.cp}</span>
+                                          <span className="flex items-center gap-1.5 min-w-0">
+                                            <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                                            <span className="truncate">{opt.name}</span>
+                                          </span>
+                                          <span className="text-[9px] font-mono text-amber-300 shrink-0">CP {opt.cp}</span>
                                         </button>
                                       ))}
                                     </div>
@@ -10511,10 +10526,13 @@ export default function App() {
                                           setBlindShow6LockedSlots(next);
                                           setShow6SlotAutocomplete(null);
                                         }}
-                                        className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-sky-500/25 flex items-center justify-between"
+                                        className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-sky-500/25 flex items-center justify-between gap-2"
                                       >
-                                        <span className="truncate">{opt.name}</span>
-                                        <span className="text-[9px] font-mono text-sky-300">CP {opt.cp}</span>
+                                        <span className="flex items-center gap-1.5 min-w-0">
+                                          <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                                          <span className="truncate">{opt.name}</span>
+                                        </span>
+                                        <span className="text-[9px] font-mono text-sky-300 shrink-0">CP {opt.cp}</span>
                                       </button>
                                     ))}
                                   </div>
@@ -11214,10 +11232,13 @@ export default function App() {
                                 setAntiMetaDropdownSlot(null);
                                 handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, opt.name, antiMetaFeat2);
                               }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-800 flex items-center justify-between"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-800 flex items-center justify-between gap-2"
                             >
-                              <span className="font-bold text-white">{opt.name}</span>
-                              <span className="text-[10px] text-slate-400">
+                              <span className="flex items-center gap-2 min-w-0">
+                                <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                                <span className="font-bold text-white truncate">{opt.name}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-400 shrink-0">
                                 {opt.types.join('/')} • CP {opt.cp}
                               </span>
                             </button>
@@ -11297,10 +11318,13 @@ export default function App() {
                                 setAntiMetaDropdownSlot(null);
                                 handleGenerateAntiMetaTeams(antiMetaSelectedLeagues, antiMetaFeat1, opt.name);
                               }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-800 flex items-center justify-between"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-800 flex items-center justify-between gap-2"
                             >
-                              <span className="font-bold text-white">{opt.name}</span>
-                              <span className="text-[10px] text-slate-400">
+                              <span className="flex items-center gap-2 min-w-0">
+                                <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                                <span className="font-bold text-white truncate">{opt.name}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-400 shrink-0">
                                 {opt.types.join('/')} • CP {opt.cp}
                               </span>
                             </button>
@@ -12170,11 +12194,22 @@ export default function App() {
                         <h3 className="font-bold text-base text-white">
                           {preset.name}
                         </h3>
-                        <span
-                          className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded border ${leadTierInfo.colorClass}`}
-                        >
-                          Lead BR: {leadBr} ({leadTierInfo.tier})
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0" aria-label="Team Pokémon Sprites">
+                            {preset.pokemon.slice(0, 3).map((member, sIdx) => (
+                              <PokemonSprite
+                                key={member.id || `${preset.id}-spr-${sIdx}-${member.name}`}
+                                name={member.name}
+                                size={26}
+                              />
+                            ))}
+                          </div>
+                          <span
+                            className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded border ${leadTierInfo.colorClass}`}
+                          >
+                            Lead BR: {leadBr} ({leadTierInfo.tier})
+                          </span>
+                        </div>
                       </div>
 
                       {assignedMetas.length > 1 && (
@@ -13043,24 +13078,27 @@ export default function App() {
                                       : 'hover:bg-slate-800/90 text-slate-200'
                                   }`}
                                 >
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="font-bold text-xs text-white truncate">{opt.name}</span>
-                                      <span
-                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase ${
-                                          opt.isShadow
-                                            ? 'bg-purple-500/25 text-purple-200 border-purple-400/50'
-                                            : opt.isAlternateForm
-                                            ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
-                                            : 'bg-slate-800 text-slate-300 border-slate-700'
-                                        }`}
-                                      >
-                                        {opt.formBadge}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 truncate">
-                                      {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
-                                      {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={26} />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-xs text-white truncate">{opt.name}</span>
+                                        <span
+                                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase ${
+                                            opt.isShadow
+                                              ? 'bg-purple-500/25 text-purple-200 border-purple-400/50'
+                                              : opt.isAlternateForm
+                                              ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+                                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                                          }`}
+                                        >
+                                          {opt.formBadge}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 truncate">
+                                        {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
+                                        {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
+                                      </div>
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold text-sky-400 shrink-0">
@@ -13341,24 +13379,27 @@ export default function App() {
                                       : 'hover:bg-slate-800/90 text-slate-200'
                                   }`}
                                 >
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="font-bold text-xs text-white truncate">{opt.name}</span>
-                                      <span
-                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase ${
-                                          opt.isShadow
-                                            ? 'bg-purple-500/25 text-purple-200 border-purple-400/50'
-                                            : opt.isAlternateForm
-                                            ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
-                                            : 'bg-slate-800 text-slate-300 border-slate-700'
-                                        }`}
-                                      >
-                                        {opt.formBadge}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 truncate">
-                                      {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
-                                      {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={26} />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-xs text-white truncate">{opt.name}</span>
+                                        <span
+                                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase ${
+                                            opt.isShadow
+                                              ? 'bg-purple-500/25 text-purple-200 border-purple-400/50'
+                                              : opt.isAlternateForm
+                                              ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+                                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                                          }`}
+                                        >
+                                          {opt.formBadge}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 truncate">
+                                        {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
+                                        {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
+                                      </div>
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold text-purple-300 shrink-0">
@@ -13639,24 +13680,27 @@ export default function App() {
                                       : 'hover:bg-slate-800/90 text-slate-200'
                                   }`}
                                 >
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="font-bold text-xs text-white truncate">{opt.name}</span>
-                                      <span
-                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase ${
-                                          opt.isShadow
-                                            ? 'bg-purple-500/25 text-purple-200 border-purple-400/50'
-                                            : opt.isAlternateForm
-                                            ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
-                                            : 'bg-slate-800 text-slate-300 border-slate-700'
-                                        }`}
-                                      >
-                                        {opt.formBadge}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 truncate">
-                                      {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
-                                      {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={26} />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-xs text-white truncate">{opt.name}</span>
+                                        <span
+                                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase ${
+                                            opt.isShadow
+                                              ? 'bg-purple-500/25 text-purple-200 border-purple-400/50'
+                                              : opt.isAlternateForm
+                                              ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+                                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                                          }`}
+                                        >
+                                          {opt.formBadge}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 truncate">
+                                        {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
+                                        {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
+                                      </div>
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold text-amber-300 shrink-0">
@@ -18734,10 +18778,13 @@ export default function App() {
                                   }
                                   setShow6EditorSlotAutocompleteIdx(null);
                                 }}
-                                className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between"
+                                className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between gap-2"
                               >
-                                <span className="truncate">{opt.name}</span>
-                                <span className="text-[9px] font-mono text-amber-300">CP {opt.cp}</span>
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  <PokemonSprite name={opt.name} isShadow={opt.isShadow} size={20} />
+                                  <span className="truncate">{opt.name}</span>
+                                </span>
+                                <span className="text-[9px] font-mono text-amber-300 shrink-0">CP {opt.cp}</span>
                               </button>
                             ))}
                           </div>
@@ -19043,7 +19090,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.64 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.70 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

@@ -1713,7 +1713,7 @@
                 onpointercancel="cancelMinimizeHold(event)"
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
-                title="Tap: Switch between Full ↔ Compact HUD • Hold 2s: Toggle Log-Only Stealth Mode">⚔️</button>
+                title="Tap: Switch between Full ↔ Compact HUD • Hold 2s: Toggle Log-Only Stealth Mode"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="13" height="13" style="width:13px;height:13px;display:inline-block;vertical-align:middle;flex-shrink:0;"><defs><linearGradient id="ss2bL_init" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#38BDF8"/><stop offset="100%" stop-color="#2563EB"/></linearGradient><linearGradient id="ss2bR_init" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FACC15"/><stop offset="55%" stop-color="#F97316"/><stop offset="100%" stop-color="#EF4444"/></linearGradient></defs><circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2"/><path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#ss2bL_init)" stroke-width="6.2" stroke-linecap="round"/><path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#ss2bR_init)" stroke-width="6.2" stroke-linecap="round"/><path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/><circle cx="54" cy="19.5" r="1.6" fill="#FEF08A"/><circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8"/><circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444"/><rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/><rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/><rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8"/><rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/><rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/><path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round"/><circle cx="76.5" cy="80.5" r="6.6" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8"/><circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF"/></svg></button>
             <span id="sky-top-opp-shad-pill" class="compact-shad-pill hidden" style="margin-left:1px;" title="Opponent Verified Shadow Status"></span>
             <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge ocr-inactive" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">OCR:---/---ms</span>
             <div class="header-badges-cluster">
@@ -2333,6 +2333,42 @@
         let activeOverlayThemeId = "dialga_shiny_midnight";
         let showOverlayWatermark = window.location.search.indexOf("replay=1") !== -1;
 
+        function getUnifiedSilphScopeIconSvg(sizePx) {
+            const s = sizePx || 13;
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="${s}" height="${s}" style="width:${s}px;height:${s}px;display:inline-block;vertical-align:middle;flex-shrink:0;">
+                <defs>
+                    <linearGradient id="ss2bL" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#38BDF8"/>
+                        <stop offset="100%" stop-color="#2563EB"/>
+                    </linearGradient>
+                    <linearGradient id="ss2bR" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#FACC15"/>
+                        <stop offset="55%" stop-color="#F97316"/>
+                        <stop offset="100%" stop-color="#EF4444"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2"/>
+                <path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#ss2bL)" stroke-width="6.2" stroke-linecap="round"/>
+                <path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#ss2bR)" stroke-width="6.2" stroke-linecap="round"/>
+                <path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="54" cy="19.5" r="1.6" fill="#FEF08A"/>
+                <circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8"/>
+                <circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444"/>
+                <rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/>
+                <rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/>
+                <rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                <rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E"/>
+                <rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                <rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444"/>
+                <rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8"/>
+                <rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/>
+                <rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569"/>
+                <path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round"/>
+                <circle cx="76.5" cy="80.5" r="6.6" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8"/>
+                <circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF"/>
+            </svg>`;
+        }
+
         function getOverlayThemeIconSvg(themeId, sizePx) {
             const mappedId = (themeId === "amoled_cyan" || themeId === "amoled_matrix") ? "dialga_shiny_midnight" : themeId;
             const t = OVERLAY_THEME_PRESETS[mappedId] || OVERLAY_THEME_PRESETS["dialga_shiny_midnight"];
@@ -2415,7 +2451,7 @@
                 const myShortEl = document.getElementById("sky-my-short");
                 if (myShortEl) myShortEl.style.color = t.accentHex;
                 const minBtn = document.getElementById("btn-minimize-sword");
-                if (minBtn) minBtn.innerHTML = getOverlayThemeIconSvg(activeOverlayThemeId, 13);
+                if (minBtn) minBtn.innerHTML = getUnifiedSilphScopeIconSvg(13);
                 refreshOverlayWatermarkUi();
                 updateBattleButtonUi();
             } catch (e) {}

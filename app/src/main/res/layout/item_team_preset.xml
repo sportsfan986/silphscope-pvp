@@ -64,15 +64,42 @@
                 android:paddingBottom="2dp" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/text_preset_metrics_badges"
+        <LinearLayout
+            android:id="@+id/layout_preset_metrics_and_sprites"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Lead BR: 512 (N)  •  Mach BR: 642 (Solid)  •  Swap BR: #2 518 / #3 496"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="2dp">
+
+            <TextView
+                android:id="@+id/text_preset_metrics_badges"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Lead BR: 512 (N)  •  Mach BR: 642 (Solid)  •  Swap BR: #2 518 / #3 496"
+                android:textColor="#94a3b8"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/container_preset_team_sprites"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_preset_single_meta_subline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:textColor="#94a3b8"
             android:textSize="10.5sp"
             android:textStyle="bold"
-            android:layout_marginTop="2dp" />
+            android:layout_marginTop="1dp"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/container_preset_meta_pools"

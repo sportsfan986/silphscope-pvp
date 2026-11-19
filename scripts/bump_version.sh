@@ -54,10 +54,14 @@ fi
 # 5. Marketing Website header badge & direct download button release label
 sed -i "s/v[0-9]\+\.[0-9]\+ • Latest Release/${NEW_TAG} • Latest Release/g" src/components/MarketingWebsite.tsx
 sed -i "s/Instant 1-Click Direct Release (v[0-9]\+\.[0-9]\+)/Instant 1-Click Direct Release (${NEW_TAG})/g" src/components/MarketingWebsite.tsx
+sed -i "s/Download APK (v[0-9]\+\.[0-9]\+)/Download APK (${NEW_TAG})/g" src/components/MarketingWebsite.tsx
 
 # 6. Cloudflare Worker & Roadmap Infographic fallback
 sed -i "s/WORKER_VERSION = \"[^\"]*\"/WORKER_VERSION = \"${NEW_NUM}.0\"/g" cloudflare/telemetry-worker/wrangler.toml
 sed -i "s/SilphScope-PvP-Version-Check\/[0-9]\+\.[0-9]\+/SilphScope-PvP-Version-Check\/${NEW_NUM}/g" cloudflare/telemetry-worker/worker.mjs
+sed -i "s/versionName: 'v[0-9]\+\.[0-9]\+'/versionName: '${NEW_TAG}'/g" cloudflare/telemetry-worker/worker.mjs
+sed -i "s/releaseTitle: 'SilphScope PvP v[0-9]\+\.[0-9]\+'/releaseTitle: 'SilphScope PvP ${NEW_TAG}'/g" cloudflare/telemetry-worker/worker.mjs
+sed -i "s/releaseInfo.versionName || 'v[0-9]\+\.[0-9]\+'/releaseInfo.versionName || '${NEW_TAG}'/g" cloudflare/telemetry-worker/worker.mjs
 sed -i "s/VERSION_EVOLUTION_HISTORY\[0\]?\.version || 'v[0-9]\+\.[0-9]\+'/VERSION_EVOLUTION_HISTORY[0]?.version || '${NEW_TAG}'/g" src/components/VersionRoadmapInfographic.tsx
 
 echo "Updated version to ${NEW_TAG} (versionCode=${VERSION_CODE}, versionName=${NEW_NUM}) across all targets."

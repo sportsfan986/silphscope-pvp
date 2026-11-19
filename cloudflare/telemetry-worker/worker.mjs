@@ -6989,6 +6989,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SilphScope DVR • Shiny Origin Dialga Cloud Replay Vault</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#050B16" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -7353,11 +7354,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <div class="brand">
         <a href="https://silphscopepvp.com" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:inherit" title="SilphScopePvP.com">
           <div class="dialga-crest-badge">
-            <svg viewBox="0 0 36 36" style="width:28px;height:28px;display:block">
-              <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" stroke-width="2.2" />
-              <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" />
-              <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-            </svg>
+            <img src="/favicon.svg" alt="SilphScope PvP" style="width:36px;height:36px;border-radius:10px;display:block" />
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:8px">
@@ -8317,6 +8314,387 @@ async function computeHmacSha256Hex(secret, payload) {
     .join('');
 }
 
+function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.70');
+  const size = escapeHtml(releaseInfo.assetSizeMb || '');
+  const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Download SilphScope PvP • Real-Time Battle HUD &amp; DVR (${ver})</title>
+  <meta name="description" content="Download SilphScope PvP for Android. 100% TOS-safe 50% translucent battle HUD, fast move counter, and synchronized DVR replay theater for Pokémon GO PvP." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="theme-color" content="#050B16" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #050b16;
+      --card: #0e1b2e;
+      --card-alt: #081120;
+      --border: #19304e;
+      --accent: #2dd4bf;
+      --accent-hover: #5eead4;
+      --cyan: #67e8f9;
+      --amber: #facc15;
+      --amber-hover: #fde047;
+      --text: #ecfeff;
+      --text-dim: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 40%),
+        linear-gradient(180deg, #050B16 0%, #081120 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+    .container {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      background: rgba(45, 212, 191, 0.12);
+      border: 1px solid rgba(45, 212, 191, 0.35);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 900;
+      line-height: 1.2;
+      background: linear-gradient(135deg, #ffffff 40%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 15px;
+      line-height: 1.5;
+      max-width: 580px;
+    }
+    .hero-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+    .btn-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    @media (min-width: 600px) {
+      .btn-stack {
+        flex-direction: row;
+      }
+    }
+    .btn-download {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+      color: #042f2e;
+      text-decoration: none;
+      font-weight: 900;
+      font-size: 15px;
+      box-shadow: 0 8px 24px rgba(45, 212, 191, 0.35);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .btn-download:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
+    }
+    .btn-subtext {
+      font-size: 11px;
+      font-weight: 700;
+      opacity: 0.85;
+    }
+    .btn-web {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: rgba(250, 204, 21, 0.1);
+      border: 1px solid rgba(250, 204, 21, 0.4);
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 900;
+      font-size: 15px;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    .btn-web:hover {
+      transform: translateY(-2px);
+      background: rgba(250, 204, 21, 0.18);
+    }
+    .trust-section {
+      background: var(--card-alt);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      border-radius: 20px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .trust-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .trust-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 600px) {
+      .trust-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .trust-item {
+      background: rgba(14, 27, 46, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      gap: 10px;
+    }
+    .trust-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .trust-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+    .trust-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.4;
+      margin: 0;
+    }
+    .guide-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .guide-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--amber);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      background: rgba(45, 212, 191, 0.15);
+      border: 1px solid rgba(45, 212, 191, 0.4);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-content {
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+    .step-content strong {
+      color: #fff;
+    }
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 0;
+    }
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="/favicon.svg" alt="SilphScope PvP Icon" style="width:56px;height:56px;border-radius:14px;border:1px solid rgba(56,189,248,0.4);box-shadow:0 8px 24px rgba(0,0,0,0.45);" />
+      <div class="badge">⚔️ Official Release • ${ver}</div>
+      <h1>Download SilphScope PvP</h1>
+      <p class="subtitle">
+        The 50% translucent real-time battle HUD, fast move turn counter, and cloud replay DVR for Pokémon GO PvP.
+      </p>
+    </div>
+
+    <div class="hero-card">
+      <div class="btn-stack">
+        <a href="${directHref}" class="btn-download">
+          <span>📱 Download Android APK (${ver})</span>
+          <span class="btn-subtext">${size ? size + ' • ' : ''}Direct Signed Build (minSdk 31)</span>
+        </a>
+        <a href="https://silphscopepvp.com" class="btn-web">
+          <span>🌐 Try Web Simulator First</span>
+          <span class="btn-subtext">Zero Install • Runs in Mobile Browser</span>
+        </a>
+      </div>
+      <div style="text-align: center; font-size: 12px; color: var(--text-dim);">
+        Prefer watching replays? Check out the <a href="https://dvr.silphscopepvp.com" style="color: var(--cyan); text-decoration: none; font-weight: bold;">Cloud DVR Replay Vault &rarr;</a>
+      </div>
+    </div>
+
+    <!-- 100% TOS-SAFE GUARANTEE -->
+    <div class="trust-section">
+      <div class="trust-header">
+        <span>🛡️ 100% TOS-Safe &amp; Ban-Proof Guarantee</span>
+      </div>
+      <div class="trust-grid">
+        <div class="trust-item">
+          <div class="trust-icon">🛡️</div>
+          <div>
+            <div class="trust-title">Zero Game Injection</div>
+            <p class="trust-desc">Never touches Pokémon GO&apos;s code, memory, or game files. Operates independently with zero server or packet interaction.</p>
+          </div>
+        </div>
+        <div class="trust-item">
+          <div class="trust-icon">👁️</div>
+          <div>
+            <div class="trust-title">Screen Pixels Only</div>
+            <p class="trust-desc">Uses standard Android <code>MediaProjection</code>&mdash;the exact same passive visual technology used safely by Poke Genie &amp; Calcy IV since 2016.</p>
+          </div>
+        </div>
+        <div class="trust-item">
+          <div class="trust-icon">🚫</div>
+          <div>
+            <div class="trust-title">No Automation or GPS</div>
+            <p class="trust-desc">Zero macros, zero auto-tapping, and zero location spoofing. Purely a tactical HUD and turn-counting calculator.</p>
+          </div>
+        </div>
+        <div class="trust-item">
+          <div class="trust-icon">🔒</div>
+          <div>
+            <div class="trust-title">Open &amp; Verified Security</div>
+            <p class="trust-desc">Android Keystore AES-256-GCM encryption, APK Signature Scheme v3 lineage, and verifiable release hashes.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3-STEP INSTALL GUIDE -->
+    <div class="guide-card">
+      <div class="guide-title">📲 How to Install in 3 Easy Steps</div>
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            Tap <strong>"Download Android APK"</strong> above to save the signed release file to your device.
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            If Chrome displays <em>"File might be harmful"</em>, tap <strong>Download anyway</strong>. (Android displays this standard precaution for all apps downloaded outside Google Play).
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            Tap <strong>Open</strong> in your downloads, then tap <strong>Install</strong>. If prompted, toggle <em>"Allow from this source"</em>.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>
+        <a href="https://silphscopepvp.com">silphscopepvp.com</a> &bull; 
+        <a href="https://dvr.silphscopepvp.com">dvr.silphscopepvp.com</a> &bull; 
+        <a href="https://github.com/sportsfan986/silphscope-pvp" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+      <div>
+        Pokémon and Pokémon GO are trademarks of Nintendo, Creatures Inc., GAME FREAK inc., and Niantic, Inc. SilphScope PvP is an independent tactical assistant.
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 async function verifyStripeWebhookSignature(request, rawBody, env) {
   const secret = (env.STRIPE_WEBHOOK_SECRET || '').trim();
   if (!secret) {
@@ -8481,27 +8859,43 @@ self.addEventListener('fetch', (e) => {
       });
     }
 
-    if (isGetOrHead && (path === '/pwa-icon-192.svg' || path === '/pwa-icon-512.svg')) {
-      const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+    if (
+      isGetOrHead &&
+      (path === '/pwa-icon-192.svg' || path === '/pwa-icon-512.svg' || path === '/favicon.svg')
+    ) {
+      const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="192" height="192">
   <defs>
-    <radialGradient id="dialgaBgGlow" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#19304E" />
-      <stop offset="65%" stop-color="#0E1B2E" />
-      <stop offset="100%" stop-color="#050B16" />
-    </radialGradient>
-    <filter id="dialgaTealGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
+    <linearGradient id="c2bWkrL" x1="25" y1="83" x2="38" y2="21" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="c2bWkrR" x1="70" y1="21" x2="78" y2="81" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FACC15" />
+      <stop offset="55%" stop-color="#F97316" />
+      <stop offset="100%" stop-color="#EF4444" />
+    </linearGradient>
   </defs>
-  <rect width="192" height="192" rx="42" fill="url(#dialgaBgGlow)" />
-  <rect width="190" height="190" x="1" y="1" rx="41" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-opacity="0.35" />
-  <g transform="translate(96, 96) scale(4.4) translate(-18, -18)" filter="url(#dialgaTealGlow)">
-    <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.95)" stroke="#2DD4BF" stroke-width="2.2" stroke-linejoin="round" />
-    <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" stroke-linejoin="round" />
-    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-    <circle cx="18" cy="18" r="1.8" fill="#FFFBEB" />
-  </g>
+  <rect width="108" height="108" rx="24" fill="#08101D" />
+  <rect width="106" height="106" x="1" y="1" rx="23" fill="none" stroke="#1E3A5F" stroke-width="1.2" />
+  <circle cx="54" cy="54" r="36" fill="#0B1526" stroke="#1E293B" stroke-width="2" />
+  <path d="M33,83.3 A36,36 0 0,1 38,21.8" fill="none" stroke="url(#c2bWkrL)" stroke-width="4.8" stroke-linecap="round" />
+  <path d="M70,21.8 A36,36 0 0,1 77.5,81" fill="none" stroke="url(#c2bWkrR)" stroke-width="4.8" stroke-linecap="round" />
+  <path d="M47,14 L61,25 M61,14 L47,25" stroke="#FACC15" stroke-width="3" stroke-linecap="round" />
+  <circle cx="54" cy="19.5" r="1.6" fill="#FEF08A" />
+  <circle cx="40.5" cy="19.5" r="2.6" fill="#38BDF8" />
+  <circle cx="67.5" cy="19.5" r="2.6" fill="#EF4444" />
+  <rect x="37.6" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E" />
+  <rect x="49.4" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#22C55E" />
+  <rect x="61.2" y="37.6" width="9.2" height="9.2" rx="2.4" fill="#EF4444" />
+  <rect x="37.6" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#22C55E" />
+  <rect x="49.4" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444" />
+  <rect x="61.2" y="49.4" width="9.2" height="9.2" rx="2.4" fill="#EF4444" />
+  <rect x="37.6" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#38BDF8" />
+  <rect x="49.4" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569" />
+  <rect x="61.2" y="61.2" width="9.2" height="9.2" rx="2.4" fill="#475569" />
+  <path d="M54,85 L58.5,87.5 L58.5,91.5 L54,94.5 L49.5,91.5 L49.5,87.5 Z" fill="#0E2038" stroke="#38BDF8" stroke-width="1.6" stroke-linejoin="round" />
+  <circle cx="76.5" cy="80.5" r="5.4" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.8" />
+  <circle cx="76.5" cy="80.5" r="2.2" fill="#FFFFFF" />
 </svg>`;
       return new Response(svgIcon, {
         status: 200,
@@ -8516,7 +8910,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.64',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.70',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -8680,9 +9074,15 @@ self.addEventListener('fetch', (e) => {
 
     if (
       isGetOrHead &&
-      (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk')
+      (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk' || path.endsWith('.apk'))
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
+      const releaseInfo = {
+        versionName: 'v7.70',
+        releaseTitle: 'SilphScope PvP v7.70',
+        publishedAt: '',
+        assetSizeMb: '',
+      };
       try {
         const ghRes = await fetch(
           'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
@@ -8696,23 +9096,57 @@ self.addEventListener('fetch', (e) => {
         );
         if (ghRes.ok) {
           const release = await ghRes.json();
+          if (release.tag_name) releaseInfo.versionName = release.tag_name;
+          if (release.name) releaseInfo.releaseTitle = release.name;
+          if (release.published_at) releaseInfo.publishedAt = release.published_at.split('T')[0];
           const apkAsset = (release.assets || []).find(
             (a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk')
           );
           if (apkAsset && apkAsset.browser_download_url) {
             apkUrl = apkAsset.browser_download_url;
+            if (apkAsset.size) {
+              releaseInfo.assetSizeMb = (apkAsset.size / (1024 * 1024)).toFixed(1) + ' MB';
+            }
           } else if (release.html_url) {
             apkUrl = release.html_url;
           }
         }
       } catch (_) {}
-      return new Response(null, {
-        status: 302,
-        headers: buildSecurityHeaders({
-          Location: apkUrl,
-          'Cache-Control': 'public, max-age=300',
-        }),
-      });
+
+      const isDirectDownload =
+        url.searchParams.get('direct') === '1' ||
+        url.searchParams.get('direct') === 'true' ||
+        path.endsWith('.apk');
+
+      if (isDirectDownload) {
+        return new Response(null, {
+          status: 302,
+          headers: buildSecurityHeaders({
+            Location: apkUrl,
+            'Cache-Control': 'public, max-age=300',
+          }),
+        });
+      }
+
+      // Render high-converting 100% TOS-Safe Android Download Landing Page
+      const directDownloadHref =
+        url.hostname === 'dl.silphscopepvp.com' ? '/?direct=1' : '/download?direct=1';
+
+      return new Response(
+        request.method === 'HEAD'
+          ? null
+          : renderDownloadLandingPage(url.origin, releaseInfo, directDownloadHref),
+        {
+          status: 200,
+          headers: buildSecurityHeaders(
+            {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Cache-Control': 'public, max-age=300',
+            },
+            true
+          ),
+        }
+      );
     }
 
     // 0. Public Cloud DVR Replay Vault Web Portal (`GET /` on dvr.*, or `GET /vault`, `GET /vault/:user`, `GET /u/:user`)
@@ -12526,11 +12960,7 @@ self.addEventListener('fetch', (e) => {
   </div>
   <div class="card">
     <div class="badge-icon">
-      <svg viewBox="0 0 36 36" style="width:32px;height:32px;display:block">
-        <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" stroke-width="2.2" />
-        <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" />
-        <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-      </svg>
+      <img src="/favicon.svg" alt="SilphScope PvP" style="width:36px;height:36px;border-radius:10px;display:block" />
     </div>
     <h2>SilphScope <span>PvP Replay</span></h2>
     <p>This replay link (<code>${escapeHtml(shareId)}</code>) has expired or was removed by the trainer.</p>

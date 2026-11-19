@@ -2,6 +2,16 @@
 
 ---
 
+## v7.70 (2026-11-18) — High-Res Pokémon Sprites, Unified 2B Duel Scope Icon & TOS-Safe Website Upgrade
+*Major Roadmap Feature Release (`v7.70`, `versionCode = 1770`) introducing high-resolution Web Simulator Battle Arena sprites and selective zero-bloat mini sprites across Android & Web, rolling out the unified 2B (Split-Arc Duel Scope) icon across launcher/PWA/overlay/Cloudflare assets, and launching the 100% TOS-Safe website & download portal upgrade.*
+
+- **High-Res Web Simulator Sprites & Deterministic Form/Shadow Pipeline (`pokemonSprites.ts`, `PokemonSprite.tsx`, `pokemonDb.ts`, `src/App.tsx`, `sw.js`)**: Replaced hardcoded Battle Arena emojis with crisp `112px`/`128px` Pokémon Showdown HOME 3D sprites (`sprites/home`, `animate-arena-float`, mirrored player view), added National `dex` ingestion from PvPoke `gamemaster.json` + PokeAPI HOME fallback + type-colored monogram badges, and styled Shadow Pokémon with a purple aura drop-shadow and inlaid corner flame indicator while keeping the floating HUD overlay 100% sprite-free.
+- **Selective Zero-Bloat Mini Sprites Across Android & Web (`PokemonSpriteLoader.kt`, `item_team_preset.xml`, `MainActivity.kt`, `MetaTab.tsx`, `IvLabTab.tsx`, `src/App.tsx`)**: Added Coil `2.7.0` (`40 MB` disk cache + `15%` memory cache) on Android and `<PokemonSprite>` on Web to render a compact 3-Pokémon sprite strip inside the Team Builder preset card header (`0dp`/`0px` card height growth), `28dp`/`20–26px` leading icons in Pokémon autocomplete dropdowns, inline sprites on Meta Cores & Top Meta Pokémon rows, and Target Species + Built Pokémon Roster card sprites in IV Lab.
+- **Unified 2B (Split-Arc Duel Scope) App, Web & Overlay Icon (`ic_launcher_background.xml`, `ic_launcher_foreground.xml`, `favicon.svg`, `pwa-icon-192.svg`, `pwa-icon-512.svg`, `overlay.html`, `worker.mjs`)**: Rolled out the unified cyan/amber split-arc Duel Scope icon with 3×3 matchup matrix and crossed swords across Android adaptive launcher drawables (`0.78×` safe zone), Web/PWA SVGs, overlay `#btn-minimize-sword` emblem, and Cloudflare Vault/Download pages.
+- **100% TOS-Safe Website & Download Portal Upgrade (`MarketingWebsite.tsx`, `worker.mjs`)**: Added the **100% TOS-Safe & Ban-Proof Guarantee** showcase section to the official homepage (`silphscopepvp.com`), upgraded `dl.silphscopepvp.com` with a dedicated high-converting TOS-safe download landing page (`renderDownloadLandingPage`), and synced `v7.70` roadmap & Neon orchestrator automation (`AGENTS.md`, `trigger-daily-telemetry-plan.mjs`).
+
+---
+
 ## v7.64 (2026-11-18) — Full-Height Right-Rail Team Card Controls & Zero Left Gutter
 *UI layout polish release (`v7.64`, `versionCode = 1764`) removing the left drag-handle gutter completely and stacking the 6-dot drag icon between `▲`/`▼` inside a full-height elastic right action column.*
 

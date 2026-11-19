@@ -39,6 +39,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Let cross-origin assets (CDN sprites, PvPoke raw GitHub, Google Sheets) use native HTTP caching cleanly
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // Always use Network-Only for dynamic APIs, WebSockets, Range video requests and Stripe
   if (
     url.pathname.startsWith('/v1/') ||

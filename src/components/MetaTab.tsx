@@ -14,6 +14,7 @@ import {
   fetchCrowdEloMetaForLeague
 } from '../data/gblData';
 import type { WebBattleLogEntry, GblSeasonInfo } from './AppThemeAndModels';
+import { PokemonSprite } from './PokemonSprite';
 
 export interface MetaTabProps {
   appCombatMode: AppCombatMode;
@@ -621,6 +622,10 @@ export function MetaTab(props: MetaTabProps) {
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-mono font-bold text-amber-400">#{idx + 1}</span>
+                          <span className="inline-flex items-center gap-0.5 shrink-0">
+                            <PokemonSprite name={core.monA} size={20} />
+                            <PokemonSprite name={core.monB} size={20} />
+                          </span>
                           <span className="font-extrabold text-white truncate">
                             {core.monA} + {core.monB}
                           </span>
@@ -656,6 +661,7 @@ export function MetaTab(props: MetaTabProps) {
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-mono font-bold text-sky-400">#{idx + 1}</span>
+                          <PokemonSprite name={entry.name} size={22} />
                           <span className="font-extrabold text-white truncate">{entry.name}</span>
                         </div>
                         <span className="text-[10.5px] font-mono text-emerald-300 shrink-0">

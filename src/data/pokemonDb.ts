@@ -59,6 +59,7 @@ export interface ChargedMove {
 export interface PokemonStats {
   speciesId: string;
   name: string;
+  dex?: number;
   baseSpecies?: string;
   formLabel?: string;
   types: string[];
@@ -3193,6 +3194,67 @@ export const FORM_CHANGE_SPECIAL_POKEMON: FormChangeComparisonGroup[] = [
   }
 ];
 
+export const SPECIES_DEX_LOOKUP: Record<string, number> = {
+  bulbasaur: 1, ivysaur: 2, venusaur: 3, charmander: 4, charmeleon: 5, charizard: 6,
+  squirtle: 7, wartortle: 8, blastoise: 9, butterfree: 12, beedrill: 15, pidgeot: 18,
+  fearow: 22, pikachu: 25, raichu: 26, sandshrew: 27, sandslash: 28, nidoranf: 29,
+  nidoqueen: 31, nidoranm: 32, nidoking: 34, clefable: 36, ninetales: 38, wigglytuff: 40,
+  golbat: 42, vileplume: 45, primeape: 57, arcanine: 59, poliwrath: 62, alakazam: 65,
+  machamp: 68, victreebel: 71, tentacruel: 73, golem: 76, rapidash: 78, slowbro: 80,
+  dewgong: 87, muk: 89, cloyster: 91, gengar: 94, hypno: 97, marowak: 105,
+  hitmonlee: 106, hitmonchan: 107, lickitung: 108, weezing: 110, rhydon: 112,
+  gyarados: 130, lapras: 131, snorlax: 143, articuno: 144, zapdos: 145, moltres: 146,
+  dragonair: 148, dragonite: 149, mewtwo: 150, mew: 151, meganium: 154, typhlosion: 157,
+  feraligatr: 160, noctowl: 164, lanturn: 171, azumarill: 184, politoed: 186, jumpluff: 189,
+  quagsire: 195, umbreon: 197, slowking: 199, dunsparce: 206, gligar: 207, steelix: 208,
+  forretress: 205, qwilfish: 211, scizor: 212, heracross: 214, skarmory: 227, kingdra: 230,
+  raikou: 243, entei: 244, suicune: 245, tyranitar: 248, lugia: 249, hooh: 250, ho_oh: 250,
+  sceptile: 254, blaziken: 257, swampert: 260, pelipper: 279, gardevoir: 282, vigoroth: 288,
+  sableye: 302, mawile: 303, aggron: 306, medicham: 308, ampharos: 181, altaria: 334,
+  whiscash: 340, cradily: 346, milotic: 350, tropius: 357, walrein: 365, regirock: 377,
+  regice: 378, registeel: 379, latias: 380, latios: 381, kyogre: 382, groudon: 383,
+  rayquaza: 384, jirachi: 385, deoxys: 386, empoleon: 395, luxray: 405, bastiodon: 411,
+  gastrodon: 423, drifblim: 426, bronzong: 437, garchomp: 445, lucario: 448, hippowdon: 450,
+  drapion: 452, toxicroak: 454, abomasnow: 460, lickilicky: 463, rhyperior: 464, togekiss: 468,
+  gliscor: 472, mamoswine: 473, gallade: 475, probopass: 476, dusknoir: 477, froslass: 478,
+  dialga: 483, palkia: 484, heatran: 485, giratina: 487, cresselia: 488, serperior: 497,
+  samurott: 503, excadrill: 530, conkeldurr: 534, whimsicott: 547,
+  scrafty: 560, cofagrigus: 563, jellicent: 593, galvantula: 596, ferrothorn: 598,
+  stunfisk: 618, mandibuzz: 630, hydreigon: 635, cobalion: 638, terrakion: 639, virizion: 640,
+  tornadus: 641, thundurus: 642, reshiram: 643, zekrom: 644, landorus: 645, kyurem: 646,
+  keldeo: 647, meloetta: 648, genesect: 649, chesnaught: 652, greninja: 658, diggersby: 660,
+  talonflame: 663, florges: 671, malamar: 687, dragalge: 691, carbink: 703, goodra: 706,
+  trevenant: 709, xerneas: 716, yveltal: 717, zygarde: 718, decidueye: 724, primarina: 730,
+  vikavolt: 738, toxapex: 748, araquanid: 752, salazzle: 758, golisopod: 768, mimikyu: 778,
+  tapukoko: 785, tapulele: 786, tapubulu: 787, tapufini: 788, solgaleo: 791, lunala: 792,
+  necrozma: 800, melmetal: 809, rillaboom: 812, corviknight: 823, obstagoon: 862, perrserker: 863,
+  runerigus: 867, morpeko: 877, zacian: 888, zamazenta: 889, eternatus: 890, urshifu: 892,
+  zarude: 893, calyrex: 898, ursaluna: 901, sneasler: 903, enamorus: 905, skeledirge: 911,
+  annihilape: 979, clodsire: 980, tinkaton: 959, gholdengo: 1000
+};
+
+export function lookupPokemonDex(nameOrId: string): number | undefined {
+  if (!nameOrId) return undefined;
+  const trimmed = nameOrId.trim().toLowerCase();
+  const direct = SPECIES_DEX_LOOKUP[trimmed];
+  if (direct) return direct;
+  const clean = trimmed
+    .replace(/^shadow\s+/i, "")
+    .replace(/\s*\(shadow\)\s*$/i, "")
+    .replace(/_shadow$/i, "")
+    .replace(/^(alolan|galarian|hisuian|paldean|kanto|mega|primal|origin|therian|crowned)\s+/i, "")
+    .replace(/\s*\([^)]+\)\s*$/g, "")
+    .trim();
+  const baseUnderscore = clean.split("_")[0];
+  const alnum = clean.replace(/[^a-z0-9]/g, "");
+  return (
+    SPECIES_DEX_LOOKUP[clean] ||
+    SPECIES_DEX_LOOKUP[baseUnderscore] ||
+    SPECIES_DEX_LOOKUP[alnum] ||
+    findPokemonByName(nameOrId)?.dex
+  );
+}
+
 export function findPokemonByName(name: string): PokemonStats | undefined {
   if (!name) return undefined;
   const trimmed = name.trim();
@@ -6262,6 +6324,18 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       if (displayName.endsWith(" (Shadow)")) {
         displayName = "Shadow " + displayName.replace(" (Shadow)", "").trim();
       }
+      const gmDex = typeof p.dex === "number" && p.dex > 0 ? p.dex : undefined;
+      if (gmDex) {
+        const cleanDispKey = displayName.toLowerCase().replace(/^shadow\s+/i, "").trim();
+        const baseKeyGm = speciesId.toLowerCase().replace(/_shadow$/i, "");
+        SPECIES_DEX_LOOKUP[speciesId.toLowerCase()] = gmDex;
+        SPECIES_DEX_LOOKUP[baseKeyGm] = gmDex;
+        SPECIES_DEX_LOOKUP[cleanDispKey] = gmDex;
+        const baseAlnumKey = cleanDispKey.replace(/\s*\([^)]+\)\s*$/g, "").replace(/[^a-z0-9]/g, "");
+        if (baseAlnumKey) {
+          SPECIES_DEX_LOOKUP[baseAlnumKey] = gmDex;
+        }
+      }
       const rawTypes = Array.isArray(p.types)
         ? p.types.filter((t: unknown): t is string => typeof t === "string" && t.toLowerCase() !== "none").map((t: string) => t.toLowerCase())
         : ["normal"];
@@ -6359,6 +6433,7 @@ export async function syncPvPokeDataAndRankings(): Promise<{
           }
           POKEMON_DATABASE[k] = {
             ...existingEntry,
+            dex: gmDex ?? existingEntry.dex,
             types,
             baseStats: { atk, def, hp },
             isRawBaseStats: true,
@@ -6433,6 +6508,7 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       POKEMON_DATABASE[displayName] = {
         speciesId,
         name: displayName,
+        dex: gmDex,
         baseSpecies,
         formLabel,
         types,

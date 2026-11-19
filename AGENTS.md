@@ -1,7 +1,7 @@
 # AGENTS.md — SilphScope PvP Workspace Rules
 
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.64` (`versionCode = 1764`)  
+> **Current Version**: `v7.70` (`versionCode = 1770`)  
 > **Domains**: `silphscopepvp.com` (Web/Sim) • `dvr.silphscopepvp.com` (Cloud Vault & `/watch/:shareId`) • `api.silphscopepvp.com` (Worker API) • `dl.silphscopepvp.com` (APK)
 
 ---
@@ -27,9 +27,9 @@
 ## 2. Model & Subagent Routing
 
 - **Tier 0 (`0 AI Tokens` — Local Node/ffmpeg)**: Run telemetry sync/audits (`npm run telemetry:sync`, `scripts/nightly-telemetry-audit.mjs`), D1 meta queries (`npm run meta:summary`), and release checks (`npm run release:check`) locally.
-- **Tier 1 (`flash` / `flash_lite` Subagents)**: **Always** delegate visual OCR, `4x6` contact-sheet, and DVR keyframe inspection via `invoke_subagent(TypeName: "research", Model: "flash")`, and delegate mechanical CI workflow polling to Flash. Never inspect video frames directly on Pro/Carbon.
-- **Tier 2 (`Orchestrator (Carbon)` / `Carbon Medium`)**: Default for multi-file plans, root-cause diagnostics, and all Kotlin / TypeScript / Cloudflare Worker / HUD code wiring (in Orchestrator mode, write clean plans and hand off via `exit_plan_mode`; in standalone chats, use Carbon Medium for code wiring and Carbon Low for compiler fixes).
-- **Tier 3 (`Carbon High` — Ask First)**: Proactively ask via `ask_question` before switching to Carbon High for new combat math engines or complex vision/concurrency pipeline overhauls.
+- **Tier 1 (`flash` / `flash_lite` Subagents)**: **Always** delegate visual OCR, `4x6` contact-sheet, and DVR keyframe inspection via `invoke_subagent(TypeName: "research", Model: "flash")`, and delegate mechanical CI workflow polling to Flash. Never inspect video frames directly on Pro/Carbon/Neon.
+- **Tier 2 (`Orchestrator (Neon)` / `Gemini 4 Neon (Medium)`)**: Primary default for daily development: multi-file plans, HUD/Web Simulator features, Cloudflare Worker endpoints, database queries, daily telemetry audits, and routine code wiring. Provides significantly faster turn latency and quota preservation during long tool-execution loops.
+- **Tier 3 (`Carbon Escalation` — Suggest Upgrading for Complex Tasks)**: For high-complexity tasks (core native Android `ImageReader`/`captureLock` concurrency overhauls, 3D HSV pixel scanner rewrites, new combat math simulation engines, or deep K2 compiler OOM diagnostics), **proactively suggest upgrading to Carbon (`Orchestrator (Carbon)` or `Carbon High`) via `ask_question` before proceeding** if deep architectural reasoning or formal verification would be beneficial.
 
 ---
 
@@ -62,7 +62,7 @@
 
 ## 5. Release Checklist (`vX.XX`)
 
-1. Bump version across all synced targets: `"C:\Program Files\Git\bin\bash.exe" scripts/bump_version.sh` (`+0.01` default, or pass `vX.XX`).
+1. Bump version across all synced targets: `"C:\Program Files\Git\bin\bash.exe" scripts/bump_version.sh` (`+0.01` default for routine fixes/polish; pass the next `vX.Y0` e.g. `v7.70` whenever shipping a roadmap feature).
 2. Prepend `## vX.XX (YYYY-MM-DD) — <Summary Title>` (unbracketed `vX.XX`) + bullet highlights to [CHANGELOG.md](./CHANGELOG.md) (drives GitHub Release notes and `/v1/version/latest`).
 3. Update [src/data/roadmapData.ts](./src/data/roadmapData.ts): prepend `vX.XX` to `VERSION_EVOLUTION_HISTORY` and **remove any newly completed items from `ACTIVE_ROADMAP_ITEMS`**.
 4. Run `npm run release:check && npm run lint && npm run build` (all must exit `0`).
