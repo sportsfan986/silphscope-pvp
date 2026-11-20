@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.82',
+    codename: 'Disguise + Debuff Engine, Mirror Catch-Swaps & Lead Sync',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Fixes simultaneous debuffs during Mimikyu Disguise busts and same-epoch 100%-chance stat-stage undos, adds 2-line wrapped OCR stat callout stitching, unlocks mirror-species catch-swaps during charged-move cutscenes with catch-and-KO defender tracking, and aligns Turn-0 opening-lead battle clocks.',
+    icon: '🛡️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Decoupled Disguise Bust, Layer 1 deterministic move receipts, and Layer 2 OCR receipts in OverlayService.kt so simultaneous debuffs (e.g. Poison Fang + Disguise bust = -2 Def) and same-epoch Overheat self-debuffs persist without self-undo, paired with 2-line wrapped OCR stitching ("DEFENSE HARSHLY" + "FELL!")',
+      'Corroborated mirror-species "Go, <Species>!" catch-swaps via top-right opponent nameplate OCR, unlocked confirmedCutsceneNameplateSwap during cutscenes, and tracked catch-and-KO defender slots to eliminate false SHIELD_DESYNC flags',
+      'Aligned opening-lead battleClockAnchorMs to earlyMoves * userMoveDurationMs after intro countdowns and added retroactive archival of verified pre-v7.56 non-manual anomalies in nightly-telemetry-audit.mjs'
+    ]
+  },
+  {
     version: 'v7.81',
     codename: 'Website, Roadmap, Download Portal & PWA Manifest Theme Polish',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Eliminates all remaining Shiny Origin Dialga teal/navy leaks across the marketing site, Version Roadmap infographic, dl.silphscopepvp.com download portal, and PWA manifests so every web surface honors Duel Scope Midnight Black by default and syncs dynamically with user themes.',
     icon: '🎨',

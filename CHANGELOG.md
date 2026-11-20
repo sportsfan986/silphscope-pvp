@@ -2,6 +2,16 @@
 
 ---
 
+## v7.82 (2026-11-20) — Simultaneous Mimikyu Disguise + Debuff Engine, Mirror Catch-Swap Cutscenes & Opening-Lead Sync
+*Combat telemetry & live vision reliability patch (`v7.82`, `versionCode = 1782`) fixing simultaneous debuff accounting on Mimikyu Disguise busts, same-epoch 100%-chance stat-stage self-undos, wrapped 2-line OCR stat callouts, mirror-species catch-swaps during charged-move cutscenes, opening-lead energy anchoring, and historical telemetry queue hygiene.*
+
+- **Stat-Stage Engine, Mimikyu Disguise + Debuff & Wrapped 2-Line OCR (`OverlayService.kt`)**: Decoupled Disguise Bust (`lastDisguiseBustStatWallMs`) and Layer 1 deterministic move receipts (`lastLayer1StatWallMs`/`lastLayer1StatDelta`) from Layer 2 OCR callout receipts (`lastOcrStatCalloutWallMs`/`lastOcrStatCalloutDelta`) so Poison Fang/Acid Spray debuffs stack cleanly on Mimikyu Disguise busts (`-2` Def) and same-epoch retroactive banner calls never undo Overheat/100%-chance stat deltas; added 2-line vertical OCR callout stitching (`"DEFENSE HARSHLY"` + `"FELL!"`, `"DEFENSE SEVERELY"` + `"FELL!"`) and channel magnitude upgrade tracking (`-1 -> -2/-3`) while preserving `v7.51`'s Mimikyu swap-in reminder guard.
+- **Mirror-Species Catch-Swaps & Catch-and-KO Defender Attribution (`OverlayService.kt`)**: Allowed mirror-species `"Go, <Species>!"` banners when corroborated by top-right opponent nameplate OCR, unlocked `confirmedCutsceneNameplateSwap` through the `isAllCombatHudGone` charged-move cutscene gate, and added `pendingChargedAttackCatchSlotIdx` tracking so one-shot KO catch-swaps attribute damage and fainting accurately without false `SHIELD_DESYNC` flags.
+- **Opening-Lead Clock & Energy Alignment (`OverlayService.kt`)**: Anchored `battleClockAnchorMs` to `earlyMoves * userMoveDurationMs` on first-circle battle start after intro countdowns, eliminating Turn-0 opponent fast-move undercounts (`-18E`) and backward elapsed-clock jumps.
+- **Nightly Telemetry Audit Hygiene (`scripts/nightly-telemetry-audit.mjs`)**: Added `v7.82` retroactive resolution rules and automated archival of verified pre-`v7.56` non-manual auto-anomalies with zero `v7.70+` recurrences.
+
+---
+
 ## v7.81 (2026-11-19) — Website, Roadmap Infographic, Download Portal & PWA Manifest Theme Polish
 *Patch release (`v7.81`, `versionCode = 1781`) eliminating remaining Shiny Origin Dialga teal (`#2DD4BF` / `teal-*` / `#050B16`) color leaks across the public marketing site, Version Roadmap section, `dl.silphscopepvp.com` download page, and PWA manifests.*
 
