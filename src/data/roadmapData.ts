@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.92',
+    codename: 'Android 17 VerifyError Hotfix, Release Pin Switch & Node 24 Pages CI',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Resolves the v7.90–v7.91 Android 17 ART VerifyError cold-launch crash by structurally splitting OverlayService.updateLiveHpAndChargedAttackState into modular helpers, adds a Worker release-pin switch for dl.silphscopepvp.com, and upgrades GitHub Pages CI to Node 24 actions.',
+    icon: '🔧',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Split OverlayService.updateLiveHpAndChargedAttackState (5,259 lines / 430 DEX registers -> ~1,905 lines + 8 modular internal helpers + class-level FormFastCandidate/JointFastMoveEval), eliminating R8 register-allocator [0x5A5B] v6<-v352 Undefined VerifyError on Android 17 (SDK 37)',
+      'Added PINNED_RELEASE_TAG support in Cloudflare Worker (dl.silphscopepvp.com/direct + /v1/version/latest) so public downloads can stay pinned to a verified stable release during device validation',
+      'Upgraded deploy-pages.yml to checkout@v7, configure-pages@v6, setup-node@v7, upload-pages-artifact@v5, and deploy-pages@v5 for Node 24 runner compatibility'
+    ]
+  },
+  {
     version: 'v7.91',
     codename: 'Move Counts Only HUD, Comp All-Metas & Cold-Launch Stability',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Resolves the v7.90 cold-launch main-thread Keystore IPC storm with thread-safe caching and built-in crash diagnostics, adds a Move Counts Only HUD option hiding damage percentages, and unlocks all Open and Limited/Mega/Specialty Metas on temporary Comp DVR passes.',
     icon: '🛡️',

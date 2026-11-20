@@ -9306,7 +9306,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.91');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.92');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
   const dlWatermarkMap = buildWorkerWatermarkSvgMap();
@@ -9994,15 +9994,19 @@ self.addEventListener('fetch', (e) => {
     }
     if (isGetOrHead && path === '/v1/version/latest') {
       try {
+        const pinnedTag = String(env.PINNED_RELEASE_TAG || '').trim();
+        const ghReleaseApiUrl = pinnedTag
+          ? `https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/tags/${encodeURIComponent(pinnedTag)}`
+          : 'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest';
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.91',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.92',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
         }
         let ghRes = await fetch(
-          'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
+          ghReleaseApiUrl,
           {
             headers: ghHeaders,
             cf: { cacheTtl: 60, cacheEverything: true },
@@ -10011,7 +10015,7 @@ self.addEventListener('fetch', (e) => {
         if (ghRes.status === 401 && ghHeaders.Authorization) {
           delete ghHeaders.Authorization;
           ghRes = await fetch(
-            'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
+            ghReleaseApiUrl,
             {
               headers: ghHeaders,
               cf: { cacheTtl: 60, cacheEverything: true },
@@ -10162,16 +10166,26 @@ self.addEventListener('fetch', (e) => {
       isGetOrHead &&
       (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk' || path.endsWith('.apk'))
     ) {
-      let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
+      const pinnedTag = String(env.PINNED_RELEASE_TAG || '').trim();
+      const ghReleaseApiUrl = pinnedTag
+        ? `https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/tags/${encodeURIComponent(pinnedTag)}`
+        : 'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest';
+      let apkUrl = pinnedTag
+        ? `https://github.com/sportsfan986/silphscope-pvp/releases/download/${encodeURIComponent(pinnedTag)}/silphscope-pvp-${encodeURIComponent(pinnedTag)}.apk`
+        : 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.91',
-        releaseTitle: 'SilphScope PvP v7.91',
+        versionName: 'v7.92',
+        releaseTitle: 'SilphScope PvP v7.92',
         publishedAt: '',
         assetSizeMb: '',
       };
+      if (pinnedTag) {
+        releaseInfo.versionName = pinnedTag;
+        releaseInfo.releaseTitle = `SilphScope PvP ${pinnedTag}`;
+      }
       try {
         const ghRes = await fetch(
-          'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
+          ghReleaseApiUrl,
           {
             headers: {
               Accept: 'application/vnd.github+json',

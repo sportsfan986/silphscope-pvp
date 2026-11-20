@@ -2,6 +2,15 @@
 
 ---
 
+## v7.92 (2026-11-20) — Android 17 ART VerifyError Hotfix, Download-Pin Safety Switch & GitHub Pages CI Upgrade
+*Critical stability hotfix & CI infrastructure update (`v7.92`, `versionCode = 1792`) resolving the `v7.90`–`v7.91` Android 17 (`SDK 37`) `java.lang.VerifyError` cold-launch crash caught by the built-in Crash Diagnostics screen, adding an instant Cloudflare Worker release-pin switch for `dl.silphscopepvp.com`, and upgrading GitHub Pages deployment actions to Node 24.*
+
+- **ART `VerifyError` Root-Cause Fix (`OverlayService.kt`)**: Structurally split `OverlayService.updateLiveHpAndChargedAttackState` (5,259 lines / 430 DEX registers / 41,559 code units -> ~1,905 lines) into 8 modular `internal` helper methods and lifted nested `FormFastCandidate` / `JointFastMoveEval` data classes to class level, eliminating the R8 register-allocator `Undefined` register bug (`[0x5A5B] copy-cat1 v6<-v352`) that caused Android 17 ART to reject `OverlayService` on cold launch with zero combat/vision logic changes.
+- **Download Portal Release-Pin Switch (`worker.mjs`, `wrangler.toml`)**: Added `PINNED_RELEASE_TAG` support in the Cloudflare Worker so `dl.silphscopepvp.com` (`/direct`) and `/v1/version/latest` can be pinned to a verified stable GitHub release while hotfixes undergo on-device testing.
+- **GitHub Pages CI Node 24 Upgrade (`deploy-pages.yml`)**: Upgraded `.github/workflows/deploy-pages.yml` actions to native Node 24 releases (`checkout@v7`, `configure-pages@v6`, `setup-node@v7`, `upload-pages-artifact@v5`, `deploy-pages@v5`), fixing the `v7.90`–`v7.91` `Deploy to GitHub Pages` artifact lookup failure.
+
+---
+
 ## v7.91 (2026-11-20) — Move Counts Only HUD Mode, Comp Tier All-Metas Unlock, Cold-Launch Keystore Fix & Crash Diagnostics
 *Stability, HUD customization & tournament-pass update (`v7.91`, `versionCode = 1791`) resolving the `v7.90` cold-launch main-thread Keystore Binder IPC storm, adding built-in on-device crash diagnostics, adding a Settings toggle to display move counts without damage percentages, and unlocking all Limited/Mega/Specialty Metas for temporary Comp DVR passes.*
 
