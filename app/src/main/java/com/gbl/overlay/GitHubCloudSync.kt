@@ -462,6 +462,7 @@ private val SYNCABLE_BOOLEAN_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS,
     OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH,
     OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING,
+    OverlayService.PREFS_KEY_HIDE_DAMAGE_PERCENTS,
     OverlayService.PREFS_KEY_ENABLE_HP_TRACKING,
     OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING,
     OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT,
@@ -697,28 +698,40 @@ internal fun OverlayService.Companion.saveReconciledSyncVaultLocally(
 
 private const val KEYSTORE_SECRET_ENC_PREFIX = "KS_GCM_V1:"
 private const val ANDROID_KEYSTORE_ALIAS = "silphscope_keystore_aes_gcm_v1"
+private val keystoreLock = Any()
+@Volatile private var cachedKeystoreAesKey: javax.crypto.SecretKey? = null
+private val keystoreDecryptCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
 private fun getOrCreateAndroidKeystoreAesKey(): javax.crypto.SecretKey? {
-    return try {
-        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        val existing = ks.getEntry(ANDROID_KEYSTORE_ALIAS, null) as? java.security.KeyStore.SecretKeyEntry
-        if (existing != null) return existing.secretKey
-        val keyGenerator = javax.crypto.KeyGenerator.getInstance(
-            android.security.keystore.KeyProperties.KEY_ALGORITHM_AES,
-            "AndroidKeyStore"
-        )
-        val spec = android.security.keystore.KeyGenParameterSpec.Builder(
-            ANDROID_KEYSTORE_ALIAS,
-            android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .build()
-        keyGenerator.init(spec)
-        keyGenerator.generateKey()
-    } catch (_: Exception) {
-        null
+    cachedKeystoreAesKey?.let { return it }
+    synchronized(keystoreLock) {
+        cachedKeystoreAesKey?.let { return it }
+        return try {
+            val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val existing = ks.getEntry(ANDROID_KEYSTORE_ALIAS, null) as? java.security.KeyStore.SecretKeyEntry
+            val key = if (existing != null) {
+                existing.secretKey
+            } else {
+                val keyGenerator = javax.crypto.KeyGenerator.getInstance(
+                    android.security.keystore.KeyProperties.KEY_ALGORITHM_AES,
+                    "AndroidKeyStore"
+                )
+                val spec = android.security.keystore.KeyGenParameterSpec.Builder(
+                    ANDROID_KEYSTORE_ALIAS,
+                    android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build()
+                keyGenerator.init(spec)
+                keyGenerator.generateKey()
+            }
+            cachedKeystoreAesKey = key
+            key
+        } catch (_: Throwable) {
+            null
+        }
     }
 }
 
@@ -736,8 +749,11 @@ internal fun OverlayService.Companion.encryptSecretWithKeystore(plaintext: Strin
         combined[0] = iv.size.toByte()
         System.arraycopy(iv, 0, combined, 1, iv.size)
         System.arraycopy(cipherBytes, 0, combined, 1 + iv.size, cipherBytes.size)
-        KEYSTORE_SECRET_ENC_PREFIX + android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
-    } catch (_: Exception) {
+        val out = KEYSTORE_SECRET_ENC_PREFIX + android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
+        if (keystoreDecryptCache.size > 64) keystoreDecryptCache.clear()
+        keystoreDecryptCache[out] = clean
+        out
+    } catch (_: Throwable) {
         clean
     }
 }
@@ -746,6 +762,7 @@ internal fun OverlayService.Companion.decryptSecretWithKeystore(stored: String?)
     val raw = stored?.trim().orEmpty()
     if (raw.isEmpty()) return ""
     if (!raw.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) return raw
+    keystoreDecryptCache[raw]?.let { return it }
     return try {
         val b64 = raw.removePrefix(KEYSTORE_SECRET_ENC_PREFIX)
         val combined = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
@@ -757,8 +774,13 @@ internal fun OverlayService.Companion.decryptSecretWithKeystore(stored: String?)
         val secretKey = getOrCreateAndroidKeystoreAesKey() ?: return ""
         val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, javax.crypto.spec.GCMParameterSpec(128, iv))
-        String(cipher.doFinal(cipherBytes), Charsets.UTF_8).trim()
-    } catch (_: Exception) {
+        val plain = String(cipher.doFinal(cipherBytes), Charsets.UTF_8).trim()
+        if (plain.isNotEmpty()) {
+            if (keystoreDecryptCache.size > 64) keystoreDecryptCache.clear()
+            keystoreDecryptCache[raw] = plain
+        }
+        plain
+    } catch (_: Throwable) {
         ""
     }
 }
@@ -3146,16 +3168,18 @@ internal fun OverlayService.Companion.applyServerLicenseMetadataToEditorStatic(
 }
 
 internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: SharedPreferences): String {
-    val unlockKey = getEffectiveReplayUnlockKey(prefs)
     val rawTier = (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
     val everPaid = prefs.getBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, false)
     val offlineSig = prefs.getString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, "")?.trim().orEmpty()
-    val vaultSession = getVaultSessionTokenStatic(prefs)
     val expiresAtStr = prefs.getString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, "")?.trim().orEmpty()
 
-    // Anti-Spoofing: If no unlock key, offline sig, or authenticated vault session and never verified via key/claim, default to free
-    if (unlockKey.isEmpty() && !everPaid && offlineSig.isEmpty() && vaultSession.isEmpty() && rawTier != "free") {
-        return "free"
+    // Anti-Spoofing: Only hit Keystore-encrypted unlock/session secrets when unverified paid/comp tier is claimed
+    if (rawTier != "free" && !everPaid && offlineSig.isEmpty()) {
+        val unlockKey = getEffectiveReplayUnlockKey(prefs)
+        val vaultSession = if (unlockKey.isEmpty()) getVaultSessionTokenStatic(prefs) else ""
+        if (unlockKey.isEmpty() && vaultSession.isEmpty()) {
+            return "free"
+        }
     }
 
     // Check offline expiration:

@@ -135,7 +135,7 @@ export function IvLabTab({
   onDeleteBuiltPokemon
 }: IvLabTabProps) {
   const isProOrVip = webMembershipTier === "pro" || webMembershipTier === "vip";
-  const isFree = webMembershipTier === "free" || webMembershipTier === "comp";
+  const isFree = webMembershipTier === "free";
 
   const [subTab, setSubTab] = useState<"matrix" | "built">("matrix");
 

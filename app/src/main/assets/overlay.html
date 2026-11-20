@@ -1718,6 +1718,21 @@
             border: 1px solid rgba(var(--panel-border-rgb, 45, 212, 191), 0.24);
         }
 
+        #mode-sky-trench.hide-dmg-pcts .section-header-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        #mode-sky-trench.hide-dmg-pcts .move-timing-row {
+            grid-template-columns: 44px 1fr;
+            padding-right: 4px;
+        }
+
+        #mode-sky-trench.hide-dmg-pcts .dmg-col-headers,
+        #mode-sky-trench.hide-dmg-pcts .move-col-right-grid,
+        #mode-sky-trench.hide-dmg-pcts .bp-micro-pill {
+            display: none !important;
+        }
+
         .hidden {
             display: none !important;
         }
@@ -2693,6 +2708,23 @@
                 applyCompactHudConfigFields(parsed);
             } catch (e) {}
             render();
+        };
+
+        window.hideDamagePercents = false;
+        window.setHideDamagePercents = function(hide) {
+            const next = !!hide;
+            window.hideDamagePercents = next;
+            if (battleData) {
+                battleData.hideDamagePercents = next;
+            }
+            const panel = document.getElementById("mode-sky-trench");
+            if (panel) {
+                panel.classList.toggle("hide-dmg-pcts", next);
+            }
+            render();
+            if (typeof scheduleNotifyHeight === "function") {
+                scheduleNotifyHeight(true);
+            }
         };
 
         function toggleLiveHudModeFromBadge(e) {
@@ -3686,6 +3718,9 @@
                 if (data.compactHudConfig && typeof data.compactHudConfig === "object") {
                     applyCompactHudConfigFields(data.compactHudConfig);
                 }
+                if (typeof data.hideDamagePercents === "boolean") {
+                    window.hideDamagePercents = data.hideDamagePercents;
+                }
                 render();
             } catch (e) {
                 console.error("Error parsing battle data in overlay", e);
@@ -3699,6 +3734,17 @@
         function render() {
             const isWaitingState = (battleData.activeOpponent === "Waiting..." || !battleData.activeOpponent);
             const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1"));
+            const hideDmgPcts = (typeof battleData.hideDamagePercents === "boolean")
+                ? battleData.hideDamagePercents
+                : !!window.hideDamagePercents;
+            const skyPanelEl = document.getElementById("mode-sky-trench");
+            if (skyPanelEl) {
+                const hadHideDmg = skyPanelEl.classList.contains("hide-dmg-pcts");
+                skyPanelEl.classList.toggle("hide-dmg-pcts", hideDmgPcts);
+                if (hadHideDmg !== hideDmgPcts && typeof scheduleNotifyHeight === "function") {
+                    scheduleNotifyHeight(true);
+                }
+            }
 
             try {
                 // Update Shadow Toggle Button (2-row stacked + verified ✓ / locked 🔒 provenance)
@@ -4225,7 +4271,7 @@
 
             const my3Letter = abbrPoke(battleData.userActivePokemon || "Lead", false);
             const rawUserFastTelemetry = battleData.userFastTelemetry || `${abbrMove5(battleData.userFastMoveName || "Fast")} ${battleData.userFastMoveTurns || 2}t`;
-            const userFastTelemetry = hpTrackingEnabled ? String(rawUserFastTelemetry).replace(/\/\d+%$/, "") : rawUserFastTelemetry;
+            const userFastTelemetry = (hpTrackingEnabled || hideDmgPcts) ? String(rawUserFastTelemetry).replace(/\/\d+%$/, "") : rawUserFastTelemetry;
             if (myShortEl) {
                 const myHpSuffix = hpTrackingEnabled ? ` ${activeUserHpVal}%` : "";
                 const myHtml = isWaitingState
@@ -4253,7 +4299,7 @@
             const myBpPillEl = document.getElementById("sky-my-bp-pill");
             if (myBpPillEl) {
                 const myBpDelta = Number(battleData.liveMyBpDeltaHp) || 0;
-                const myBpHtml = !isWaitingState && myBpDelta !== 0
+                const myBpHtml = !isWaitingState && !hideDmgPcts && myBpDelta !== 0
                     ? (myBpDelta > 0
                         ? `<span class="bp-micro-pill bp-pos" title="Live Attack Breakpoint: +${myBpDelta} HP/hit vs Opp IVs">⚡BP+${myBpDelta}</span>`
                         : `<span class="bp-micro-pill bp-blk" title="Opp Bulkpoint holds: ${myBpDelta} HP/hit vs standard">🛡️BLK${myBpDelta}</span>`)
@@ -4521,7 +4567,7 @@
                 const opp3Letter = abbrPoke(battleData.activeOpponent || "Opp", false);
                 const rawOppFastTelemetry = battleData.oppFastTelemetry
                     || `${abbrMove5(battleData.activeOpponentFastMove || "Fast")} ${battleData.activeOpponentTurns || 2}t`;
-                const oppFastTelemetry = hpTrackingEnabled ? String(rawOppFastTelemetry).replace(/\/\d+%$/, "") : rawOppFastTelemetry;
+                const oppFastTelemetry = (hpTrackingEnabled || hideDmgPcts) ? String(rawOppFastTelemetry).replace(/\/\d+%$/, "") : rawOppFastTelemetry;
                 const oppHpSuffix = hpTrackingEnabled ? ` ${activeOppHpVal}%` : "";
                 const oppFastStatus = String(battleData.oppFastMoveStatus || "unconfirmed");
                 const oppFastSpanCls = oppFastStatus === "confirmed_non_standard"
@@ -4536,7 +4582,7 @@
                         ? "Confirmed Standard Fast Move (Joint ΔHP + Turn Cadence)"
                         : "Unconfirmed Standard Fast Move (awaiting ΔHP + Cadence check)");
                 const oppBpDelta = Number(battleData.liveOppBpDeltaHp) || 0;
-                const oppBpHtml = oppBpDelta !== 0
+                const oppBpHtml = !hideDmgPcts && oppBpDelta !== 0
                     ? (oppBpDelta > 0
                         ? `<span class="bp-micro-pill bp-warn" title="Opponent hits Attack Breakpoint: +${oppBpDelta} HP/hit vs your IVs">⚠️BP+${oppBpDelta}</span>`
                         : `<span class="bp-micro-pill bp-blk" title="Your Defense Bulkpoint holds: ${oppBpDelta} HP/hit vs Opp standard">🛡️BLK${oppBpDelta}</span>`)
@@ -4546,8 +4592,8 @@
                 }
                 const oppBpPillEl = document.getElementById("sky-opp-bp-pill");
                 if (oppBpPillEl) {
-                    oppBpPillEl.style.display = (!isWaitingState && oppBpHtml) ? "inline-flex" : "none";
-                    setHtmlIfChanged(oppBpPillEl, !isWaitingState ? oppBpHtml : "");
+                    oppBpPillEl.style.display = (!isWaitingState && !hideDmgPcts && oppBpHtml) ? "inline-flex" : "none";
+                    setHtmlIfChanged(oppBpPillEl, (!isWaitingState && !hideDmgPcts) ? oppBpHtml : "");
                 }
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;

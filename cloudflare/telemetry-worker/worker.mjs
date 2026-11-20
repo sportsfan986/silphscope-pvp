@@ -597,7 +597,7 @@ const TIER_PRESETS = {
   comp: {
     tier: 'comp',
     isComp: true,
-    label: 'Comp DVR Pass (Temporary • 25 Local + 5 ⭐ Local Pins • 15 Rolling Cloud (30d) • Free Tier Features)',
+    label: 'Comp DVR Pass (Temporary • 25 Local + 5 ⭐ Local Pins • 15 Rolling Cloud (30d) • All Metas)',
     maxLocalBattles: 25,
     maxLocalPinnedBattles: 5,
     maxRollingBattles: 15,
@@ -605,7 +605,7 @@ const TIER_PRESETS = {
     retentionDays: 30,
     pinnedRetentionDays: 0,
     maxStorageMb: 525,
-    allowedLeagues: ['GREAT LEAGUE', 'MASTER LEAGUE'],
+    allowedLeagues: ['ALL'],
     teamsPerArchetype: 1,
     allowAltMovesets: false,
     shieldDecisionOverlay: false,
@@ -4126,7 +4126,7 @@ async function resolveUserPaidTierSummary(kv, screenName) {
           }
           return {
             tier: 'comp',
-            badge: '🎁 Comp DVR Pass (Free Tier)',
+            badge: '🎁 Comp DVR Pass (All Metas)',
             key: lic.key || mappedKey,
             expiresAt: lic.expiresAt || null,
             maxRollingBattles: Number(lic.maxRollingBattles ?? TIER_PRESETS.comp.maxRollingBattles),
@@ -9306,7 +9306,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.90');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.91');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
   const dlWatermarkMap = buildWorkerWatermarkSvgMap();
@@ -9996,7 +9996,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.90',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.91',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -10164,8 +10164,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.90',
-        releaseTitle: 'SilphScope PvP v7.90',
+        versionName: 'v7.91',
+        releaseTitle: 'SilphScope PvP v7.91',
         publishedAt: '',
         assetSizeMb: '',
       };
@@ -14232,7 +14232,7 @@ self.addEventListener('fetch', (e) => {
               : null;
             const compLabel = `Comp DVR Pass (${maxLocalBattles} Local + ${maxLocalPinnedBattles} ⭐ Local${
               maxRollingBattles > 0 ? ` • ${maxRollingBattles} Rolling Cloud` : ''
-            } • ${durationDays}d • Free Features)`;
+            } • ${durationDays}d • All Metas)`;
             record = {
               key,
               tier: 'comp',

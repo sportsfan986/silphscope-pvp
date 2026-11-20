@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.91',
+    codename: 'Move Counts Only HUD, Comp All-Metas & Cold-Launch Stability',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Resolves the v7.90 cold-launch main-thread Keystore IPC storm with thread-safe caching and built-in crash diagnostics, adds a Move Counts Only HUD option hiding damage percentages, and unlocks all Open and Limited/Mega/Specialty Metas on temporary Comp DVR passes.',
+    icon: '🛡️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Cached AndroidKeyStore AES-GCM key/decrypts, short-circuited tier checks, and eliminated redundant initViews/applyCurrentAppTheme summary cascades (~400+ main-thread IPCs -> 0-2), paired with SilphScopeApp crash capture + 1-tap stack-trace recovery UI',
+      'Added Live HUD toggle (Dmg % + Counts vs. Counts Only) synced via Cloudflare D1 to hide 3-column damage % grids, fast-move /X% suffixes, and BP/BLK pills while keeping the Shield Decision Overlay independent',
+      'Expanded 30-day non-paid Comp DVR passes (comp) to unlock all Open + Limited/Mega/Specialty Metas across Anti-Meta Generator and IV Lab (Android & Web) while keeping paid/Alumni features gated'
+    ]
+  },
+  {
     version: 'v7.90',
     codename: 'Expanded Local DVR, 30d Comp Pass, Haptics Fixes & 5-Accordion Settings',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Expands local on-device DVR rolling buffers and ⭐ pin limits across all tiers, gates Compact HUD AI Coach to Lifetime Supporter+, adds an internal 30-day non-paid Comp DVR pass, fixes OEM haptic vibration reliability, and streamlines Android Settings into 5 collapsible accordions with 1-tap Playstyle Quick Presets.',
     icon: '🎛️',

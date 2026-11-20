@@ -2,6 +2,15 @@
 
 ---
 
+## v7.91 (2026-11-20) — Move Counts Only HUD Mode, Comp Tier All-Metas Unlock, Cold-Launch Keystore Fix & Crash Diagnostics
+*Stability, HUD customization & tournament-pass update (`v7.91`, `versionCode = 1791`) resolving the `v7.90` cold-launch main-thread Keystore Binder IPC storm, adding built-in on-device crash diagnostics, adding a Settings toggle to display move counts without damage percentages, and unlocking all Limited/Mega/Specialty Metas for temporary Comp DVR passes.*
+
+- **Cold-Launch Keystore IPC Fix & Built-In Crash Diagnostics (`GitHubCloudSync.kt`, `SilphScopeApp.kt`, `MainActivity.kt`, `AndroidManifest.xml`)**: Added thread-safe in-memory caching for `AndroidKeyStore` AES-GCM key and decrypted secrets, short-circuited `getEffectiveReplayTierStatic`, cached `PackageManager.getPackageInfo`, and eliminated 35+ redundant `initViews()`/`applyCurrentAppTheme()` summary cascades (~400+ main-thread Keystore Binder IPCs reduced to 0–2 per cold launch); added global `SilphScopeApp` uncaught-exception logging plus an on-screen Emergency Crash Diagnostic view / next-launch Crash Report dialog with 1-tap clipboard copy.
+- **Move Counts Only HUD Mode (`OverlayService.kt`, `MainActivity.kt`, `GitHubCloudSync.kt`, `overlay.html`, `activity_main.xml`, `overlay-asset.mjs`)**: Added Android Settings toggle under *Live HUD Layout & Toggles* (`📊 Move Table Damage %`: `Dmg % + Counts` ↔ `Counts Only`, synced via Cloudflare D1) hiding 3-column damage % grids, fast-move `/X%` suffixes, and `⚡BP+`/`🛡️BLK` micro-pills across both Compact & Full HUD while leaving the Shield Decision Overlay on its own independent toggle.
+- **Comp Tier (`comp`) All-Metas Unlock (`MainActivity.kt`, `App.tsx`, `IvLabTab.tsx`, `worker.mjs`, `SKILL.md`)**: Expanded temporary 30-day non-paid `comp` passes to unlock all Open + Limited/Mega/Specialty Cups in both Anti-Meta Team Generator and IV Lab Multi-IV Matrix (Android & Web) while keeping `everPaid = false`, 1 team/archetype, standard movesets, and all paid/Alumni features gated.
+
+---
+
 ## v7.90 (2026-11-20) — Expanded Local DVR Buffers & Pin Caps, 30-Day Comp DVR Pass, Haptics Reliability & 5-Accordion Settings
 *Major feature & UX release (`v7.90`, `versionCode = 1790`) increasing local on-device DVR rolling buffers and ⭐ pin limits across all tiers, gating Compact HUD AI Coach to Lifetime Supporter+, introducing an internal 30-day non-paid Comp DVR pass, fixing OEM haptic vibration reliability and Master-mute leaks, and reorganizing Android Settings into 5 collapsible accordions with 1-tap Playstyle Quick Presets.*
 

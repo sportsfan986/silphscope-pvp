@@ -1103,7 +1103,7 @@ export default function App() {
     const normLg = normalizeLeagueName(lg);
     const isGlOrMl = normLg === 'GREAT LEAGUE' || normLg === 'MASTER LEAGUE';
     const isCore3 = isGlOrMl || normLg === 'ULTRA LEAGUE';
-    if (tier === 'free' || tier === 'comp') return isGlOrMl;
+    if (tier === 'free') return isGlOrMl;
     if (tier === 'supporter') return isCore3;
     return true;
   };
@@ -7054,7 +7054,7 @@ export default function App() {
       const displayLg = formatLeagueDisplayLabel(lockedLg);
       setShowMembershipModal(true);
       setMembershipStatusMsg(
-        webMembershipTier === 'free' || webMembershipTier === 'comp'
+        webMembershipTier === 'free'
           ? `🔒 ${displayLg} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`
           : `🏆 ${displayLg} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`
       );
@@ -7563,7 +7563,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.90 • Android Native Overlay
+                  v7.91 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -12254,7 +12254,7 @@ export default function App() {
                                   const displayLg = formatLeagueDisplayLabel(lgId);
                                   setShowMembershipModal(true);
                                   setMembershipStatusMsg(
-                                    webMembershipTier === 'free' || webMembershipTier === 'comp'
+                                    webMembershipTier === 'free'
                                       ? `🔒 ${displayLg} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`
                                       : `🏆 ${displayLg} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`
                                   );
@@ -12832,7 +12832,10 @@ export default function App() {
                                 🏆 Unlock All 15 Anti-Meta Teams, Limited Cups &amp; ⚡ Alternate Moveset Role Synthesis
                               </h5>
                               <p className="text-[11px] text-slate-300">
-                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($2)</strong> for the 🛡️ Shield Decision HUD + 🧠 Compact AI Coach + Ultra League + 2 teams/archetype + 25 Local DVR + Unlimited Battle Log History, or <strong>Legend Pro ($3 First-Season Intro / $6 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
+                                {webMembershipTier === 'comp'
+                                  ? 'Comp Pass unlocks all leagues & limited cups (1 team per archetype, standard movesets). '
+                                  : 'Free tier shows 1 team per archetype (GL/ML) with standard movesets. '}
+                                Upgrade to <strong>Lifetime Supporter ($2)</strong> for the 🛡️ Shield Decision HUD + 🧠 Compact AI Coach + Ultra League + 2 teams/archetype + 25 Local DVR + Unlimited Battle Log History, or <strong>Legend Pro ($3 First-Season Intro / $6 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
                               </p>
                             </div>
                             <button
@@ -20576,7 +20579,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.90 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.91 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

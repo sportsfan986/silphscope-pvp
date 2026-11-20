@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.90"
-        const val APP_VERSION_CODE = 1790
+        const val APP_VERSION = "7.91"
+        const val APP_VERSION_CODE = 1791
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -141,6 +141,7 @@ class OverlayService : LifecycleService() {
         const val EXTRA_SHOW_TACTICAL_RECOMMENDATIONS = "extra_show_tactical_recommendations"
         const val EXTRA_SHOW_SHIELD_DECISION_OVERLAY = "extra_show_shield_decision_overlay"
         const val EXTRA_ENABLE_HP_TRACKING = "extra_enable_hp_tracking"
+        const val EXTRA_HIDE_DAMAGE_PERCENTS = "extra_hide_damage_percents"
         const val EXTRA_ENABLE_ENERGY_TRACKING = "extra_enable_energy_tracking"
         const val EXTRA_FAST_DETECT_TURN_OFFSET = "extra_fast_detect_turn_offset"
         const val EXTRA_CHARGE_CIRCLE_PRIORITY_MODE = "extra_charge_circle_priority_mode"
@@ -180,6 +181,8 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_COMPACT_HUD_SHOW_PACING = true
         const val PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE = "gbl_compact_hud_toolbar_mode"
         const val DEFAULT_COMPACT_HUD_TOOLBAR_MODE = "auto" // "auto" | "always" | "hidden"
+        const val PREFS_KEY_HIDE_DAMAGE_PERCENTS = "gbl_hide_damage_percents"
+        const val DEFAULT_HIDE_DAMAGE_PERCENTS = false
         const val PREFS_KEY_LOG_ONLY_STEALTH_MODE = "gbl_log_only_stealth_mode"
         const val DEFAULT_LOG_ONLY_STEALTH_MODE = false
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
@@ -1739,6 +1742,7 @@ class OverlayService : LifecycleService() {
         @Volatile var activeCompactHudShowCoach: Boolean = DEFAULT_COMPACT_HUD_SHOW_COACH
         @Volatile var activeCompactHudShowPacing: Boolean = DEFAULT_COMPACT_HUD_SHOW_PACING
         @Volatile var activeCompactHudToolbarMode: String = DEFAULT_COMPACT_HUD_TOOLBAR_MODE
+        @Volatile var activeHideDamagePercents: Boolean = DEFAULT_HIDE_DAMAGE_PERCENTS
 
         fun buildCompactHudConfigJsonStatic(prefs: SharedPreferences): String {
             val showOpp = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
@@ -1863,6 +1867,7 @@ class OverlayService : LifecycleService() {
             activeCompactHudShowPacing = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_PACING, DEFAULT_COMPACT_HUD_SHOW_PACING)
             activeCompactHudToolbarMode = (prefs.getString(PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, DEFAULT_COMPACT_HUD_TOOLBAR_MODE) ?: DEFAULT_COMPACT_HUD_TOOLBAR_MODE)
                 .lowercase().let { if (it == "always" || it == "hidden") it else "auto" }
+            activeHideDamagePercents = prefs.getBoolean(PREFS_KEY_HIDE_DAMAGE_PERCENTS, DEFAULT_HIDE_DAMAGE_PERCENTS)
             activeGblMetaLogWeightPct = prefs.getInt(PREFS_KEY_GBL_META_LOG_WEIGHT_PCT, DEFAULT_GBL_META_LOG_WEIGHT_PCT).coerceIn(0, 100)
             activeShow6MetaLogWeightPct = prefs.getInt(PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT, DEFAULT_SHOW6_META_LOG_WEIGHT_PCT).coerceIn(0, 100)
             activeGblMetaDecayFactor = prefs.getFloat(PREFS_KEY_GBL_META_DECAY_FACTOR, DEFAULT_GBL_META_DECAY_FACTOR).coerceIn(0.0f, 0.25f)
@@ -3925,6 +3930,7 @@ class OverlayService : LifecycleService() {
 
     internal var currentLayoutMode = "option1"
     internal var oppCountMode = "my_fasts"
+    internal var hideDamagePercents: Boolean = DEFAULT_HIDE_DAMAGE_PERCENTS
     internal var enable4ChargedMoves = false
     internal var disableBattleToasts = false
     internal var showTacticalRecommendations = true
@@ -3973,7 +3979,7 @@ class OverlayService : LifecycleService() {
         val tb = if (compactHudToolbarMode == "always" || compactHudToolbarMode == "hidden") compactHudToolbarMode else "auto"
         val effShowCoach = compactHudShowCoach && isCompactAiCoachUnlockedByTier()
         val json = "{\"showOppAttacks\":$compactHudShowOppAttacks,\"showMyAttacks\":$compactHudShowMyAttacks,\"showCoach\":$effShowCoach,\"showMatrix\":$compactHudShowMatrix,\"showPacing\":$compactHudShowPacing,\"toolbarMode\":\"$tb\"}"
-        return "if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix); if (window.setCompactHudConfig) setCompactHudConfig($json);"
+        return "if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix); if (window.setCompactHudConfig) setCompactHudConfig($json); if (window.setHideDamagePercents) setHideDamagePercents($hideDamagePercents);"
     }
 
     internal fun syncCompactHudFieldsFromIntentOrPrefs(intent: Intent?) {
@@ -6712,6 +6718,7 @@ class OverlayService : LifecycleService() {
         runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
         runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
         oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
+        hideDamagePercents = prefs.getBoolean(PREFS_KEY_HIDE_DAMAGE_PERCENTS, DEFAULT_HIDE_DAMAGE_PERCENTS)
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
         showTacticalRecommendations = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
@@ -7965,6 +7972,13 @@ class OverlayService : LifecycleService() {
                 } ?: run {
                     oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
                 }
+                hideDamagePercents = if (intent?.hasExtra(EXTRA_HIDE_DAMAGE_PERCENTS) == true) {
+                    intent.getBooleanExtra(EXTRA_HIDE_DAMAGE_PERCENTS, DEFAULT_HIDE_DAMAGE_PERCENTS)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_HIDE_DAMAGE_PERCENTS, hideDamagePercents)
+                }
+                activeHideDamagePercents = hideDamagePercents
+                overlayView?.evaluateJavascript("if (window.setHideDamagePercents) setHideDamagePercents($hideDamagePercents);", null)
                 val startScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
                     prefs.getInt("overlay_scale_pct", 78)
@@ -8154,6 +8168,13 @@ class OverlayService : LifecycleService() {
                 } else {
                     oppCountMode = prefs.getString("opp_count_mode", oppCountMode) ?: oppCountMode
                 }
+                if (intent?.hasExtra(EXTRA_HIDE_DAMAGE_PERCENTS) == true) {
+                    hideDamagePercents = intent.getBooleanExtra(EXTRA_HIDE_DAMAGE_PERCENTS, DEFAULT_HIDE_DAMAGE_PERCENTS)
+                } else {
+                    hideDamagePercents = prefs.getBoolean(PREFS_KEY_HIDE_DAMAGE_PERCENTS, hideDamagePercents)
+                }
+                activeHideDamagePercents = hideDamagePercents
+                overlayView?.evaluateJavascript("if (window.setHideDamagePercents) setHideDamagePercents($hideDamagePercents);", null)
                 if (intent?.hasExtra(EXTRA_ENABLE_4_CHARGED_MOVES) == true) {
                     enable4ChargedMoves = intent.getBooleanExtra(EXTRA_ENABLE_4_CHARGED_MOVES, false)
                 } else {
@@ -24018,6 +24039,7 @@ class OverlayService : LifecycleService() {
                 "lastBattleAvgHpScanMs" to lastBattleAvgHpScanMs,
                 "enableHpTracking" to enableHpTracking,
                 "enableEnergyTracking" to enableEnergyTracking,
+                "hideDamagePercents" to hideDamagePercents,
                 "fastDetectTurnOffset" to fastDetectTurnOffset,
                 "oppFastMoveStatus" to "unconfirmed",
                 "oppShadowEligible" to true,
@@ -26059,6 +26081,7 @@ class OverlayService : LifecycleService() {
             "confirmedOppChargedMoves" to activeOppConfirmedSet.toList(),
             "userFastTelemetry" to userFastTelemetry,
             "oppCountMode" to oppCountMode,
+            "hideDamagePercents" to hideDamagePercents,
             "enable4ChargedMoves" to enable4ChargedMoves,
             "fastDetectTurnOffset" to fastDetectTurnOffset,
             "overlayTransparencyPct" to overlayTransparencyPct,
