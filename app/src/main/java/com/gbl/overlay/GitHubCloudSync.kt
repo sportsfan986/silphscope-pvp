@@ -1343,20 +1343,11 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
             val rawTier = rObj.get("tier")?.takeIf { !it.isJsonNull }?.asString?.lowercase() ?: "free"
             val normTier = if (rawTier == "base") "supporter" else rawTier
             val active = rObj.get("active")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
-            val everPaid = rObj.get("everPaid")?.takeIf { !it.isJsonNull }?.asBoolean ?: (active && normTier != "free")
-            if (active || everPaid) {
-                val sig = rObj.get("signature")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                val licObj = rObj.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
-                val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                val expiresAt = licObj?.get("expiresAt")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            val everPaid = rObj.get("everPaid")?.takeIf { !it.isJsonNull }?.asBoolean ?: (active && isPaidOrAlumniTierStatic(normTier))
+            val cachedTierNow = (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
+            if (active || everPaid || cachedTierNow == "comp") {
                 val licEditor = prefs.edit()
-                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) normTier else "supporter")
-                    .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
-                if (sig.isNotBlank()) licEditor.putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
-                if (expiresAt.isNotBlank()) licEditor.putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
-                if (resolvedKey.isNotBlank()) {
-                    licEditor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(resolvedKey))
-                }
+                applyServerLicenseMetadataToEditorStatic(licEditor, rObj, active, normTier, everPaid)
                 licEditor.apply()
             }
 
@@ -2738,8 +2729,7 @@ internal fun OverlayService.Companion.retryPendingCachedDvrBundlesBlocking(
         )
         lastMsg = msg
         if (ok) {
-            val tier = getEffectiveReplayTierStatic(prefs)
-            var vaultOk = (tier == "free" || tier == "supporter")
+            var vaultOk = !hasCloudDvrUploadAccessStatic(prefs)
             if (!vaultOk) {
                 try {
                     val (vOk, _, _) = uploadBattleReplayToR2VaultIfUnlockedBlocking(
@@ -3073,6 +3063,88 @@ internal fun OverlayService.Companion.saveReplayVaultMapStatic(
     prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, jsonStr).apply()
 }
 
+internal fun OverlayService.Companion.isPaidOrAlumniTierStatic(tier: String): Boolean {
+    return tier == "supporter" || tier == "base" || tier == "pro" || tier == "vip"
+}
+
+internal fun OverlayService.Companion.isPaidOrAlumniTierStatic(prefs: SharedPreferences): Boolean {
+    return isPaidOrAlumniTierStatic(getEffectiveReplayTierStatic(prefs))
+}
+
+internal fun OverlayService.Companion.getMaxCloudRollingDvrBattlesForTierStatic(prefs: SharedPreferences): Int {
+    return when (getEffectiveReplayTierStatic(prefs)) {
+        "vip" -> 150
+        "pro" -> 50
+        "comp" -> prefs.getInt(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_CLOUD, 15).coerceIn(0, 50)
+        else -> 0
+    }
+}
+
+internal fun OverlayService.Companion.hasCloudDvrUploadAccessStatic(prefs: SharedPreferences): Boolean {
+    val tier = getEffectiveReplayTierStatic(prefs)
+    return tier == "pro" || tier == "vip" || (tier == "comp" && getMaxCloudRollingDvrBattlesForTierStatic(prefs) > 0)
+}
+
+internal fun OverlayService.Companion.getMaxLocalPinnedDvrBattlesForTierStatic(prefs: SharedPreferences): Int {
+    return when (getEffectiveReplayTierStatic(prefs)) {
+        "vip" -> 25
+        "pro" -> 10
+        "supporter" -> 5
+        "comp" -> prefs.getInt(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_LOCAL_PINS, 5).coerceIn(2, 10)
+        else -> 2
+    }
+}
+
+internal fun OverlayService.Companion.applyServerLicenseMetadataToEditorStatic(
+    editor: SharedPreferences.Editor,
+    root: com.google.gson.JsonObject,
+    active: Boolean,
+    normTier: String,
+    everPaid: Boolean
+): String {
+    val effTier = if (active) normTier else if (everPaid) "supporter" else "free"
+    val sig = root.get("signature")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+    val licObj = root.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
+    val limObj = root.get("limits")?.takeIf { it.isJsonObject }?.asJsonObject ?: licObj
+    val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+    val expiresAt = licObj?.get("expiresAt")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+
+    editor
+        .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, effTier)
+        .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
+    if (sig.isNotBlank()) {
+        editor.putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
+    } else if (effTier == "free") {
+        editor.remove(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG)
+    }
+    if (expiresAt.isNotBlank()) {
+        editor.putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
+    } else if (effTier == "free") {
+        editor.remove(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT)
+    }
+    if (resolvedKey.isNotBlank()) {
+        editor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(resolvedKey))
+    } else if (effTier == "free") {
+        editor.remove(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY)
+    }
+    if (effTier == "comp" && limObj != null) {
+        val cLocal = limObj.get("maxLocalBattles")?.takeIf { !it.isJsonNull }?.asInt?.coerceIn(5, 100) ?: 25
+        val cPins = limObj.get("maxLocalPinnedBattles")?.takeIf { !it.isJsonNull }?.asInt?.coerceIn(2, 10)
+            ?: kotlin.math.max(2, kotlin.math.min(10, (cLocal * 0.2).roundToInt()))
+        val cCloud = limObj.get("maxRollingBattles")?.takeIf { !it.isJsonNull }?.asInt?.coerceIn(0, 50) ?: 15
+        editor
+            .putInt(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_LOCAL, cLocal)
+            .putInt(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_LOCAL_PINS, cPins)
+            .putInt(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_CLOUD, cCloud)
+    } else if (effTier == "free") {
+        editor
+            .remove(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_LOCAL)
+            .remove(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_LOCAL_PINS)
+            .remove(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_CLOUD)
+    }
+    return effTier
+}
+
 internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: SharedPreferences): String {
     val unlockKey = getEffectiveReplayUnlockKey(prefs)
     val rawTier = (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
@@ -3086,12 +3158,14 @@ internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: Shared
         return "free"
     }
 
-    // Check offline expiration: if Pro/VIP expired locally, automatically graduate to "supporter" (Alumni)
-    if (expiresAtStr.isNotEmpty() && (rawTier == "pro" || rawTier == "vip")) {
+    // Check offline expiration:
+    // - Comp DVR keys drop cleanly back to "free" (NEVER graduate to "supporter" / Alumni)
+    // - Pro/VIP keys graduate to "supporter" (Alumni)
+    if (expiresAtStr.isNotEmpty() && (rawTier == "pro" || rawTier == "vip" || rawTier == "comp")) {
         try {
             val expMs = java.time.Instant.parse(expiresAtStr).toEpochMilli()
             if (expMs < System.currentTimeMillis()) {
-                return "supporter"
+                return if (rawTier == "comp") "free" else "supporter"
             }
         } catch (_: Exception) {}
     }
@@ -3100,16 +3174,18 @@ internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: Shared
         "vip" -> "vip"
         "pro" -> "pro"
         "supporter", "base" -> "supporter"
+        "comp" -> "comp"
         else -> if (everPaid) "supporter" else "free"
     }
 }
 
 internal fun OverlayService.Companion.getMaxLocalDvrBattlesForTierStatic(prefs: SharedPreferences): Int {
     return when (getEffectiveReplayTierStatic(prefs)) {
-        "vip" -> prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
-        "pro" -> 25
-        "supporter" -> 5
-        else -> 1
+        "vip" -> prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 200)
+        "pro" -> 50
+        "supporter" -> 25
+        "comp" -> prefs.getInt(OverlayService.PREFS_KEY_REPLAY_COMP_MAX_LOCAL, 25).coerceIn(5, 100)
+        else -> 5
     }
 }
 
@@ -3131,24 +3207,30 @@ internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
     if (!replaysDir.exists()) return
     val tier = getEffectiveReplayTierStatic(prefs)
     val maxUnpinnedLocal = getMaxLocalDvrBattlesForTierStatic(prefs)
+    val maxPinnedLocal = getMaxLocalPinnedDvrBattlesForTierStatic(prefs)
     val maxLocalBytes = when (tier) {
-        "vip" -> 3000L * 1024L * 1024L
-        "pro" -> 800L * 1024L * 1024L
-        "supporter" -> 200L * 1024L * 1024L
-        else -> 60L * 1024L * 1024L
+        "vip" -> (maxUnpinnedLocal + maxPinnedLocal).toLong() * 35L * 1024L * 1024L
+        "pro" -> 1800L * 1024L * 1024L
+        "supporter" -> 900L * 1024L * 1024L
+        "comp" -> ((maxUnpinnedLocal + maxPinnedLocal).toLong() * 30L).coerceAtLeast(240L) * 1024L * 1024L
+        else -> 240L * 1024L * 1024L
     }
     val vaultMap = loadReplayVaultMapStatic(prefs, gson)
 
     val mp4Files = (replaysDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }?.toList() ?: emptyList())
         .sortedByDescending { it.lastModified() }
 
+    var pinnedCount = 0
     var unpinnedCount = 0
+    val protectedPinnedIds = HashSet<String>()
     val keptMp4 = mutableListOf<File>()
     for (mp4 in mp4Files) {
         val cleanId = mp4.name.removeSuffix("_video.mp4")
         val meta = vaultMap[cleanId]
-        val isPinned = meta?.isPinned == true && tier != "free"
-        if (isPinned) {
+        val isPinnedEligible = meta?.isPinned == true && pinnedCount < maxPinnedLocal
+        if (isPinnedEligible) {
+            pinnedCount++
+            protectedPinnedIds.add(cleanId)
             keptMp4.add(mp4)
         } else {
             unpinnedCount++
@@ -3170,7 +3252,7 @@ internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
         if (totalBytes <= maxLocalBytes) break
         val mp4 = keptMp4[i]
         val cleanId = mp4.name.removeSuffix("_video.mp4")
-        val isPinned = vaultMap[cleanId]?.isPinned == true && tier != "free"
+        val isPinned = cleanId in protectedPinnedIds
         if (!isPinned && keptMp4.size > 1) {
             val tr = File(replaysDir, "${cleanId}_deep_trace.jsonl")
             val freed = mp4.length() + (if (tr.exists()) tr.length() else 0L)
@@ -3313,24 +3395,21 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             val rawTier = root.get("tier")?.asString?.lowercase() ?: "free"
             val tier = if (rawTier == "base") "supporter" else rawTier
             val active = root.get("active")?.asBoolean ?: false
-            val everPaid = root.get("everPaid")?.asBoolean ?: (active && tier != "free")
-            val sig = root.get("signature")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            val everPaid = root.get("everPaid")?.asBoolean ?: (active && isPaidOrAlumniTierStatic(tier))
             val err = root.get("error")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val licObj = root.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
             val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString?.ifBlank { keyToUse } ?: keyToUse
-            val expiresAt = licObj?.get("expiresAt")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val label = licObj?.get("label")?.takeIf { !it.isJsonNull }?.asString ?: tier.uppercase()
 
             val prevKey = getEffectiveReplayUnlockKey(prefs)
-            val newKeyVal = if (active) resolvedKey else keyToUse
+            val newKeyVal = if (active) resolvedKey else ""
             val editor = prefs.edit()
-                .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(newKeyVal))
-                .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else if (everPaid) "supporter" else "free")
-                .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
-                .putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
-                .putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
                 .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
                 .putLong(OverlayService.PREFS_KEY_LAST_LICENSE_BG_VERIFY_MS, System.currentTimeMillis())
+            val effTier = applyServerLicenseMetadataToEditorStatic(editor, root, active, tier, everPaid)
+            if (newKeyVal.isNotEmpty()) {
+                editor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(newKeyVal))
+            }
             if (emailToUse.isNotEmpty()) {
                 editor.putString(OverlayService.PREFS_KEY_CLAIM_EMAIL, emailToUse)
             }
@@ -3339,8 +3418,8 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             }
             editor.apply()
 
-            if (active && tier != "free") {
-                if (tier == "pro" || tier == "vip") {
+            if (active && effTier != "free") {
+                if (hasCloudDvrUploadAccessStatic(prefs)) {
                     syncCloudReplayListBlocking(prefs, gson)
                 }
                 val syncNote = if (ghUser.isNotEmpty()) " • 🔒 Synced via @$ghUser" else " • 📴 Offline-Ready"
@@ -3348,7 +3427,7 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             } else if (err.isNotBlank()) {
                 false to "⚠️ $err"
             } else {
-                true to "ℹ️ Free Tier active (1 Local Replay + GL/ML 1-Team Anti-Meta)"
+                true to "ℹ️ Free Tier active (5 Local Replays + 2 ⭐ Local Pins • GL/ML 1-Team Anti-Meta)"
             }
         }
     } catch (e: Exception) {
@@ -3460,23 +3539,10 @@ internal fun OverlayService.Companion.setOrLoginVaultPasswordBlocking(
                 val rawTier = root.get("tier")?.asString?.lowercase() ?: "free"
                 val tier = if (rawTier == "base") "supporter" else rawTier
                 val active = root.get("active")?.asBoolean ?: false
-                val everPaid = root.get("everPaid")?.asBoolean ?: (active && tier != "free")
-                val sig = root.get("signature")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                val licObj = root.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
-                val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                val expiresAt = licObj?.get("expiresAt")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                editor
-                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else if (everPaid) "supporter" else "free")
-                    .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
-                    .putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
-                if (expiresAt.isNotBlank()) {
-                    editor.putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
-                }
-                if (resolvedKey.isNotBlank()) {
-                    editor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(resolvedKey))
-                }
+                val everPaid = root.get("everPaid")?.asBoolean ?: (active && isPaidOrAlumniTierStatic(tier))
+                val effTier = applyServerLicenseMetadataToEditorStatic(editor, root, active, tier, everPaid)
                 editor.apply()
-                return true to "✅ Signed in to @$resolvedName Cloud Vault (${tier.uppercase()})!"
+                return true to "✅ Signed in to @$resolvedName Cloud Vault (${effTier.uppercase()})!"
             }
 
             editor.apply()
@@ -3595,7 +3661,7 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
             }
             if (active) {
                 metaEditor.putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, tier)
-                if (tier != "free") {
+                if (isPaidOrAlumniTierStatic(tier)) {
                     metaEditor.putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, true)
                 }
             }
@@ -3668,12 +3734,13 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
 ): Triple<Boolean, String, OverlayService.Companion.ReplayVaultEntryMeta?> {
     return try {
         val tier = getEffectiveReplayTierStatic(prefs)
-        if (tier == "free" || tier == "supporter") {
-            return Triple(
-                false,
-                if (tier == "supporter") "Supporter tier (5 local replays + 365d pinned retention)" else "Free tier (1 local replay only)",
-                null
-            )
+        if (!hasCloudDvrUploadAccessStatic(prefs)) {
+            val denyMsg = when (tier) {
+                "supporter" -> "Supporter tier (25 local replays + 5 ⭐ local pins + 365d pinned cloud retention)"
+                "comp" -> "Comp DVR tier (local-only buffer; cloud upload disabled for this key)"
+                else -> "Free tier (5 local replays + 2 ⭐ local pins)"
+            }
+            return Triple(false, denyMsg, null)
         }
         if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) {
             return Triple(false, "📶 DVR saved locally (Wi-Fi Only mode — enable Mobile Data Upload in Settings to upload on cellular)", null)
@@ -3811,8 +3878,7 @@ internal fun OverlayService.Companion.retryUnuploadedLocalDvrReplaysBlocking(
     gson: Gson,
     battleLogs: List<BattleLogEntry> = emptyList()
 ): Int {
-    val tier = getEffectiveReplayTierStatic(prefs)
-    if (tier == "free" || tier == "supporter") return 0
+    if (!OverlayService.hasCloudDvrUploadAccessStatic(prefs)) return 0
     if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) return 0
     val replaysDir = File(filesDir, "dvr_replays")
     if (!replaysDir.exists()) return 0
@@ -3881,11 +3947,25 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
     battleId: String,
     isPinned: Boolean? = null,
     isPublic: Boolean? = null,
-    hideNames: Boolean? = null
+    hideNames: Boolean? = null,
+    filesDir: File? = null
 ): Pair<Boolean, String> {
     val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    val tier = getEffectiveReplayTierStatic(prefs)
+    val maxLocalPins = getMaxLocalPinnedDvrBattlesForTierStatic(prefs)
     val map = loadReplayVaultMapStatic(prefs, gson)
     val existing = map[cleanId] ?: OverlayService.Companion.ReplayVaultEntryMeta(battleId = cleanId)
+    if (isPinned == true && !existing.isPinned) {
+        val replaysDir = filesDir?.let { File(it, "dvr_replays") }
+        val localFilesPresent = replaysDir?.exists() == true
+        val currentLocalPins = map.entries.count { (id, v) ->
+            v.isPinned && id != cleanId &&
+                (!localFilesPresent || File(replaysDir!!, "${id}_video.mp4").exists() || v.shareId.isBlank())
+        }
+        if (currentLocalPins >= maxLocalPins && (existing.shareId.isBlank() || tier == "free" || tier == "comp" || tier == "supporter")) {
+            return false to "⭐ Local pin limit reached ($maxLocalPins max on your tier). Unstar an older replay or upgrade!"
+        }
+    }
     val nextPinned = isPinned ?: existing.isPinned
     val nextPublic = isPublic ?: existing.isPublic
     val nextHide = hideNames ?: existing.hideNames
@@ -3894,9 +3974,17 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
 
     if (existing.shareId.isBlank()) {
         return true to when {
-            isPinned != null -> if (nextPinned) "⭐ Starred locally" else "Unstarred locally"
+            isPinned != null -> if (nextPinned) "⭐ Starred locally ($maxLocalPins max)" else "☆ Unstarred locally"
             isPublic != null -> if (nextPublic) "🌐 Marked Public locally" else "🔒 Marked Private locally"
             else -> "Updated locally"
+        }
+    }
+
+    if (tier == "comp" && isPinned != null && isPublic == null && hideNames == null) {
+        return true to if (nextPinned) {
+            "⭐ Starred locally ($maxLocalPins max — Cloud starring requires Pro/VIP)"
+        } else {
+            "☆ Unstarred locally"
         }
     }
 
@@ -3910,7 +3998,7 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
             "shareId" to existing.shareId,
             "unlockKey" to unlockKey
         )
-        if (isPinned != null) payload["isPinned"] = isPinned
+        if (isPinned != null && tier != "comp") payload["isPinned"] = isPinned
         if (isPublic != null) payload["isPublic"] = isPublic
         if (hideNames != null) payload["hideNames"] = hideNames
 

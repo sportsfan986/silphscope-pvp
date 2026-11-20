@@ -246,6 +246,14 @@ class MainActivity : AppCompatActivity() {
     private var currentActivePage: String = "teams"
     private var isUpdatingThemeSpinner = false
     private var isUpdatingThemeWatermarkSwitch = false
+    private var isHapticFineTuneExpanded = false
+    private var layoutHapticsChildrenBody: LinearLayout? = null
+    private var layoutHapticWarn2fRow: LinearLayout? = null
+    private var tvHapticWarn2fDesc: TextView? = null
+    private var btnPresetCompact: Button? = null
+    private var btnPresetStandard: Button? = null
+    private var btnPresetMinimalist: Button? = null
+    private var btnPresetStealth: Button? = null
 
     private fun contrastingInkColor(bgColor: Int): Int {
         return if (androidx.core.graphics.ColorUtils.calculateLuminance(bgColor) > 0.179) {
@@ -913,6 +921,10 @@ class MainActivity : AppCompatActivity() {
             refreshMetaTabDashboard()
         } else if (page == "ivs") {
             refreshIvLabPageUi()
+        } else if (page == "settings") {
+            updateSettingsDependentVisibility()
+            updateSettingsAccordionSummaries()
+            updatePlaystylePresetsUi()
         }
     }
 
@@ -1346,6 +1358,9 @@ class MainActivity : AppCompatActivity() {
         if (::btnCycleAltFastStrictness.isInitialized) updateAltFastStrictnessUi()
         if (::btnCycleShieldChipTol.isInitialized) updateShieldChipTolUi()
         if (::btnCycleSwapRollbackWindow.isInitialized) updateSwapRollbackWindowUi()
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1548,6 +1563,14 @@ class MainActivity : AppCompatActivity() {
         textLeadLostRecovery = findViewById(R.id.text_lead_lost_recovery)
         textSafeSwapMvp = findViewById(R.id.text_safe_swap_mvp)
 
+        layoutHapticsChildrenBody = findViewById(R.id.layout_haptics_children_body)
+        layoutHapticWarn2fRow = findViewById(R.id.layout_haptic_warn_2f_row)
+        tvHapticWarn2fDesc = findViewById(R.id.tv_haptic_warn_2f_desc)
+        val layoutHapticFineTuneSwap = findViewById<LinearLayout>(R.id.layout_haptic_fine_tune_swap)
+        val layoutHapticFineTuneCharge = findViewById<LinearLayout>(R.id.layout_haptic_fine_tune_charge)
+        val layoutHapticFineTuneCatch = findViewById<LinearLayout>(R.id.layout_haptic_fine_tune_catch)
+        val btnToggleHapticFineTune = findViewById<Button>(R.id.btn_toggle_haptic_fine_tune)
+
         // v6.06 / v7.29: Initialize Haptics & 4-Tier Tactical Vibration Alert Controls
         val masterHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED)
         val oppSwapHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
@@ -1556,10 +1579,11 @@ class MainActivity : AppCompatActivity() {
         val chargeTimingFasts = prefs.getInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, OverlayService.DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
         val warn2fHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_WARN_2F_ENABLED, OverlayService.DEFAULT_HAPTIC_WARN_2F_ENABLED)
         val catchTripleHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, OverlayService.DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED)
-        var catchSensitivity = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY) ?: OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY
-        var hapticIntensity = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, OverlayService.DEFAULT_HAPTIC_INTENSITY) ?: OverlayService.DEFAULT_HAPTIC_INTENSITY
+        val catchSensitivity = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY) ?: OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY
+        val hapticIntensity = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, OverlayService.DEFAULT_HAPTIC_INTENSITY) ?: OverlayService.DEFAULT_HAPTIC_INTENSITY
 
         switchHapticMaster.isChecked = masterHapticOn
+        layoutHapticsChildrenBody?.visibility = if (masterHapticOn) android.view.View.VISIBLE else android.view.View.GONE
         switchHapticOppSwap.isChecked = oppSwapHapticOn
         seekbarHapticOppSwapSec.progress = (oppSwapWarnSec - 2).coerceIn(0, 8)
         textHapticOppSwapSecVal.text = if (oppSwapWarnSec == 5) "≤ 5s (Default)" else "≤ ${oppSwapWarnSec}s"
@@ -1567,49 +1591,25 @@ class MainActivity : AppCompatActivity() {
         switchHapticWarn2F.isChecked = warn2fHapticOn
         switchHapticCatchTriple.isChecked = catchTripleHapticOn
 
-        fun updateHapticChargeLeadButtonsUi(fasts: Int) {
-            val is1F = fasts <= 1
-            btnHapticCharge1F.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (is1F) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnHapticCharge1F.setTextColor(if (is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
-            btnHapticCharge2F.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (!is1F) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnHapticCharge2F.setTextColor(if (!is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        fun renderFineTuneRowsVisibility() {
+            val vis = if (isHapticFineTuneExpanded) android.view.View.VISIBLE else android.view.View.GONE
+            layoutHapticFineTuneSwap?.visibility = vis
+            layoutHapticFineTuneCharge?.visibility = vis
+            layoutHapticFineTuneCatch?.visibility = vis
+            btnToggleHapticFineTune?.text = if (isHapticFineTuneExpanded) {
+                "⚙️ Fine-Tune Alert Timings ▴"
+            } else {
+                "⚙️ Fine-Tune Alert Timings ▾"
+            }
         }
+        renderFineTuneRowsVisibility()
+        btnToggleHapticFineTune?.setOnClickListener {
+            isHapticFineTuneExpanded = !isHapticFineTuneExpanded
+            renderFineTuneRowsVisibility()
+        }
+
         updateHapticChargeLeadButtonsUi(chargeTimingFasts)
-
-        fun updateCatchSensButtonsUi(sens: String) {
-            val isStrict = sens == "STRICT"
-            btnCatchSensStrict.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (isStrict) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnCatchSensStrict.setTextColor(if (isStrict) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
-            btnCatchSensAll.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (!isStrict) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnCatchSensAll.setTextColor(if (!isStrict) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
-        }
         updateCatchSensButtonsUi(catchSensitivity)
-
-        fun updateIntensityButtonsUi(intensity: String) {
-            val isShort = intensity == "SHORT"
-            val isNormal = intensity == "NORMAL"
-            val isLong = intensity == "LONG"
-            btnIntensityShort.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (isShort) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnIntensityShort.setTextColor(if (isShort) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
-            btnIntensityNormal.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (isNormal) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnIntensityNormal.setTextColor(if (isNormal) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
-            btnIntensityLong.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (isLong) 0xFFE11D48.toInt() else 0xFF334155.toInt()
-            )
-            btnIntensityLong.setTextColor(if (isLong) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
-        }
         updateIntensityButtonsUi(hapticIntensity)
 
         fun pushHapticSettingsToOverlay() {
@@ -1622,13 +1622,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        fun hapticTestToastSuffix(): String {
+            val stealthOn = prefs.getBoolean(
+                OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE,
+                OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE
+            )
+            return if (stealthOn) " (🔇 Stealth ON — live battle haptics muted)" else ""
+        }
+
         switchHapticMaster.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, isChecked).apply()
+            layoutHapticsChildrenBody?.visibility = if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
             pushHapticSettingsToOverlay()
+            updateSettingsAccordionSummaries()
+            updatePlaystylePresetsUi()
         }
         switchHapticOppSwap.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, isChecked).apply()
             pushHapticSettingsToOverlay()
+            updateSettingsAccordionSummaries()
         }
         seekbarHapticOppSwapSec.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -1643,12 +1655,17 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
         btnTestHapticSwap.setOnClickListener {
-            OverlayService.triggerUnlockBuzzHapticStatic(this)
-            Toast.makeText(this, "📳 Smooth 220ms Unlock Buzz (Swap Clock Alert)", Toast.LENGTH_SHORT).show()
+            OverlayService.triggerUnlockBuzzHapticStatic(this, bypassStealthForTest = true)
+            Toast.makeText(
+                this,
+                "📳 Smooth 220ms Unlock Buzz (Swap Clock Alert)${hapticTestToastSuffix()}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
         switchHapticOppCharge.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, isChecked).apply()
             pushHapticSettingsToOverlay()
+            updateSettingsAccordionSummaries()
         }
         btnHapticCharge1F.setOnClickListener {
             prefs.edit().putInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, 1).apply()
@@ -1661,55 +1678,59 @@ class MainActivity : AppCompatActivity() {
             pushHapticSettingsToOverlay()
         }
         btnTestHapticCharge.setOnClickListener {
-            OverlayService.triggerDoubleHapticPulseStatic(this)
-            Toast.makeText(this, "📳📳 Double Pulse (Move Imminent Alert)", Toast.LENGTH_SHORT).show()
+            OverlayService.triggerDoubleHapticPulseStatic(this, bypassStealthForTest = true)
+            Toast.makeText(
+                this,
+                "📳📳 Double Pulse (Move Imminent Alert)${hapticTestToastSuffix()}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
         switchHapticWarn2F.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_WARN_2F_ENABLED, isChecked).apply()
             pushHapticSettingsToOverlay()
+            updateSettingsAccordionSummaries()
         }
         btnTestHapticWarn2F.setOnClickListener {
-            OverlayService.triggerSingleHapticPulseStatic(this)
-            Toast.makeText(this, "📳 Single Pulse (2 Fast Moves Warning)", Toast.LENGTH_SHORT).show()
+            OverlayService.triggerSingleHapticPulseStatic(this, bypassStealthForTest = true)
+            Toast.makeText(
+                this,
+                "📳 Single Pulse (2 Fast Moves Warning)${hapticTestToastSuffix()}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
         switchHapticCatchTriple.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, isChecked).apply()
             pushHapticSettingsToOverlay()
+            updateSettingsAccordionSummaries()
         }
         btnTestHapticCatchTriple.setOnClickListener {
-            OverlayService.triggerTripleHapticPulseStatic(this)
-            Toast.makeText(this, "🚨📳📳📳 Triple Pulse (Urgent Catch Window)", Toast.LENGTH_SHORT).show()
+            OverlayService.triggerTripleHapticPulseStatic(this, bypassStealthForTest = true)
+            Toast.makeText(
+                this,
+                "🚨📳📳📳 Triple Pulse (Urgent Catch Window)${hapticTestToastSuffix()}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
         btnCatchSensStrict.setOnClickListener {
-            catchSensitivity = "STRICT"
             prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, "STRICT").apply()
             updateCatchSensButtonsUi("STRICT")
             pushHapticSettingsToOverlay()
         }
         btnCatchSensAll.setOnClickListener {
-            catchSensitivity = "ALL"
             prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, "ALL").apply()
             updateCatchSensButtonsUi("ALL")
             pushHapticSettingsToOverlay()
         }
-        btnIntensityShort.setOnClickListener {
-            hapticIntensity = "SHORT"
-            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, "SHORT").apply()
-            updateIntensityButtonsUi("SHORT")
+        fun applyHapticIntensitySelection(level: String) {
+            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, level).apply()
+            updateIntensityButtonsUi(level)
             pushHapticSettingsToOverlay()
+            OverlayService.triggerSingleHapticPulseStatic(this, bypassStealthForTest = true)
+            updateSettingsAccordionSummaries()
         }
-        btnIntensityNormal.setOnClickListener {
-            hapticIntensity = "NORMAL"
-            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, "NORMAL").apply()
-            updateIntensityButtonsUi("NORMAL")
-            pushHapticSettingsToOverlay()
-        }
-        btnIntensityLong.setOnClickListener {
-            hapticIntensity = "LONG"
-            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, "LONG").apply()
-            updateIntensityButtonsUi("LONG")
-            pushHapticSettingsToOverlay()
-        }
+        btnIntensityShort.setOnClickListener { applyHapticIntensitySelection("SHORT") }
+        btnIntensityNormal.setOnClickListener { applyHapticIntensitySelection("NORMAL") }
+        btnIntensityLong.setOnClickListener { applyHapticIntensitySelection("LONG") }
         val switchPostBattleTuning = findViewById<android.widget.Switch>(R.id.switch_post_battle_tuning_feedback)
         if (switchPostBattleTuning != null) {
             switchPostBattleTuning.isChecked = OverlayService.isPostBattleTuningFeedbackEnabledStatic(prefs)
@@ -2397,6 +2418,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCompactPresetMinimal.setOnClickListener {
+            if (!OverlayService.isPaidOrAlumniTierStatic(prefs)) {
+                showCompactAiCoachSupporterDialog()
+                return@setOnClickListener
+            }
             commitAndBroadcastCompactHudPrefs {
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, false)
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, false)
@@ -2408,6 +2433,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCompactPresetCoachMoves.setOnClickListener {
+            if (!OverlayService.isPaidOrAlumniTierStatic(prefs)) {
+                showCompactAiCoachSupporterDialog()
+                return@setOnClickListener
+            }
             commitAndBroadcastCompactHudPrefs {
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, true)
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, false)
@@ -2419,13 +2448,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCompactPresetFullLite.setOnClickListener {
+            val isPaid = OverlayService.isPaidOrAlumniTierStatic(prefs)
             commitAndBroadcastCompactHudPrefs {
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, true)
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, true)
-                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, isPaid)
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, true)
                 putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, true)
                 putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+            }
+            if (!isPaid) {
+                Toast.makeText(
+                    this,
+                    "Applied Full-Lite layout (🧠 AI Coach unlocks in Lifetime Supporter $2)",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
 
@@ -2440,6 +2477,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCompactChipCoach.setOnClickListener {
+            if (!OverlayService.isPaidOrAlumniTierStatic(prefs)) {
+                showCompactAiCoachSupporterDialog()
+                return@setOnClickListener
+            }
             val cur = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
             commitAndBroadcastCompactHudPrefs { putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, !cur) }
         }
@@ -2466,7 +2507,7 @@ class MainActivity : AppCompatActivity() {
 
         btnToggleShieldDecisionOverlay.setOnClickListener {
             val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
-            if (tier == "free") {
+            if (!OverlayService.isPaidOrAlumniTierStatic(tier)) {
                 AlertDialog.Builder(this)
                     .setTitle("🏅 Lifetime Supporter Required")
                     .setMessage(
@@ -2822,6 +2863,7 @@ class MainActivity : AppCompatActivity() {
         textOverlayTransparencyDefaultTick.setOnClickListener { resetToDefaultTransparency() }
         textOverlayTransparencyValue.setOnClickListener { resetToDefaultTransparency() }
 
+        setupSettingsAccordionsAndPresets()
         applyCurrentAppTheme(notifyOverlay = false)
     }
 
@@ -2839,6 +2881,432 @@ class MainActivity : AppCompatActivity() {
         } else {
             "${transparencyPct}%"
         }
+    }
+
+    private fun updateHapticChargeLeadButtonsUi(fasts: Int) {
+        if (!::btnHapticCharge1F.isInitialized || !::btnHapticCharge2F.isInitialized) return
+        val is1F = fasts <= 1
+        btnHapticCharge1F.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (is1F) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnHapticCharge1F.setTextColor(if (is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        btnHapticCharge2F.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (!is1F) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnHapticCharge2F.setTextColor(if (!is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        val isOverridden2F = fasts >= 2
+        layoutHapticWarn2fRow?.alpha = if (isOverridden2F) 0.45f else 1.0f
+        tvHapticWarn2fDesc?.text = if (isOverridden2F) {
+            "Overridden while Move Imminent Alert is set to 2 Fasts Away"
+        } else {
+            "Discrete 80ms single pulse cadence cue at 2 fasts away"
+        }
+    }
+
+    private fun updateCatchSensButtonsUi(sens: String) {
+        if (!::btnCatchSensStrict.isInitialized || !::btnCatchSensAll.isInitialized) return
+        val isStrict = sens == "STRICT"
+        btnCatchSensStrict.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (isStrict) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnCatchSensStrict.setTextColor(if (isStrict) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        btnCatchSensAll.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (!isStrict) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnCatchSensAll.setTextColor(if (!isStrict) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+    }
+
+    private fun updateIntensityButtonsUi(intensity: String) {
+        if (!::btnIntensityShort.isInitialized) return
+        val isShort = intensity == "SHORT"
+        val isNormal = intensity == "NORMAL"
+        val isLong = intensity == "LONG"
+        btnIntensityShort.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (isShort) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnIntensityShort.setTextColor(if (isShort) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        btnIntensityNormal.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (isNormal) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnIntensityNormal.setTextColor(if (isNormal) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        btnIntensityLong.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (isLong) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+        )
+        btnIntensityLong.setTextColor(if (isLong) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+    }
+
+    private fun setupSettingsAccordionsAndPresets() {
+        val shouldAutoExpandCard1 = !OverlayService.hasValidScreenNameStatic(prefs) ||
+            OverlayService.isRandomDebugIdStatic(prefs)
+        val cards = listOf(
+            Triple(R.id.header_settings_card_1, R.id.body_settings_card_1, R.id.chevron_settings_card_1) to shouldAutoExpandCard1,
+            Triple(R.id.header_settings_card_2, R.id.body_settings_card_2, R.id.chevron_settings_card_2) to false,
+            Triple(R.id.header_settings_card_3, R.id.body_settings_card_3, R.id.chevron_settings_card_3) to false,
+            Triple(R.id.header_settings_card_4, R.id.body_settings_card_4, R.id.chevron_settings_card_4) to false,
+            Triple(R.id.header_settings_card_5, R.id.body_settings_card_5, R.id.chevron_settings_card_5) to false
+        )
+        cards.forEach { (ids, initialOpen) ->
+            val header = findViewById<android.view.View>(ids.first)
+            val body = findViewById<android.view.View>(ids.second)
+            val chevron = findViewById<TextView>(ids.third)
+            body?.visibility = if (initialOpen) android.view.View.VISIBLE else android.view.View.GONE
+            chevron?.text = if (initialOpen) "▼" else "▶"
+            header?.setOnClickListener {
+                val nextOpen = body?.visibility != android.view.View.VISIBLE
+                body?.visibility = if (nextOpen) android.view.View.VISIBLE else android.view.View.GONE
+                chevron?.text = if (nextOpen) "▼" else "▶"
+            }
+        }
+
+        btnPresetCompact = findViewById(R.id.btn_preset_compact)
+        btnPresetStandard = findViewById(R.id.btn_preset_standard)
+        btnPresetMinimalist = findViewById(R.id.btn_preset_minimalist)
+        btnPresetStealth = findViewById(R.id.btn_preset_stealth)
+
+        btnPresetCompact?.setOnClickListener {
+            applyPlaystylePreset("📱 Compact HUD preset applied") {
+                putBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, false)
+                putString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, "compact")
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, true)
+                putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+                putBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, true)
+            }
+        }
+
+        btnPresetStandard?.setOnClickListener {
+            applyPlaystylePreset("📊 Standard Full HUD preset applied") {
+                putBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, false)
+                putString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, "full")
+                putBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+                putBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, true)
+            }
+        }
+
+        btnPresetMinimalist?.setOnClickListener {
+            if (!OverlayService.isPaidOrAlumniTierStatic(prefs)) {
+                showCompactAiCoachSupporterDialog()
+                return@setOnClickListener
+            }
+            applyPlaystylePreset("🧠 Coach Only Minimalist preset applied") {
+                putBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, false)
+                putString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, "compact")
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, false)
+                putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+                putBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+            }
+        }
+
+        btnPresetStealth?.setOnClickListener {
+            applyPlaystylePreset("🔕 Log-Only Stealth preset applied (HUD & haptics muted)") {
+                putBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, true)
+            }
+        }
+
+        findViewById<Button>(R.id.btn_reset_settings_defaults)?.setOnClickListener {
+            confirmAndResetSettingsDefaults()
+        }
+
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
+    }
+
+    private fun applyPlaystylePreset(toastMsg: String, mutator: android.content.SharedPreferences.Editor.() -> Unit) {
+        if (!::prefs.isInitialized) return
+        val ed = prefs.edit()
+        ed.mutator()
+        ed.putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+        ed.apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        val masterOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED)
+        if (::switchHapticMaster.isInitialized && switchHapticMaster.isChecked != masterOn) {
+            switchHapticMaster.isChecked = masterOn
+        }
+        layoutHapticsChildrenBody?.visibility = if (masterOn) android.view.View.VISIBLE else android.view.View.GONE
+        if (::btnToggleOverlayHudMode.isInitialized) updateOverlayHudModeUi()
+        if (::btnToggleLogOnlyStealthMode.isInitialized) updateLogOnlyStealthModeUi()
+        if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
+        if (::btnToggleCompactHudMatrix.isInitialized) updateCompactHudMatrixUi()
+        syncOverlayRunningUiState()
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updatePlaystylePresetsUi() {
+        if (!::prefs.isInitialized) return
+        val btnCompact = btnPresetCompact ?: findViewById(R.id.btn_preset_compact) ?: return
+        val btnStandard = btnPresetStandard ?: findViewById(R.id.btn_preset_standard) ?: return
+        val btnMinimalist = btnPresetMinimalist ?: findViewById(R.id.btn_preset_minimalist) ?: return
+        val btnStealth = btnPresetStealth ?: findViewById(R.id.btn_preset_stealth) ?: return
+        val theme = getActiveAppTheme()
+        val canCoach = OverlayService.isPaidOrAlumniTierStatic(prefs)
+        val stealthActive = prefs.getBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE)
+        val hudMode = (prefs.getString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, OverlayService.DEFAULT_OVERLAY_HUD_MODE) ?: OverlayService.DEFAULT_OVERLAY_HUD_MODE).lowercase()
+        val isCompact = hudMode == "compact"
+        val showOpp = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
+        val showMy = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
+        val rawCoach = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
+        val showMatrix = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+        val showPacing = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, OverlayService.DEFAULT_COMPACT_HUD_SHOW_PACING)
+        val tbMode = (prefs.getString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, OverlayService.DEFAULT_COMPACT_HUD_TOOLBAR_MODE) ?: "auto").lowercase()
+
+        val isStealthPreset = stealthActive
+        val isCompactPreset = !stealthActive && isCompact && showOpp && showMy && !rawCoach && !showMatrix && showPacing && tbMode == "auto"
+        val isStandardPreset = !stealthActive && !isCompact
+        val isMinimalistPreset = !stealthActive && isCompact && canCoach && !showOpp && !showMy && rawCoach && !showMatrix
+
+        fun stylePreset(btn: Button, active: Boolean, label: String, locked: Boolean = false, warnAmber: Boolean = false) {
+            btn.text = label
+            when {
+                locked -> {
+                    btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                    btn.setTextColor(0xFFFBBF24.toInt())
+                }
+                active && warnAmber -> {
+                    btn.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+                    btn.setTextColor(0xFFFFFFFF.toInt())
+                }
+                active -> {
+                    btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                    btn.setTextColor(contrastingInkColor(theme.buttonAccentColor))
+                }
+                else -> {
+                    btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                    btn.setTextColor(theme.primaryTextColor)
+                }
+            }
+        }
+
+        stylePreset(btnCompact, isCompactPreset, "📱 Compact (Def)")
+        stylePreset(btnStandard, isStandardPreset, "📊 Standard Full")
+        stylePreset(btnMinimalist, isMinimalistPreset, if (canCoach) "🧠 Coach Only" else "🔒 Coach Only ($2)", locked = !canCoach)
+        stylePreset(btnStealth, isStealthPreset, if (isStealthPreset) "🔕 Stealth ON" else "🔕 Stealth Log", warnAmber = true)
+
+        val hintTv = findViewById<TextView>(R.id.tv_settings_active_preset_hint)
+        hintTv?.text = when {
+            isStealthPreset -> "Active: Stealth Log (HUD hidden, headless OCR + DVR)"
+            isCompactPreset -> "Active: Compact Default (Moves + Pacing + Auto Bar)"
+            isStandardPreset -> "Active: Standard Full HUD (3x3 Matrix + Moves + Coach)"
+            isMinimalistPreset -> "Active: Coach Only Minimalist (2-Line AI Coach + Auto Bar)"
+            else -> "Active: Custom Modular Layout"
+        }
+    }
+
+    private fun updateSettingsDependentVisibility() {
+        if (!::prefs.isInitialized) return
+        val stealthActive = prefs.getBoolean(
+            OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE,
+            OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE
+        )
+        val hudMode = (prefs.getString(
+            OverlayService.PREFS_KEY_OVERLAY_HUD_MODE,
+            OverlayService.DEFAULT_OVERLAY_HUD_MODE
+        ) ?: OverlayService.DEFAULT_OVERLAY_HUD_MODE).lowercase()
+        val isCompact = hudMode == "compact"
+        val showFullRecs = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+        val showCompactCoach = OverlayService.isPaidOrAlumniTierStatic(prefs) &&
+            prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
+
+        findViewById<android.view.View>(R.id.layout_compact_hud_customizer_card)?.visibility =
+            if (!stealthActive && isCompact) android.view.View.VISIBLE else android.view.View.GONE
+        findViewById<android.view.View>(R.id.row_settings_tactical_recs)?.visibility =
+            if (!stealthActive && !isCompact) android.view.View.VISIBLE else android.view.View.GONE
+        findViewById<android.view.View>(R.id.row_settings_ai_advice_position)?.visibility =
+            if (!stealthActive && ((isCompact && showCompactCoach) || (!isCompact && showFullRecs))) {
+                android.view.View.VISIBLE
+            } else {
+                android.view.View.GONE
+            }
+    }
+
+    private fun updateSettingsAccordionSummaries() {
+        if (!::prefs.isInitialized) return
+        val theme = getActiveAppTheme()
+
+        // Card 1: Profile, Combat Mode & Theme
+        val screenName = OverlayService.getRequiredScreenNameStatic(prefs).ifBlank { "ID Not Set" }
+        val elo = OverlayService.getCurrentUserEloStatic(prefs)
+        val eloStr = if (elo != null && elo in 300..3800) String.format(java.util.Locale.US, "%,d", elo) else "Unranked"
+        val modeStr = if (isShow6CombatMode()) "Show 6" else "Standard GBL"
+        val themeShort = theme.label.substringBefore(" (").trim()
+        findViewById<TextView>(R.id.summary_settings_card_1)?.text = "$screenName • $eloStr ELO • $modeStr • $themeShort"
+
+        // Card 2: Live HUD Layout & Toggles
+        val stealthActive = prefs.getBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE)
+        val hudMode = (prefs.getString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, OverlayService.DEFAULT_OVERLAY_HUD_MODE) ?: OverlayService.DEFAULT_OVERLAY_HUD_MODE).lowercase()
+        val canShield = OverlayService.isPaidOrAlumniTierStatic(prefs)
+        val shieldOn = canShield && prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+        val toastsOff = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
+        findViewById<TextView>(R.id.summary_settings_card_2)?.text = if (stealthActive) {
+            "🔕 Log-Only Stealth ON (HUD Hidden • Headless OCR & DVR)"
+        } else {
+            val hudLabel = if (hudMode == "compact") "Compact HUD" else "Full HUD"
+            "$hudLabel • Shield Overlay ${if (shieldOn) "On" else "Off"} • Toasts ${if (toastsOff) "Off" else "On"}"
+        }
+
+        // Card 3: Haptics & Vibration Alerts
+        val masterHaptic = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED)
+        findViewById<TextView>(R.id.summary_settings_card_3)?.text = if (!masterHaptic) {
+            "🔇 Master Haptics Muted"
+        } else {
+            val swapOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
+            val chargeOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
+            val warn2fOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_WARN_2F_ENABLED, OverlayService.DEFAULT_HAPTIC_WARN_2F_ENABLED)
+            val catchOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, OverlayService.DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED)
+            val enabledCount = listOf(swapOn, chargeOn, warn2fOn, catchOn).count { it }
+            val intensityRaw = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, OverlayService.DEFAULT_HAPTIC_INTENSITY) ?: OverlayService.DEFAULT_HAPTIC_INTENSITY
+            val intensityLabel = when (intensityRaw.uppercase()) {
+                "SHORT" -> "Short"
+                "LONG" -> "Long"
+                else -> "Normal"
+            }
+            "Master ON • $enabledCount/4 Alerts • $intensityLabel"
+        }
+
+        // Card 4: Replay DVR, Cloud Vault & Membership Tier
+        val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
+        val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
+        val maxPins = OverlayService.getMaxLocalPinnedDvrBattlesForTierStatic(prefs)
+        val tierLabel = when (tier) {
+            "vip" -> "VIP"
+            "pro" -> "Legend Pro"
+            "supporter" -> "Supporter"
+            "comp" -> "Comp DVR"
+            else -> "Free"
+        }
+        val dvrLabel = when (OverlayService.getEffectiveDvrModeStatic(prefs)) {
+            OverlayService.DVR_MODE_VIP_AUTO -> "Auto-Start On"
+            OverlayService.DVR_MODE_MANUAL -> "Manual Button"
+            else -> "Off"
+        }
+        findViewById<TextView>(R.id.summary_settings_card_4)?.text =
+            "$tierLabel (${maxLocal} Local, ${maxPins} ⭐ Pins) • DVR: $dvrLabel"
+
+        // Card 5: Advanced, Detection & Updates
+        val batterySaver = prefs.getBoolean(OverlayService.PREFS_KEY_VISION_BATTERY_SAVER, OverlayService.DEFAULT_VISION_BATTERY_SAVER)
+        val hpOn = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING)
+        val energyOn = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, OverlayService.DEFAULT_ENABLE_ENERGY_TRACKING)
+        val (verName, _) = getInstalledAppVersionNameAndCode()
+        findViewById<TextView>(R.id.summary_settings_card_5)?.text =
+            "${if (batterySaver) "10Hz Battery Saver" else "15Hz High-Perf"} • HP ${if (hpOn) "On" else "Off"} • Energy ${if (energyOn) "On" else "Off"} • v$verName"
+    }
+
+    private fun confirmAndResetSettingsDefaults() {
+        AlertDialog.Builder(this)
+            .setTitle("↺ Reset Visual & Alert Settings?")
+            .setMessage(
+                "This restores Themes, HUD Layout, Compact Customizer, Haptics, Vision Tolerances & Rating Thresholds back to defaults.\n\n" +
+                    "Preserved safely: Trainer ID, Vault Unlock Key, Vault Password, Saved Teams, Built Roster, Show 6 Rosters, and Battle Logs."
+            )
+            .setPositiveButton("Reset Settings") { _, _ ->
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_APP_THEME_ID, OverlayService.DEFAULT_APP_THEME_ID)
+                    .putBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, true)
+                    .putInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT)
+                    .putInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT)
+                    .putString(PREFS_KEY_OPP_COUNT_MODE, "my_fasts")
+                    .putBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
+                    .putBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+                    .putString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION)
+                    .putString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, OverlayService.DEFAULT_OVERLAY_HUD_MODE)
+                    .putBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE)
+                    .putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+                    .putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
+                    .putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
+                    .putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
+                    .putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, OverlayService.DEFAULT_COMPACT_HUD_SHOW_PACING)
+                    .putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, OverlayService.DEFAULT_COMPACT_HUD_TOOLBAR_MODE)
+                    .putBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+                    .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING)
+                    .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, OverlayService.DEFAULT_ENABLE_ENERGY_TRACKING)
+                    .putString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
+                    .putBoolean(OverlayService.PREFS_KEY_VISION_BATTERY_SAVER, OverlayService.DEFAULT_VISION_BATTERY_SAVER)
+                    .putBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+                    .putBoolean(OverlayService.PREFS_KEY_ENABLE_AUTO_SHADOW_DETECT, OverlayService.DEFAULT_ENABLE_AUTO_SHADOW_DETECT)
+                    .putInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, OverlayService.DEFAULT_FAST_DETECT_TURN_OFFSET)
+                    .putString(OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, OverlayService.DEFAULT_ALT_FAST_DETECT_STRICTNESS)
+                    .putInt(OverlayService.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, OverlayService.DEFAULT_SHIELD_CHIP_TOLERANCE_PCT)
+                    .putInt(OverlayService.PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, OverlayService.DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS)
+                    .putBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED)
+                    .putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
+                    .putInt(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC)
+                    .putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
+                    .putInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, OverlayService.DEFAULT_HAPTIC_CHARGE_TIMING_FASTS)
+                    .putBoolean(OverlayService.PREFS_KEY_HAPTIC_WARN_2F_ENABLED, OverlayService.DEFAULT_HAPTIC_WARN_2F_ENABLED)
+                    .putBoolean(OverlayService.PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, OverlayService.DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED)
+                    .putString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY)
+                    .putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, OverlayService.DEFAULT_HAPTIC_INTENSITY)
+                    .putInt(OverlayService.PREFS_KEY_TIER_SW_MIN, OverlayService.DEFAULT_TIER_SW_MIN)
+                    .putInt(OverlayService.PREFS_KEY_TIER_W_MIN, OverlayService.DEFAULT_TIER_W_MIN)
+                    .putInt(OverlayService.PREFS_KEY_TIER_L_MAX, OverlayService.DEFAULT_TIER_L_MAX)
+                    .putInt(OverlayService.PREFS_KEY_TIER_SL_MAX, OverlayService.DEFAULT_TIER_SL_MAX)
+                    .putInt(OverlayService.PREFS_KEY_MACH_ELITE_MIN, OverlayService.DEFAULT_MACH_ELITE_MIN)
+                    .putInt(OverlayService.PREFS_KEY_MACH_SOLID_MIN, OverlayService.DEFAULT_MACH_SOLID_MIN)
+                    .putInt(OverlayService.PREFS_KEY_MACH_PLAYABLE_MIN, OverlayService.DEFAULT_MACH_PLAYABLE_MIN)
+                    .putInt(OverlayService.PREFS_KEY_MACH_RISKY_MIN, OverlayService.DEFAULT_MACH_RISKY_MIN)
+                    .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                    .apply()
+
+                OverlayService.syncTierThresholdsFromPrefs(prefs)
+                if (::spinnerAppTheme.isInitialized) {
+                    isUpdatingThemeSpinner = true
+                    val defIdx = APP_THEME_COLLECTION.indexOfFirst { it.id == OverlayService.DEFAULT_APP_THEME_ID }.takeIf { it >= 0 } ?: 0
+                    spinnerAppTheme.setSelection(defIdx, false)
+                    isUpdatingThemeSpinner = false
+                }
+                if (::switchShowThemeWatermark.isInitialized) {
+                    isUpdatingThemeWatermarkSwitch = true
+                    switchShowThemeWatermark.isChecked = true
+                    isUpdatingThemeWatermarkSwitch = false
+                }
+                if (::seekbarOverlayScale.isInitialized) {
+                    seekbarOverlayScale.progress = scalePctToProgress(DEFAULT_OVERLAY_SCALE_PCT)
+                    updateOverlayScaleUi(DEFAULT_OVERLAY_SCALE_PCT)
+                }
+                if (::seekbarOverlayTransparency.isInitialized) {
+                    seekbarOverlayTransparency.progress = transparencyPctToProgress(DEFAULT_OVERLAY_TRANSPARENCY_PCT)
+                    updateOverlayTransparencyUi(DEFAULT_OVERLAY_TRANSPARENCY_PCT)
+                }
+                if (::switchHapticMaster.isInitialized) {
+                    switchHapticMaster.isChecked = OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED
+                    layoutHapticsChildrenBody?.visibility = android.view.View.VISIBLE
+                    switchHapticOppSwap.isChecked = OverlayService.DEFAULT_HAPTIC_OPP_SWAP_ENABLED
+                    seekbarHapticOppSwapSec.progress = (OverlayService.DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC - 2).coerceIn(0, 8)
+                    textHapticOppSwapSecVal.text = "≤ 5s (Default)"
+                    switchHapticOppCharge.isChecked = OverlayService.DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED
+                    switchHapticWarn2F.isChecked = OverlayService.DEFAULT_HAPTIC_WARN_2F_ENABLED
+                    switchHapticCatchTriple.isChecked = OverlayService.DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED
+                    updateHapticChargeLeadButtonsUi(OverlayService.DEFAULT_HAPTIC_CHARGE_TIMING_FASTS)
+                    updateCatchSensButtonsUi(OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY)
+                    updateIntensityButtonsUi(OverlayService.DEFAULT_HAPTIC_INTENSITY)
+                }
+                loadAndRenderTierThresholdsUi()
+                loadAndRenderMachineBrThresholdsUi()
+                applyCurrentAppTheme(notifyOverlay = true)
+                Toast.makeText(
+                    this,
+                    "↺ Settings restored to defaults (Trainer ID, Vault, Teams & Logs preserved)",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun resetCloudSyncCursorsForChangedScreenName(prevName: String, nextName: String) {
@@ -2883,6 +3351,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnMetaTabEloBadge.isInitialized) {
             btnMetaTabEloBadge.text = badgeLabel
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun showEditCurrentEloDialog(onUpdated: ((Int?) -> Unit)? = null) {
@@ -3110,6 +3579,7 @@ class MainActivity : AppCompatActivity() {
                 layoutAppUpdateBanner.visibility = android.view.View.GONE
             }
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun checkForAppUpdateAsync(manual: Boolean = false) {
@@ -3216,6 +3686,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<android.widget.Switch>(R.id.switch_post_battle_tuning_feedback)?.isChecked =
             OverlayService.isPostBattleTuningFeedbackEnabledStatic(prefs)
         loadAndRenderEnergyDebounceUi()
+        updateSettingsAccordionSummaries()
     }
 
     private fun saveTrainerScreenNameFromInput() {
@@ -3601,7 +4072,7 @@ class MainActivity : AppCompatActivity() {
                 "👑 VIP / Coach Pass automatically detects the '3... 2... 1... BATTLE!' countdown screen and starts the zero-overhead hardware H.264 DVR hands-free.\n\n" +
                 "• Zero screen taps before battle\n" +
                 "• 30 FPS Smooth Hardware H.264 Video\n" +
-                "• 25–100 Local Ring Buffer slider\n" +
+                "• 25–200 Local Ring Buffer slider + 25 ⭐ Local Pins\n" +
                 "• 150 Cloud R2 Replays (365d retention)\n" +
                 "• Full Nemesis Analyzer & Priority Support\n\n" +
                 "Available now for $priceTag."
@@ -3679,7 +4150,7 @@ class MainActivity : AppCompatActivity() {
             }
             val subTv = TextView(this).apply {
                 text = "1️⃣ First tap '🛡️ Step 1: Verify & Lock Unique Trainer ID' so your handle is locked to your device.\n" +
-                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 🛡️ Attack Incoming! Shield Decision Overlay + 5 Local Videos + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
+                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 🛡️ Shield Decision HUD + 🧠 Compact AI Coach + 25 Local Videos + 5 ⭐ Local Pins + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
                     "3️⃣ One-time online verification caches an offline cryptographic token so HUD, DVR & Anti-Meta work 100% offline."
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 10.5f
@@ -3912,6 +4383,8 @@ class MainActivity : AppCompatActivity() {
                                     isUpgradeKeyEntryExpanded = false
                                 }
                                 setupOrUpdateReplayVaultSettingsUi()
+                                updateCompactHudMatrixUi()
+                                updateShieldDecisionOverlayUi()
                                 updateSyncStatusUi()
                                 renderBattleLogPage()
                                 Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
@@ -3923,7 +4396,7 @@ class MainActivity : AppCompatActivity() {
             inputRow.addView(keyInput)
             inputRow.addView(verifyBtn)
 
-            // VIP Configurable Local DVR Buffer Slider (25 to 100 battles)
+            // VIP Configurable Local DVR Buffer Slider (25 to 200 battles)
             val vipRow = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 val padV = (6 * density).toInt()
@@ -3936,13 +4409,13 @@ class MainActivity : AppCompatActivity() {
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             }
             val vipSeek = SeekBar(this).apply {
-                max = 75 // 0..75 => 25..100 battles
-                val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
+                max = 175 // 0..175 => 25..200 battles
+                val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 200)
                 progress = savedLimit - 25
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                        val limit = (progress + 25).coerceIn(25, 100)
-                        vipLabel.text = "👑 VIP Local On-Device DVR Ring Buffer: $limit Battles (25–100 Configurable)"
+                        val limit = (progress + 25).coerceIn(25, 200)
+                        vipLabel.text = "👑 VIP Local On-Device DVR Ring Buffer: $limit Battles (25–200 Configurable)"
                         if (fromUser) {
                             prefs.edit().putInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, limit).apply()
                         }
@@ -4092,7 +4565,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
-        val hasActiveMembership = tier == "supporter" || tier == "pro" || tier == "vip"
+        val hasActiveMembership = OverlayService.isPaidOrAlumniTierStatic(tier)
 
         // Dynamically show/hide checkout buttons & key entry based on active tier
         textReplaySubHeader?.visibility = if (hasActiveMembership) android.view.View.GONE else android.view.View.VISIBLE
@@ -4123,6 +4596,15 @@ class MainActivity : AppCompatActivity() {
                 btnToggleUpgradeKeyEntry?.visibility = android.view.View.VISIBLE
                 btnToggleUpgradeKeyEntry?.text = if (isUpgradeKeyEntryExpanded) "✖️ Hide Key Input" else "🔑 Enter Upgrade Key"
             }
+            "comp" -> {
+                layoutReplayPayRow1?.visibility = android.view.View.VISIBLE
+                btnReplayStripeSupporter?.visibility = android.view.View.VISIBLE
+                btnReplayStripePro?.visibility = android.view.View.VISIBLE
+                btnReplayStripeVip?.visibility = android.view.View.VISIBLE
+                btnReplayBmcShop?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.text = if (isUpgradeKeyEntryExpanded) "✖️ Hide Key Input" else "🔑 Switch / Upgrade Key"
+            }
             else -> {
                 layoutReplayPayRow1?.visibility = android.view.View.VISIBLE
                 btnReplayStripeSupporter?.visibility = android.view.View.VISIBLE
@@ -4133,7 +4615,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val showKeyInputs = !hasActiveMembership || isUpgradeKeyEntryExpanded
+        val showKeyInputs = (!hasActiveMembership && tier != "comp") || isUpgradeKeyEntryExpanded
         layoutReplayKeyInputRow?.visibility = if (showKeyInputs) android.view.View.VISIBLE else android.view.View.GONE
         editReplayClaimEmail?.visibility = if (showKeyInputs) android.view.View.VISIBLE else android.view.View.GONE
         if (!showKeyInputs) {
@@ -4141,17 +4623,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
+        val maxLocalPins = OverlayService.getMaxLocalPinnedDvrBattlesForTierStatic(prefs)
+        val maxCloudRolling = OverlayService.getMaxCloudRollingDvrBattlesForTierStatic(prefs)
         val effFps = OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
+        val compExpRaw = prefs.getString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, "")?.trim().orEmpty()
+        val compExpPart = if (compExpRaw.length >= 10) " • Exp ${compExpRaw.take(10)}" else " • 30d"
+        val compCloudPart = if (maxCloudRolling > 0) " • $maxCloudRolling Rolling Cloud" else ""
         val tierBadge = when (tier) {
-            "vip" -> "👑 VIP / Coach Pass Active (🎥 Auto-Start Hands-Free • ${effFps} FPS DVR • 🛡️ Shield HUD • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
-            "pro" -> "🏅 Legend Pro Pass Active (15 FPS DVR • 🛡️ Shield HUD • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
-            "supporter" -> "🛡️ Lifetime Supporter / Alumni Active (🛡️ Shield Decision HUD • 5 Local (15 FPS) • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
-            else -> "🆓 Free / Community Tier (1 Local Video (15 FPS) • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
+            "vip" -> "👑 VIP / Coach Pass Active (🎥 Auto-Start Hands-Free • ${effFps} FPS DVR • 🛡️ Shield HUD + 🧠 AI Coach • $maxLocal Local Slider + $maxLocalPins ⭐ Local • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
+            "pro" -> "🏅 Legend Pro Pass Active (15 FPS DVR • 🛡️ Shield HUD + 🧠 AI Coach • 50 Local + 10 ⭐ Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
+            "supporter" -> "🛡️ Lifetime Supporter / Alumni Active (🛡️ Shield HUD + 🧠 Compact AI Coach • 25 Local + 5 ⭐ Local (15 FPS) • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
+            "comp" -> "🎁 Comp DVR Pass Active ($maxLocal Local + $maxLocalPins ⭐ Local Pins$compCloudPart$compExpPart • Free Features)"
+            else -> "🆓 Free / Community Tier (5 Local Videos + 2 ⭐ Local Pins (15 FPS) • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
         }
         layoutVipLocalSliderRow?.visibility = if (tier == "vip") android.view.View.VISIBLE else android.view.View.GONE
         if (tier == "vip") {
-            val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
-            textVipLocalSliderLabel?.text = "👑 VIP Local On-Device DVR Ring Buffer: $savedLimit Battles (25–100 Configurable)"
+            val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 200)
+            textVipLocalSliderLabel?.text = "👑 VIP Local On-Device DVR Ring Buffer: $savedLimit Battles (25–200 Configurable)"
             seekVipLocalSlider?.progress = savedLimit - 25
             textVipFpsModeInfo?.text = "🎥 VIP DVR Framerate: 30 FPS Smooth (900 kbps CBR • ~20 MB/battle, <=30 MB max)"
         }
@@ -4173,15 +4661,19 @@ class MainActivity : AppCompatActivity() {
         }
         textReplayVaultStatus?.text = String.format(
             java.util.Locale.US,
-            "%s\n📱 On-Device Replays: %d/%d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d\n%s",
+            "%s\n📱 On-Device Replays: %d/%d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d/%d\n%s",
             tierBadge,
             localCount,
             maxLocal,
             localMb,
             cloudCount,
             pinnedCount,
+            maxLocalPins,
             syncSecurityLine
         )
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
     }
 
     @Volatile private var cachedLocalDvrCount: Int = 0
@@ -6480,7 +6972,7 @@ class MainActivity : AppCompatActivity() {
         } else null
 
         return logs.filter { entry ->
-            if (tier == "free" && entry.timestampMs < currSeason.startMs && isPastGracePeriod) {
+            if (!OverlayService.isPaidOrAlumniTierStatic(tier) && entry.timestampMs < currSeason.startMs && isPastGracePeriod) {
                 return@filter false
             }
             val leagueOk = OverlayService.matchesEncodedLeagueFilterStatic(entry.league, leagueFilter, isShow6, prefs)
@@ -9816,7 +10308,7 @@ class MainActivity : AppCompatActivity() {
             btnPinToggle.setOnClickListener {
                 val nextPin = !(vaultMeta?.isPinned == true)
                 lifecycleScope.launch(Dispatchers.IO) {
-                    val (ok, msg) = OverlayService.togglePinOrPrivacyReplayBlocking(prefs, gson, cleanBattleId, isPinned = nextPin)
+                    val (ok, msg) = OverlayService.togglePinOrPrivacyReplayBlocking(prefs, gson, cleanBattleId, isPinned = nextPin, filesDir = filesDir)
                     vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
                     withContext(Dispatchers.Main) {
                         val pinnedNow = vaultMeta?.isPinned == true
@@ -10133,6 +10625,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleBattleToasts.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textBattleToastsDesc.text = "Default: Popups shown for Battle Start/Stop, Switches & Logs"
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateTacticalRecUi() {
@@ -10149,6 +10642,8 @@ class MainActivity : AppCompatActivity() {
             btnToggleTacticalRec.setTextColor(theme.primaryTextColor)
             textTacticalRecDesc.text = "Active: 2-Line AI Tactical Coach row hidden in Overlay"
         }
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateAiAdviceHudPosUi() {
@@ -10169,6 +10664,7 @@ class MainActivity : AppCompatActivity() {
             btnCycleAiAdviceHudPos.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             textAiAdviceHudPosDesc.text = "Default: Bottom (Below My Attacks for Maximum Mid-Battle Visibility)"
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateOverlayHudModeUi() {
@@ -10189,6 +10685,9 @@ class MainActivity : AppCompatActivity() {
             btnToggleOverlayHudMode.setTextColor(contrastingInkColor(theme.secondaryAccentColor))
             textOverlayHudModeDesc.text = "Active: Full HUD (3x3 Matrix + Move Counts + 2-Line AI Coach • Tap emblem for Compact HUD • Hold 2s for Stealth)"
         }
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
     }
 
     private fun updateLogOnlyStealthModeUi() {
@@ -10209,10 +10708,37 @@ class MainActivity : AppCompatActivity() {
             btnToggleLogOnlyStealthMode.setTextColor(theme.primaryTextColor)
             textLogOnlyStealthModeDesc.text = "Default: Live HUD On • Enable or hold emblem 2s to hide HUD & suppress haptics while recording Battle Logs & DVR"
         }
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
+    }
+
+    private fun showCompactAiCoachSupporterDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("🏅 Lifetime Supporter Required")
+            .setMessage(
+                "The 🧠 2-Line Compact AI Coach module (including Minimal and Coach + Opp presets) is unlocked permanently in the Lifetime Supporter ($2 one-time) tier — or unlocked forever automatically when you subscribe to Legend Pro or VIP even once!\n\n" +
+                    "Compact HUD Moves (Def), Opp Moves, My Moves, 3x3 Matrix, Swap/CMP Pacing, and Bar customizations remain 100% Free forever."
+            )
+            .setPositiveButton("💳 Unlock ($2 Supporter)") { _, _ ->
+                val user = OverlayService.getRequiredScreenNameStatic(prefs)
+                val url = if (user.isNotEmpty()) {
+                    "${OverlayService.STRIPE_URL_SUPPORTER}?client_reference_id=${android.net.Uri.encode(user)}"
+                } else {
+                    OverlayService.STRIPE_URL_SUPPORTER
+                }
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                } catch (_: Exception) {}
+            }
+            .setNegativeButton("Close", null)
+            .show()
+        updateCompactHudMatrixUi()
     }
 
     private fun updateCompactHudMatrixUi() {
         if (!::btnToggleCompactHudMatrix.isInitialized) return
+        val canUseCoach = if (::prefs.isInitialized) OverlayService.isPaidOrAlumniTierStatic(prefs) else false
         val showOpp = prefs.getBoolean(
             OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS,
             OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS
@@ -10221,10 +10747,11 @@ class MainActivity : AppCompatActivity() {
             OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS,
             OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS
         )
-        val showCoach = prefs.getBoolean(
+        val rawShowCoach = prefs.getBoolean(
             OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH,
             OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH
         )
+        val showCoach = rawShowCoach && canUseCoach
         val showMatrix = prefs.getBoolean(
             OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
             OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
@@ -10239,9 +10766,12 @@ class MainActivity : AppCompatActivity() {
         ) ?: "auto").lowercase().let { if (it == "always" || it == "hidden") it else "auto" }
 
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        fun styleChipBtn(btn: Button, active: Boolean, label: String) {
+        fun styleChipBtn(btn: Button, active: Boolean, label: String, locked: Boolean = false) {
             btn.text = label
-            if (active) {
+            if (locked) {
+                btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btn.setTextColor(0xFFFBBF24.toInt())
+            } else if (active) {
                 btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
                 btn.setTextColor(contrastingInkColor(theme.buttonAccentColor))
             } else {
@@ -10257,7 +10787,12 @@ class MainActivity : AppCompatActivity() {
             styleChipBtn(btnCompactChipMyAttacks, showMy, if (showMy) "⚡ Mine: ON" else "⚡ Mine: OFF")
         }
         if (::btnCompactChipCoach.isInitialized) {
-            styleChipBtn(btnCompactChipCoach, showCoach, if (showCoach) "🧠 Coach: ON" else "🧠 Coach: OFF")
+            styleChipBtn(
+                btnCompactChipCoach,
+                showCoach,
+                if (!canUseCoach) "🔒 🧠 Coach ($2)" else if (showCoach) "🧠 Coach: ON" else "🧠 Coach: OFF",
+                locked = !canUseCoach
+            )
         }
         styleChipBtn(btnToggleCompactHudMatrix, showMatrix, if (showMatrix) "📊 Matrix: ON" else "📊 Matrix: OFF")
         if (::btnCompactChipPacing.isInitialized) {
@@ -10273,18 +10808,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         val isMovesDefault = showOpp && showMy && !showCoach && !showMatrix && showPacing && tbMode == "auto"
-        val isMinimal = !showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
-        val isCoachMoves = showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
-        val isFullLite = showOpp && showMy && showCoach && showMatrix && showPacing && tbMode == "auto"
+        val isMinimal = canUseCoach && !showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
+        val isCoachMoves = canUseCoach && showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
+        val isFullLite = showOpp && showMy && (showCoach == canUseCoach) && showMatrix && showPacing && tbMode == "auto"
 
         if (::btnCompactPresetMovesDefault.isInitialized) {
             styleChipBtn(btnCompactPresetMovesDefault, isMovesDefault, "Moves (Def)")
         }
         if (::btnCompactPresetMinimal.isInitialized) {
-            styleChipBtn(btnCompactPresetMinimal, isMinimal, "Minimal")
+            styleChipBtn(
+                btnCompactPresetMinimal,
+                isMinimal,
+                if (canUseCoach) "Minimal" else "🔒 Minimal",
+                locked = !canUseCoach
+            )
         }
         if (::btnCompactPresetCoachMoves.isInitialized) {
-            styleChipBtn(btnCompactPresetCoachMoves, isCoachMoves, "Coach + Opp")
+            styleChipBtn(
+                btnCompactPresetCoachMoves,
+                isCoachMoves,
+                if (canUseCoach) "Coach + Opp" else "🔒 Coach + Opp",
+                locked = !canUseCoach
+            )
         }
         if (::btnCompactPresetFullLite.isInitialized) {
             styleChipBtn(btnCompactPresetFullLite, isFullLite, "Full-Lite")
@@ -10294,7 +10839,7 @@ class MainActivity : AppCompatActivity() {
             isMovesDefault -> "Moves (Def)"
             isMinimal -> "Minimal"
             isCoachMoves -> "Coach + Opp Moves"
-            isFullLite -> "Tactical Full-Lite"
+            isFullLite -> if (canUseCoach) "Tactical Full-Lite" else "Full-Lite (No Coach)"
             else -> "✨ Custom"
         }
         val activeParts = mutableListOf("Header (Shields/E)")
@@ -10303,11 +10848,14 @@ class MainActivity : AppCompatActivity() {
         if (showCoach) activeParts.add("2-Line Coach")
         if (showMatrix) activeParts.add("3x3 Matrix")
         if (showPacing) activeParts.add("Pacing")
-        val showShieldOverlay = OverlayService.getEffectiveReplayTierStatic(prefs) != "free" &&
+        val showShieldOverlay = OverlayService.isPaidOrAlumniTierStatic(prefs) &&
             prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         if (showShieldOverlay) activeParts.add("Shield Call")
         activeParts.add(when (tbMode) { "always" -> "Toolbar Always"; "hidden" -> "Toolbar Hidden"; else -> "Auto Toolbar" })
         textCompactHudMatrixDesc.text = "Preset: $presetName • ${activeParts.joinToString(" + ")}"
+        updateSettingsDependentVisibility()
+        updateSettingsAccordionSummaries()
+        updatePlaystylePresetsUi()
     }
 
     private fun updateShieldDecisionOverlayUi() {
@@ -10315,7 +10863,7 @@ class MainActivity : AppCompatActivity() {
         val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
         val showShieldHud = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        if (tier == "free") {
+        if (!OverlayService.isPaidOrAlumniTierStatic(tier)) {
             btnToggleShieldDecisionOverlay.text = "🔒 Supporter ($2)"
             btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleShieldDecisionOverlay.setTextColor(0xFFFBBF24.toInt())
@@ -10331,6 +10879,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleShieldDecisionOverlay.setTextColor(theme.primaryTextColor)
             textShieldDecisionOverlayDesc.text = "Active: Attack Incoming! Shield Decision Overlay disabled"
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateHpTrackingUi() {
@@ -10348,6 +10897,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleHpTracking.setTextColor(theme.primaryTextColor)
             textHpTrackingDesc.text = "Active: Disabled (Floating HP bar scanning turned off)"
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateEnergyTrackingUi() {
@@ -10365,6 +10915,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
             textEnergyTrackingDesc.text = "Active: Disabled (Slowest Charge Move Meter Debounce turned off)"
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateChargeCirclePriorityUi() {
@@ -10414,6 +10965,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleVisionBatterySaver.setTextColor(theme.primaryTextColor)
             textVisionBatterySaverDesc.text = "Active: Battery Saver 10Hz HP + 250ms/750ms OCR (Lower CPU usage on older/thermal-throttled phones)"
         }
+        updateSettingsAccordionSummaries()
     }
 
     private fun updateAutoShadowDetectUi() {
@@ -11945,7 +12497,7 @@ class MainActivity : AppCompatActivity() {
         val isGlOrMl = norm == "GREAT LEAGUE" || norm == "MASTER LEAGUE"
         val isCore3 = isGlOrMl || norm == "ULTRA LEAGUE"
         return when (tier) {
-            "free" -> isGlOrMl
+            "free", "comp" -> isGlOrMl
             "supporter" -> isCore3
             else -> true
         }
@@ -11995,13 +12547,13 @@ class MainActivity : AppCompatActivity() {
     private fun showAntiMetaTierUpgradeDialog(lg: String, tier: String) {
         val displayLg = OverlayService.formatLeagueDisplayLabelStatic(lg)
         val normLg = OverlayService.normalizeLeagueKeyStatic(lg)
-        if (tier == "free") {
+        if (!OverlayService.isPaidOrAlumniTierStatic(tier)) {
             AlertDialog.Builder(this)
                 .setTitle("🔒 Unlock $displayLg in Anti-Meta Generator")
                 .setMessage(
                     "Free tier includes Open Great League & Master League (1 team per archetype).\n\n" +
-                        "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
-                        "• Legend Pro ($3 Intro / $6 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
+                        "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Shield Decision HUD + 🧠 Compact AI Coach + Open Ultra League + 2 teams per archetype + 25 Local DVR Videos (+5 ⭐) + Unlimited Lifetime Battle Log History!\n" +
+                        "• Legend Pro ($3 Intro / $6 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), 50 Local DVR, and 50 Cloud Replay Vault slots!"
                 )
                 .setPositiveButton("💳 Unlock via Stripe") { _, _ ->
                     val url = if (normLg == "ULTRA LEAGUE") OverlayService.STRIPE_URL_SUPPORTER_3 else OverlayService.STRIPE_URL_PRO_INTRO_5
@@ -12281,6 +12833,7 @@ class MainActivity : AppCompatActivity() {
         antiMetaResultsFilterCup = "ALL"
         ensureDefaultPresets()
         updateSettingsCombatModeButtonsUi()
+        updateSettingsAccordionSummaries()
         syncOverlayRunningUiState()
         setupAntiMetaTeamBuilderUi()
         refreshPresetsUi()
@@ -18784,10 +19337,11 @@ class MainActivity : AppCompatActivity() {
         ivLabSelectedLeagues.retainAll { sel ->
             visibleIvCups.any { it.equals(sel, ignoreCase = true) }
         }
+        val isPaidOrAlumni = OverlayService.isPaidOrAlumniTierStatic(tier)
         if (ivLabSelectedLeagues.isEmpty()) {
             val fallbackLg = visibleIvCups.firstOrNull { lg ->
                 val isCup = OverlayService.normalizeLeagueKeyStatic(lg) !in coreLeagues
-                !(isCup && tier == "free")
+                !(isCup && !isPaidOrAlumni)
             } ?: visibleIvCups.firstOrNull() ?: "GREAT LEAGUE"
             ivLabSelectedLeagues.add(fallbackLg)
         }
@@ -18830,7 +19384,7 @@ class MainActivity : AppCompatActivity() {
                     if (ivLabSelectedLeagues.isEmpty()) {
                         val fallback = nextVisible.firstOrNull { lg ->
                             val isCup = OverlayService.normalizeLeagueKeyStatic(lg) !in coreLeagues
-                            !(isCup && tier == "free")
+                            !(isCup && !isPaidOrAlumni)
                         } ?: nextVisible.firstOrNull() ?: "GREAT LEAGUE"
                         ivLabSelectedLeagues.add(fallback)
                     }
@@ -18854,7 +19408,7 @@ class MainActivity : AppCompatActivity() {
         for (lg in visibleIvCups) {
             val normLg = OverlayService.normalizeLeagueKeyStatic(lg)
             val isCup = normLg !in coreLeagues
-            val locked = isCup && tier == "free"
+            val locked = isCup && !isPaidOrAlumni
             val isSelected = ivLabSelectedLeagues.any { it.equals(lg, ignoreCase = true) }
             leagueRow.addView(Button(this).apply {
                 text = MegaBadgeUi.formatCupChip(

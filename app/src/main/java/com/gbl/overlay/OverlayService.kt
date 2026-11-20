@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.82"
-        const val APP_VERSION_CODE = 1782
+        const val APP_VERSION = "7.90"
+        const val APP_VERSION_CODE = 1790
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -1525,7 +1525,10 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_REPLAY_OFFLINE_SIG = "gbl_replay_offline_sig_v700"
         const val PREFS_KEY_CLAIM_EMAIL = "gbl_claim_email_v700"
         const val PREFS_KEY_VIP_LOCAL_DVR_LIMIT = "gbl_vip_local_dvr_limit"
-        const val DEFAULT_VIP_LOCAL_DVR_LIMIT = 100
+        const val DEFAULT_VIP_LOCAL_DVR_LIMIT = 200
+        const val PREFS_KEY_REPLAY_COMP_MAX_LOCAL = "gbl_replay_comp_max_local_v783"
+        const val PREFS_KEY_REPLAY_COMP_MAX_LOCAL_PINS = "gbl_replay_comp_max_local_pins_v783"
+        const val PREFS_KEY_REPLAY_COMP_MAX_CLOUD = "gbl_replay_comp_max_cloud_v783"
         const val PREFS_KEY_VIP_DVR_FPS_MODE = "gbl_vip_dvr_fps_mode"
         const val DEFAULT_VIP_DVR_FPS_MODE = 30 // 30 FPS Smooth (VIP Default) or 15 FPS Storage Saver
         const val PREFS_KEY_SCREEN_NAME_REGISTERED_V700 = "gbl_screen_name_registered_v700"
@@ -1640,8 +1643,13 @@ class OverlayService : LifecycleService() {
         }
 
         @Suppress("DEPRECATION")
-        fun triggerSingleHapticPulseStatic(context: Context) {
-            if (activeLogOnlyStealthMode) return
+        private fun fireHapticWaveformStatic(
+            context: Context,
+            timings: LongArray,
+            amplitudes: IntArray,
+            bypassStealthForTest: Boolean = false
+        ) {
+            if (activeLogOnlyStealthMode && !bypassStealthForTest) return
             try {
                 val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
@@ -1650,80 +1658,61 @@ class OverlayService : LifecycleService() {
                     context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
                 } ?: return
                 if (!vibrator.hasVibrator()) return
-                val dur = getHapticPulseDurationStatic(80L)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(dur, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    vibrator.vibrate(dur)
-                }
-            } catch (_: Exception) {}
-        }
-
-        @Suppress("DEPRECATION")
-        fun triggerDoubleHapticPulseStatic(context: Context) {
-            if (activeLogOnlyStealthMode) return
-            try {
-                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-                    vm?.defaultVibrator
-                } else {
-                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                } ?: return
-                if (!vibrator.hasVibrator()) return
-                val dur = getHapticPulseDurationStatic(80L)
-                val gap = getHapticPulseDurationStatic(60L)
-                val timings = longArrayOf(0L, dur, gap, dur)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val amplitudes = intArrayOf(0, 255, 0, 255)
-                    vibrator.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
+                    val effect = if (vibrator.hasAmplitudeControl()) {
+                        android.os.VibrationEffect.createWaveform(timings, amplitudes, -1)
+                    } else {
+                        android.os.VibrationEffect.createWaveform(timings, -1)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val attrs = android.os.VibrationAttributes.createForUsage(
+                            android.os.VibrationAttributes.USAGE_ALARM
+                        )
+                        vibrator.vibrate(effect, attrs)
+                    } else {
+                        val audioAttrs = android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                        vibrator.vibrate(effect, audioAttrs)
+                    }
                 } else {
                     vibrator.vibrate(timings, -1)
                 }
             } catch (_: Exception) {}
         }
 
-        @Suppress("DEPRECATION")
-        fun triggerTripleHapticPulseStatic(context: Context) {
-            if (activeLogOnlyStealthMode) return
-            try {
-                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-                    vm?.defaultVibrator
-                } else {
-                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                } ?: return
-                if (!vibrator.hasVibrator()) return
-                val dur = getHapticPulseDurationStatic(80L)
-                val gap = getHapticPulseDurationStatic(50L)
-                val finalDur = getHapticPulseDurationStatic(120L)
-                val timings = longArrayOf(0L, dur, gap, dur, gap, finalDur)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
-                    vibrator.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
-                } else {
-                    vibrator.vibrate(timings, -1)
-                }
-            } catch (_: Exception) {}
+        fun triggerSingleHapticPulseStatic(context: Context, bypassStealthForTest: Boolean = false) {
+            val dur = getHapticPulseDurationStatic(80L)
+            fireHapticWaveformStatic(context, longArrayOf(0L, dur), intArrayOf(0, 255), bypassStealthForTest)
         }
 
-        @Suppress("DEPRECATION")
-        fun triggerUnlockBuzzHapticStatic(context: Context) {
-            if (activeLogOnlyStealthMode) return
-            try {
-                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-                    vm?.defaultVibrator
-                } else {
-                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                } ?: return
-                if (!vibrator.hasVibrator()) return
-                val dur = getHapticPulseDurationStatic(220L)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(dur, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    vibrator.vibrate(dur)
-                }
-            } catch (_: Exception) {}
+        fun triggerDoubleHapticPulseStatic(context: Context, bypassStealthForTest: Boolean = false) {
+            val dur = getHapticPulseDurationStatic(80L)
+            val gap = getHapticPulseDurationStatic(60L)
+            fireHapticWaveformStatic(
+                context,
+                longArrayOf(0L, dur, gap, dur),
+                intArrayOf(0, 255, 0, 255),
+                bypassStealthForTest
+            )
+        }
+
+        fun triggerTripleHapticPulseStatic(context: Context, bypassStealthForTest: Boolean = false) {
+            val dur = getHapticPulseDurationStatic(80L)
+            val gap = getHapticPulseDurationStatic(50L)
+            val finalDur = getHapticPulseDurationStatic(120L)
+            fireHapticWaveformStatic(
+                context,
+                longArrayOf(0L, dur, gap, dur, gap, finalDur),
+                intArrayOf(0, 255, 0, 255, 0, 255),
+                bypassStealthForTest
+            )
+        }
+
+        fun triggerUnlockBuzzHapticStatic(context: Context, bypassStealthForTest: Boolean = false) {
+            val dur = getHapticPulseDurationStatic(220L)
+            fireHapticWaveformStatic(context, longArrayOf(0L, dur), intArrayOf(0, 255), bypassStealthForTest)
         }
 
         @Volatile var activeLogOnlyStealthMode: Boolean = DEFAULT_LOG_ONLY_STEALTH_MODE
@@ -1754,7 +1743,8 @@ class OverlayService : LifecycleService() {
         fun buildCompactHudConfigJsonStatic(prefs: SharedPreferences): String {
             val showOpp = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
             val showMy = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
-            val showCoach = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_COACH, DEFAULT_COMPACT_HUD_SHOW_COACH)
+            val showCoach = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_COACH, DEFAULT_COMPACT_HUD_SHOW_COACH) &&
+                isPaidOrAlumniTierStatic(prefs)
             val showMatrix = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
             val showPacing = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_PACING, DEFAULT_COMPACT_HUD_SHOW_PACING)
             val tbRaw = (prefs.getString(PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, DEFAULT_COMPACT_HUD_TOOLBAR_MODE) ?: DEFAULT_COMPACT_HUD_TOOLBAR_MODE).lowercase()
@@ -1868,7 +1858,8 @@ class OverlayService : LifecycleService() {
             activeCompactHudShowMatrix = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
             activeCompactHudShowOppAttacks = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
             activeCompactHudShowMyAttacks = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
-            activeCompactHudShowCoach = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_COACH, DEFAULT_COMPACT_HUD_SHOW_COACH)
+            activeCompactHudShowCoach = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_COACH, DEFAULT_COMPACT_HUD_SHOW_COACH) &&
+                isPaidOrAlumniTierStatic(prefs)
             activeCompactHudShowPacing = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_PACING, DEFAULT_COMPACT_HUD_SHOW_PACING)
             activeCompactHudToolbarMode = (prefs.getString(PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, DEFAULT_COMPACT_HUD_TOOLBAR_MODE) ?: DEFAULT_COMPACT_HUD_TOOLBAR_MODE)
                 .lowercase().let { if (it == "always" || it == "hidden") it else "auto" }
@@ -3941,7 +3932,18 @@ class OverlayService : LifecycleService() {
     internal fun isShieldDecisionOverlayUnlockedByTier(): Boolean {
         return try {
             if (::prefs.isInitialized) {
-                OverlayService.getEffectiveReplayTierStatic(prefs) != "free"
+                OverlayService.isPaidOrAlumniTierStatic(prefs)
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+    internal fun isCompactAiCoachUnlockedByTier(): Boolean {
+        return try {
+            if (::prefs.isInitialized) {
+                OverlayService.isPaidOrAlumniTierStatic(prefs)
             } else {
                 false
             }
@@ -3961,7 +3963,7 @@ class OverlayService : LifecycleService() {
     internal fun buildCompactHudConfigMap(): Map<String, Any> = mapOf(
         "showOppAttacks" to compactHudShowOppAttacks,
         "showMyAttacks" to compactHudShowMyAttacks,
-        "showCoach" to compactHudShowCoach,
+        "showCoach" to (compactHudShowCoach && isCompactAiCoachUnlockedByTier()),
         "showMatrix" to compactHudShowMatrix,
         "showPacing" to compactHudShowPacing,
         "toolbarMode" to compactHudToolbarMode
@@ -3969,7 +3971,8 @@ class OverlayService : LifecycleService() {
 
     internal fun buildCompactHudEvalJs(): String {
         val tb = if (compactHudToolbarMode == "always" || compactHudToolbarMode == "hidden") compactHudToolbarMode else "auto"
-        val json = "{\"showOppAttacks\":$compactHudShowOppAttacks,\"showMyAttacks\":$compactHudShowMyAttacks,\"showCoach\":$compactHudShowCoach,\"showMatrix\":$compactHudShowMatrix,\"showPacing\":$compactHudShowPacing,\"toolbarMode\":\"$tb\"}"
+        val effShowCoach = compactHudShowCoach && isCompactAiCoachUnlockedByTier()
+        val json = "{\"showOppAttacks\":$compactHudShowOppAttacks,\"showMyAttacks\":$compactHudShowMyAttacks,\"showCoach\":$effShowCoach,\"showMatrix\":$compactHudShowMatrix,\"showPacing\":$compactHudShowPacing,\"toolbarMode\":\"$tb\"}"
         return "if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix); if (window.setCompactHudConfig) setCompactHudConfig($json);"
     }
 
@@ -9669,7 +9672,9 @@ class OverlayService : LifecycleService() {
         lastLockedPartyBannerText = "✅ Team Locked: ${chosen.name}$metaSuffix$megaTag"
         lastLockedPartyBannerUntilMs = System.currentTimeMillis() + 6500L
         schedulePartyBannerExpiryPush(6600L)
-        OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+        if (activeHapticMasterEnabled) {
+            OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+        }
         val leadHint = if (effLeadName.isNotBlank()) " (★ $effLeadName)" else ""
         showBattleToast("🔍 Team Locked ($source): ${chosen.name}$metaSuffix$megaTag$leadHint")
     }
@@ -10489,7 +10494,9 @@ class OverlayService : LifecycleService() {
                 lastEloLockBannerUntilMs = nowMs + 4000L
                 recalculateAndPushBattleData()
                 Handler(Looper.getMainLooper()).post {
-                    OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+                    if (activeHapticMasterEnabled) {
+                        OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+                    }
                     showBattleToast("🎯 Set ELO Verified: $sanitizedFmt (±0)")
                 }
             } else if ((nowMs - lastIdleSameEloVerifiedAtMs) >= 45_000L) {
@@ -10557,7 +10564,9 @@ class OverlayService : LifecycleService() {
         if ((nowMs - lastAutoCapturedEloToastMs) >= 4_000L || source != "AUTO") {
             lastAutoCapturedEloToastMs = nowMs
             Handler(Looper.getMainLooper()).post {
-                OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+                if (activeHapticMasterEnabled) {
+                    OverlayService.triggerSingleHapticPulseStatic(this@OverlayService)
+                }
                 showBattleToast("🎯 ELO Locked: $deltaSummary")
             }
         }

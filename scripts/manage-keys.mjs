@@ -6,6 +6,7 @@
  *   node scripts/manage-keys.mjs list
  *   node scripts/manage-keys.mjs create --tier vip --user sportsfan986 --note "Founder VIP Key"
  *   node scripts/manage-keys.mjs create --tier pro --user some_friend --days 90 --note "Beta tester"
+ *   node scripts/manage-keys.mjs create --tier comp --user some_trainer --days 30 --local 25 --cloud 15 --note "Tester comp"
  *   node scripts/manage-keys.mjs create --tier base --days 35
  *   node scripts/manage-keys.mjs extend --key SSPVP-PRO-XXXX-XXXX --days 30
  *   node scripts/manage-keys.mjs revoke --key SSPVP-PRO-XXXX-XXXX
@@ -128,8 +129,10 @@ async function main() {
     console.log(`Total Keys Issued: ${data.count}\n`);
     for (const k of data.keys || []) {
       const status = k.revoked ? 'REVOKED' : 'ACTIVE';
+      const compTag = k.tier === 'comp' || k.isComp ? ' [NON-PAID COMP]' : '';
+      const expiryDisplay = k.expiresAt || (k.durationDays ? `${k.durationDays}d from activation` : 'never');
       console.log(
-        `  [${status}] ${k.key} | Tier: ${(k.tier || '').toUpperCase()} (${k.label || ''}) | Bound Trainer: ${k.boundScreenName || '(unbound)'} | Expires: ${k.expiresAt || 'never'}${k.note ? ` | Note: ${k.note}` : ''}`
+        `  [${status}]${compTag} ${k.key} | Tier: ${(k.tier || '').toUpperCase()} (${k.label || ''}) | Bound Trainer: ${k.boundScreenName || '(unbound)'} | Expires: ${expiryDisplay}${k.note ? ` | Note: ${k.note}` : ''}`
       );
     }
     console.log('');
@@ -139,22 +142,45 @@ async function main() {
   if (cmd === 'create') {
     const tier = String(args.tier || 'pro').toLowerCase();
     const screenName = args.user || args.screenName || '';
-    const days = args.days ? Number(args.days) : tier === 'vip' ? 3650 : 35;
+    const days = args.days ? Number(args.days) : tier === 'vip' ? 3650 : tier === 'comp' ? 30 : 35;
     const note = args.note || '';
     const customKey = args.key || '';
 
-    const data = await callAdminKeys('POST', {
+    const payload = {
       action: 'create',
       tier,
       screenName,
       days,
       note,
       customKey,
-    });
+    };
+    if (tier === 'comp') {
+      if (args.local !== undefined || args.battles !== undefined || args.maxLocalBattles !== undefined) {
+        payload.maxLocalBattles = Number(args.maxLocalBattles ?? args.local ?? args.battles);
+      }
+      if (args.localPins !== undefined || args.maxLocalPinnedBattles !== undefined) {
+        payload.maxLocalPinnedBattles = Number(args.maxLocalPinnedBattles ?? args.localPins);
+      }
+      if (args.cloud !== undefined || args.maxRollingBattles !== undefined) {
+        payload.maxRollingBattles = Number(args.maxRollingBattles ?? args.cloud);
+      }
+      if (args['start-now'] || args.startNow) {
+        payload.startNow = true;
+      }
+    }
+
+    const data = await callAdminKeys('POST', payload);
+    const expiryText =
+      data.license.expiresAt ||
+      (data.license.durationDays ? `${data.license.durationDays} days from first activation` : 'LIFETIME');
     console.log(`\n✅ Minted ${data.license.label} (${data.license.tier.toUpperCase()}) Unlock Key:`);
     console.log(`   Key:           ${data.license.key}`);
     console.log(`   Bound Trainer: ${data.license.boundScreenName || '(binds on first verify)'}`);
-    console.log(`   Expires At:    ${data.license.expiresAt}`);
+    console.log(`   Ever Paid:     ${Boolean(data.license.everPaid)}`);
+    console.log(`   Expires At:    ${expiryText}`);
+    console.log(
+      `   Local Quota:   ${data.limits.maxLocalBattles ?? '-'} rolling + ${data.limits.maxLocalPinnedBattles ?? '-'} local ⭐ pins`
+    );
     console.log(
       `   Cloud Quota:   ${data.limits.maxRollingBattles} rolling + ${data.limits.maxPinnedBattles} pinned (${data.limits.retentionDays}d retention, ${data.limits.maxStorageMb} MB cap)\n`
     );

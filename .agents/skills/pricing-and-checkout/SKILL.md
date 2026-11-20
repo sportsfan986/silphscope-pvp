@@ -17,17 +17,19 @@ description: >-
 | :--- | :---: | :---: | :---: | :---: |
 | **Price & Billing** | **$0 Forever** | **$2 One-Time** *(or Free forever after any Pro/VIP sub)* | **$3/mo** or **$3 First-Season Intro** / **$6 per 90d GBL Season** (`$2/mo` eff.) | **$5/mo** or **$5 First-Season Intro** / **$10 per 90d GBL Season** (`$3.33/mo` eff.) |
 | **Live In-Game HUD, 9-Shield Matrix & Haptics** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** |
-| **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
+| **🛡️ Attack Incoming! Shield Decision HUD & 🧠 Compact AI Coach** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
 | **Battle Log History & Multi-Device Cloudflare D1 Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
-| **Local On-Device DVR Ring Buffer** | **1 Battle** | **5 Battles** | **25 Battles (5 Sets)** | **25–100 Battles (Slider)** |
+| **Local On-Device DVR Ring Buffer** | **5 Battles (1 Set)** | **25 Battles (5 Sets / 1 Day)** | **50 Battles (10 Sets / 2 Days)** | **25–200 Battles (Slider)** |
+| **Local On-Device Pinned (⭐) Replays** | **2 Pinned** | **5 Pinned** | **10 Pinned** | **25 Pinned** |
 | **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • ≤30 MB max)** |
 | **Cloud R2 Video & Frame Trace Vault** | — | Keeps Pinned 365d | **50 Rolling (30d) + 10 Pinned (365d) • 2 GB** | **150 Rolling (365d) + 25 Pinned (365d) • 4 GB** |
 | **Anti-Meta Team Generator Leagues** | Great & Master League | **Core 3 (GL + UL + ML)** | **All Leagues + Limited/Mega/Specialty Cups** | **All Leagues + Limited/Mega/Specialty Cups** |
 | **Anti-Meta Teams & ⚡ Alt Moveset Synthesis** | 1 / Archetype (Std Moves) | 2 / Archetype (Std Moves) | **Top 5 / Arch (15+ Teams) + ⚡ Alt Movesets** | **Top 5 / Arch (15+ Teams) + ⚡ Alt Movesets** |
 | **🎯 Nemesis Analyzer & 🌿 What-If Branching** | Preview | Preview | ✅ **Full Access** | ✅ **Full Access + Priority Review** |
 
-- **\*Alumni Rule (`everPaid`)**: Subscribing to **Legend Pro** or **VIP** even once sets `everPaid = true` on the trainer's license and permanently unlocks **🏅 Lifetime Supporter (Alumni)** benefits forever (including the **🛡️ Attack Incoming! Shield Decision Overlay**, Unlimited Lifetime Battle Logs, 5 Local DVR Videos, Core 3 Open Leagues, and 365d Pinned Cloud Replay retention) even if their seasonal pass later expires.
+- **\*Alumni Rule (`everPaid`)**: Subscribing to **Legend Pro** or **VIP** even once sets `everPaid = true` on the trainer's license and permanently unlocks **🏅 Lifetime Supporter (Alumni)** benefits forever (including the **🛡️ Attack Incoming! Shield Decision Overlay**, **🧠 Compact AI Coach**, Unlimited Lifetime Battle Logs, 25 Local DVR Videos + 5 ⭐ Local Pins, Core 3 Open Leagues, and 365d Pinned Cloud Replay retention) even if their seasonal pass later expires.
 - **\*\*Day 15+ First-Season Intro Promo**: GBL seasons run 90 days starting `Dec 1`, `Mar 1`, `Jun 1`, and `Sep 1` at `21:00 UTC`. During the **first 14 days** of a season, a Season Pass is full price (`$6` Legend Pro / `$10` VIP). Starting on **Day 15+** of a season, first-time subscribers (`!introPromoAlreadyUsed`) unlock the **entire remainder of the current GBL season** at the 1-month rate (`$3` Legend Pro / `$5` VIP).
+- **Internal Non-Paid Comp DVR Tier (`comp`, Admin-Only via `manage-keys.mjs`)**: Temporary 30-day complimentary DVR pass (`everPaid = false`, `isPaidOrAlumni = false`) mintable via `node scripts/manage-keys.mjs create --tier comp [--local 25] [--cloud 15] [--days 30]`. Grants expanded local DVR (`25` rolling + `5 ⭐` local pins default) and optional rolling Cloud R2 slots (`15` rolling default, `0` cloud pins) starting from first activation, with **zero** paid/Alumni unlocks (Shield HUD, Compact AI Coach, Lifetime Logs, Ultra/Limited Anti-Meta, IV Lab Cups/Blended ELO, Nemesis, What-If, and 30 FPS stay locked to Free; drops cleanly back to `free` on expiry).
 
 ## 2. Official Live Stripe Payment Links
 

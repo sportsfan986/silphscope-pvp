@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.90',
+    codename: 'Expanded Local DVR, 30d Comp Pass, Haptics Fixes & 5-Accordion Settings',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Expands local on-device DVR rolling buffers and ⭐ pin limits across all tiers, gates Compact HUD AI Coach to Lifetime Supporter+, adds an internal 30-day non-paid Comp DVR pass, fixes OEM haptic vibration reliability, and streamlines Android Settings into 5 collapsible accordions with 1-tap Playstyle Quick Presets.',
+    icon: '🎛️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Bumped on-device DVR buffers & ⭐ local pins across all tiers (Free 5/2, Supporter 25/5, Pro 50/10, VIP 25–200 slider/25) with refreshed comparison infographic and pricing copy',
+      'Kept Compact HUD and non-Coach chips 100% Free while gating Compact AI Coach + Minimal / Coach + Opp presets to Lifetime Supporter+ / Alumni / Pro / VIP',
+      'Added admin-only 30-day non-paid Comp DVR pass (comp) for temporary DVR capacity upgrades without unlocking paid/Alumni features',
+      'Fixed OEM single-pulse & swap buzz haptics via explicit waveform amplitudes + USAGE_ALARM attributes, Master-mute guards on Team/ELO locks, Stealth-safe test pulses, live intensity previews, and 5-Accordion Settings + Playstyle Quick Presets'
+    ]
+  },
+  {
     version: 'v7.82',
     codename: 'Disguise + Debuff Engine, Mirror Catch-Swaps & Lead Sync',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Fixes simultaneous debuffs during Mimikyu Disguise busts and same-epoch 100%-chance stat-stage undos, adds 2-line wrapped OCR stat callout stitching, unlocks mirror-species catch-swaps during charged-move cutscenes with catch-and-KO defender tracking, and aligns Turn-0 opening-lead battle clocks.',
     icon: '🛡️',

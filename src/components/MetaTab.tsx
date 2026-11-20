@@ -42,7 +42,7 @@ export interface MetaTabProps {
   handleChangeShow6UsageWeightPct: (val: number) => void;
   gblLogWeightCapPct: number;
   setGblLogWeightCapPct: React.Dispatch<React.SetStateAction<number>>;
-  webMembershipTier?: 'free' | 'supporter' | 'pro' | 'vip';
+  webMembershipTier?: 'free' | 'comp' | 'supporter' | 'pro' | 'vip';
   onBuildAntiNemesisTeam?: (league: LeagueType, nemesisNames: string[]) => void;
   onOpenMembershipModal?: () => void;
   currentUserElo?: number | null;

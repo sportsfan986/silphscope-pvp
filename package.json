@@ -1,7 +1,7 @@
 {
   "name": "silphscope-pvp",
   "private": true,
-  "version": "7.82.0",
+  "version": "7.90.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -25,6 +25,8 @@
     "telemetry:uninstall-task": "powershell -ExecutionPolicy Bypass -File scripts/install-local-telemetry-task.ps1 -Uninstall",
     "meta:summary": "node scripts/query-global-meta.mjs",
     "meta:dump": "node scripts/query-global-meta.mjs --dump",
+    "users:activity": "node scripts/query-user-activity.mjs",
+    "users:notify": "node scripts/send-user-activity-telegram.mjs",
     "vault:migrate": "node scripts/migrate-vaults-to-d1.mjs"
   },
   "dependencies": {

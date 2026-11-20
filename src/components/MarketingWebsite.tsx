@@ -23,7 +23,7 @@ export interface MarketingWebsiteProps {
   onOpenMembershipModal: () => void;
   webScreenName: string;
   onChangeWebScreenName: (name: string) => void;
-  webMembershipTier: 'free' | 'supporter' | 'pro' | 'vip';
+  webMembershipTier: 'free' | 'comp' | 'supporter' | 'pro' | 'vip';
   activeTheme: WebAppThemePalette;
   showThemeWatermark: boolean;
   isSignedIn: boolean;
@@ -513,12 +513,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       }
       if (cachedOwner && cachedPayload.usage) {
         setVaultUsageInfo({
-          usedMb: Number(cachedPayload.usage.usedMb) || 0,
-          maxStorageMb: Number(cachedPayload.limits?.maxStorageMb) || 2048,
-          rollingCount: Number(cachedPayload.usage.rollingCount) || 0,
-          maxRollingBattles: Number(cachedPayload.limits?.maxRollingBattles) || 50,
-          pinnedCount: Number(cachedPayload.usage.pinnedCount) || 0,
-          maxPinnedBattles: Number(cachedPayload.limits?.maxPinnedBattles) || 10
+          usedMb: Number(cachedPayload.usage.usedMb ?? 0),
+          maxStorageMb: Number(cachedPayload.limits?.maxStorageMb ?? 2048),
+          rollingCount: Number(cachedPayload.usage.rollingCount ?? 0),
+          maxRollingBattles: Number(cachedPayload.limits?.maxRollingBattles ?? 50),
+          pinnedCount: Number(cachedPayload.usage.pinnedCount ?? 0),
+          maxPinnedBattles: Number(cachedPayload.limits?.maxPinnedBattles ?? 10)
         });
       }
     } else {
@@ -588,12 +588,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         }
         if (ownerState && data.usage) {
           setVaultUsageInfo({
-            usedMb: Number(data.usage.usedMb) || 0,
-            maxStorageMb: Number(data.limits?.maxStorageMb) || 2048,
-            rollingCount: Number(data.usage.rollingCount) || 0,
-            maxRollingBattles: Number(data.limits?.maxRollingBattles) || 50,
-            pinnedCount: Number(data.usage.pinnedCount) || 0,
-            maxPinnedBattles: Number(data.limits?.maxPinnedBattles) || 10
+            usedMb: Number(data.usage.usedMb ?? 0),
+            maxStorageMb: Number(data.limits?.maxStorageMb ?? 2048),
+            rollingCount: Number(data.usage.rollingCount ?? 0),
+            maxRollingBattles: Number(data.limits?.maxRollingBattles ?? 50),
+            pinnedCount: Number(data.usage.pinnedCount ?? 0),
+            maxPinnedBattles: Number(data.limits?.maxPinnedBattles ?? 10)
           });
         } else {
           setVaultUsageInfo(null);
@@ -1428,7 +1428,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: `rgba(${mkAccent2Rgb}, 0.12)`
                     }}
                   >
-                    v7.82 • Latest Release
+                    v7.90 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -1593,6 +1593,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       ? '🏆 Pro Active'
                       : webMembershipTier === 'supporter'
                       ? '🏅 Supporter'
+                      : webMembershipTier === 'comp'
+                      ? '🎁 Comp DVR'
                       : '👑 Upgrade ($2+)'}
                   </span>
                 </button>
@@ -1682,7 +1684,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         Download Android APK
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Instant 1-Click Direct Release (v7.82)
+                        Instant 1-Click Direct Release (v7.90)
                       </div>
                     </div>
                   </div>
@@ -2157,7 +2159,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   style={{ backgroundColor: 'var(--mk-accent)', color: 'var(--mk-cta-text)' }}
                 >
                   <span>📱</span>
-                  <span>Download APK (v7.82)</span>
+                  <span>Download APK (v7.90)</span>
                 </a>
                 <button
                   type="button"
@@ -2486,7 +2488,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   Free Auto-Logger, Replay Viewer &amp; Team Builder Forever. Upgrade for Cloud DVR Vault &amp; All-Cup Anti-Meta.
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl">
-                  Subscribing to <strong>Legend Pro</strong> or <strong>VIP</strong> even once permanently grants you <strong className="text-amber-300">🏅 Lifetime Supporter (Alumni)</strong> status forever—keeping the <strong>🛡️ Attack Incoming! Shield Decision Overlay</strong>, Unlimited Lifetime Battle Logs, and 5 Local DVR Videos unlocked even if your seasonal pass expires.
+                  Subscribing to <strong>Legend Pro</strong> or <strong>VIP</strong> even once permanently grants you <strong className="text-amber-300">🏅 Lifetime Supporter (Alumni)</strong> status forever—keeping the <strong>🛡️ Attack Incoming! Shield Decision Overlay</strong>, <strong>🧠 Compact AI Coach</strong>, Unlimited Lifetime Battle Logs, and <strong>25 Local DVR Videos (+ 5 ⭐ Local Pins)</strong> unlocked even if your seasonal pass expires.
                 </p>
               </div>
 
@@ -2534,9 +2536,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <div className="text-2xl font-black text-white">$0</div>
                   <ul className="text-xs text-slate-300 space-y-1.5">
                     <li>✅ <strong>Current Season Auto-Logs + Free 1-Click GOBattleLog Export</strong></li>
-                    <li>✅ <strong>Log-Only Stealth Mode + 1 Local Hardware DVR Video</strong> (15 FPS)</li>
+                    <li>✅ <strong>Log-Only Stealth Mode + 5 Local DVR Videos + 2 ⭐ Local Pins</strong> (15 FPS)</li>
                     <li>✅ <strong>Great &amp; Master League Anti-Meta Builder + Web 3v3 Simulator</strong></li>
-                    <li>✅ <strong>Optional Compact Reference HUD (AI Coach OFF) &amp; 9-Shield Matrix</strong></li>
+                    <li>✅ <strong>Customizable Compact HUD (AI Coach OFF) &amp; 9-Shield Matrix</strong></li>
                     <li>✅ <strong>Synchronized Haptics &amp; Open-League Backline Estimates</strong></li>
                   </ul>
                 </div>
@@ -2564,9 +2566,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     $2 <span className="text-xs font-normal text-slate-400">One-Time Forever</span>
                   </div>
                   <ul className="text-xs text-slate-300 space-y-1.5">
-                    <li>🛡️ <strong>Attack Incoming! Shield Decision HUD Unlocked Forever</strong></li>
+                    <li>🛡️ <strong>Shield Decision HUD + 🧠 Compact AI Coach Unlocked Forever</strong></li>
                     <li>📜 <strong>Unlimited Lifetime Battle Log History</strong></li>
-                    <li>🎥 <strong>5 Local On-Device DVR Videos</strong></li>
+                    <li>🎥 <strong>25 Local DVR Videos + 5 ⭐ Local Pins (1 Full Day)</strong></li>
                     <li>⚔️ <strong>Core 3 Open Leagues</strong> (GL + UL + ML) Anti-Meta</li>
                     <li>🛠️ <strong>P3 Supporter Diagnostic Priority Badge</strong></li>
                   </ul>
@@ -2615,7 +2617,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   </div>
                   <ul className="text-xs text-slate-300 space-y-1.5">
                     <li>☁️ <strong>50 Rolling + 10 Starred Cloud DVR Replays (2 GB R2)</strong></li>
-                    <li>🎥 <strong>25 Local DVR Battles (5 Full GBL Sets)</strong></li>
+                    <li>🎥 <strong>50 Local DVR Battles + 10 ⭐ Local Pins (10 GBL Sets)</strong></li>
                     <li>🏆 <strong>All Limited, Mega &amp; Show 6 Specialty Cups</strong></li>
                     <li>⚡ <strong>Top 5 Teams/Arch + Alt Moveset Synthesis</strong></li>
                     <li>🛠️ <strong>P2 Priority Bug &amp; OCR Diagnostic Queue</strong></li>
@@ -2673,7 +2675,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <ul className="text-xs text-slate-300 space-y-1.5">
                     <li>🎥 <strong>30 FPS Smooth Hardware DVR</strong> (Decoupled 900 kbps CBR)</li>
                     <li>☁️ <strong>150 Rolling (365d) + 25 Starred Replays (4 GB R2)</strong></li>
-                    <li>📱 <strong>Up to 100 Local On-Device DVR Battles (Slider)</strong></li>
+                    <li>📱 <strong>Up to 200 Local DVR Battles (25–200 Slider) + 25 ⭐ Local</strong></li>
                     <li>🚨 <strong>P1 Highest-Priority Direct Telegram Diagnostic Queue</strong></li>
                     <li>🏅 <strong>Includes Permanent Supporter Alumni Status</strong></li>
                   </ul>

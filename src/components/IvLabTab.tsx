@@ -55,7 +55,7 @@ export interface IvLabTabProps {
   enabledShow6Leagues: LeagueType[];
   battleLogs: WebBattleLogEntry[];
   activeSeasonBounds: GblSeasonInfo;
-  webMembershipTier: "free" | "supporter" | "pro" | "vip";
+  webMembershipTier: "free" | "comp" | "supporter" | "pro" | "vip";
   onOpenMembershipModal: () => void;
   builtPokemonRoster: BuiltPokemonEntry[];
   onSaveBuiltPokemon: (entry: BuiltPokemonEntry) => void;
@@ -135,7 +135,7 @@ export function IvLabTab({
   onDeleteBuiltPokemon
 }: IvLabTabProps) {
   const isProOrVip = webMembershipTier === "pro" || webMembershipTier === "vip";
-  const isFree = webMembershipTier === "free";
+  const isFree = webMembershipTier === "free" || webMembershipTier === "comp";
 
   const [subTab, setSubTab] = useState<"matrix" | "built">("matrix");
 

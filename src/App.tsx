@@ -398,10 +398,10 @@ export default function App() {
   const [expandedFormId, setExpandedFormId] = useState<string>('morpeko-forms');
 
   // v7.00 Web Membership Tier, License Unlock & Cloud Vault Theater State
-  const [webMembershipTier, setWebMembershipTier] = useState<'free' | 'supporter' | 'pro' | 'vip'>(() => {
+  const [webMembershipTier, setWebMembershipTier] = useState<'free' | 'comp' | 'supporter' | 'pro' | 'vip'>(() => {
     try {
       const saved = (localStorage.getItem('gbl_web_membership_tier_v700') || 'free').toLowerCase();
-      if (saved === 'vip' || saved === 'pro' || saved === 'supporter') return saved;
+      if (saved === 'vip' || saved === 'pro' || saved === 'supporter' || saved === 'comp') return saved;
     } catch {}
     return 'free';
   });
@@ -509,7 +509,8 @@ export default function App() {
       const data = await resp.json();
       if (data && data.ok) {
         pendingGhLinkTokenRef.current = '';
-        const t = String(data.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
+        const rawT = String(data.tier || 'free').toLowerCase();
+        const t = (rawT === 'base' ? 'supporter' : rawT) as 'free' | 'comp' | 'supporter' | 'pro' | 'vip';
         setWebMembershipTier(t);
         if (data.screenName) setWebScreenName(data.screenName);
         localStorage.setItem('gbl_web_membership_tier_v700', t);
@@ -626,7 +627,8 @@ export default function App() {
       setGhDeviceCodeInfo(null);
       if (pollData.ok && pollData.sessionToken) {
         pendingGhLinkTokenRef.current = '';
-        const t = String(pollData.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
+        const rawT = String(pollData.tier || 'free').toLowerCase();
+        const t = (rawT === 'base' ? 'supporter' : rawT) as 'free' | 'comp' | 'supporter' | 'pro' | 'vip';
         setWebMembershipTier(t);
         setWebScreenName(pollData.screenName || webScreenName);
         setWebSessionToken(pollData.sessionToken);
@@ -1101,7 +1103,7 @@ export default function App() {
     const normLg = normalizeLeagueName(lg);
     const isGlOrMl = normLg === 'GREAT LEAGUE' || normLg === 'MASTER LEAGUE';
     const isCore3 = isGlOrMl || normLg === 'ULTRA LEAGUE';
-    if (tier === 'free') return isGlOrMl;
+    if (tier === 'free' || tier === 'comp') return isGlOrMl;
     if (tier === 'supporter') return isCore3;
     return true;
   };
@@ -7052,7 +7054,7 @@ export default function App() {
       const displayLg = formatLeagueDisplayLabel(lockedLg);
       setShowMembershipModal(true);
       setMembershipStatusMsg(
-        webMembershipTier === 'free'
+        webMembershipTier === 'free' || webMembershipTier === 'comp'
           ? `🔒 ${displayLg} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`
           : `🏆 ${displayLg} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`
       );
@@ -7561,7 +7563,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.82 • Android Native Overlay
+                  v7.90 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7733,6 +7735,8 @@ export default function App() {
                   ? '🏆 Pro Active'
                   : webMembershipTier === 'supporter'
                   ? '🏅 Supporter'
+                  : webMembershipTier === 'comp'
+                  ? '🎁 Comp DVR'
                   : '🔑 Unlock Pro / Tiers'}
               </span>
             </button>
@@ -12250,7 +12254,7 @@ export default function App() {
                                   const displayLg = formatLeagueDisplayLabel(lgId);
                                   setShowMembershipModal(true);
                                   setMembershipStatusMsg(
-                                    webMembershipTier === 'free'
+                                    webMembershipTier === 'free' || webMembershipTier === 'comp'
                                       ? `🔒 ${displayLg} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`
                                       : `🏆 ${displayLg} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`
                                   );
@@ -12828,7 +12832,7 @@ export default function App() {
                                 🏆 Unlock All 15 Anti-Meta Teams, Limited Cups &amp; ⚡ Alternate Moveset Role Synthesis
                               </h5>
                               <p className="text-[11px] text-slate-300">
-                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($2)</strong> for the 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + 2 teams/archetype + Unlimited Battle Log History, or <strong>Legend Pro ($3 First-Season Intro / $6 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
+                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($2)</strong> for the 🛡️ Shield Decision HUD + 🧠 Compact AI Coach + Ultra League + 2 teams/archetype + 25 Local DVR + Unlimited Battle Log History, or <strong>Legend Pro ($3 First-Season Intro / $6 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
                               </p>
                             </div>
                             <button
@@ -17792,7 +17796,7 @@ export default function App() {
             const sevenDaysAgo = nowMs - 7 * 24 * 60 * 60 * 1000;
             const isPastGrace = nowMs > currentSeason.startMs + 14 * 24 * 60 * 60 * 1000;
             return entries.filter((e) => {
-              if (webMembershipTier === 'free' && e.timestampMs < currentSeason.startMs && isPastGrace) {
+              if ((webMembershipTier === 'free' || webMembershipTier === 'comp') && e.timestampMs < currentSeason.startMs && isPastGrace) {
                 return false;
               }
               const leagueOk = matchesTwoTierLeagueFilter(
@@ -19205,7 +19209,7 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      if (webMembershipTier !== 'pro' && webMembershipTier !== 'vip') {
+                                      if (webMembershipTier !== 'pro' && webMembershipTier !== 'vip' && webMembershipTier !== 'comp') {
                                         setShowMembershipModal(true);
                                         setMembershipStatusMsg('🎬 Cloud DVR Video & Trace Theater and "What-If" Mid-Battle Branching require Legend Pro ($3 Intro / $6 Season) or VIP!');
                                         return;
@@ -20572,7 +20576,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.82 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.90 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
@@ -20615,10 +20619,11 @@ export default function App() {
                   <div className="text-base font-black text-white">$0</div>
                   <ul className="text-[10.5px] text-slate-400 space-y-1">
                     <li>• Live 9-Shield Matrix &amp; Haptics</li>
+                    <li>• Customizable Compact HUD (AI Coach OFF)</li>
                     <li>• Current Season Logs (+14d grace)</li>
-                    <li>• 1 Local DVR Battle (15 FPS)</li>
+                    <li>• 5 Local DVR Battles + 2 ⭐ Local Pins (15 FPS)</li>
                     <li>• GL &amp; ML Anti-Meta (1/arch)</li>
-                    <li className="text-rose-400/90">• No Shield Decision HUD Card</li>
+                    <li className="text-rose-400/90">• No Shield HUD Card or Compact AI Coach</li>
                   </ul>
                 </div>
 
@@ -20626,9 +20631,9 @@ export default function App() {
                   <div className="font-extrabold text-sky-300">🏅 Lifetime Supporter</div>
                   <div className="text-base font-black text-white">$2 One-Time / Alumni</div>
                   <ul className="text-[10.5px] text-slate-300 space-y-1">
-                    <li>• <strong>🛡️ Attack Incoming! Shield Decision HUD</strong></li>
+                    <li>• <strong>🛡️ Shield HUD + 🧠 Compact AI Coach</strong></li>
                     <li>• <strong>Unlimited Lifetime Battle Logs</strong></li>
-                    <li>• 5 Local DVR Battles (15 FPS)</li>
+                    <li>• 25 Local DVR + 5 ⭐ Local Pins (15 FPS)</li>
                     <li>• Core 3 (GL/UL/ML • 2/arch)</li>
                     <li>• 365d Pinned Cloud Retention</li>
                   </ul>
@@ -20646,9 +20651,9 @@ export default function App() {
                   <div className="font-extrabold text-amber-300">🏆 Legend Pro Pass</div>
                   <div className="text-base font-black text-white">$3 Intro / $6 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
-                    <li>• <strong>🛡️ Shield HUD + Supporter Forever</strong></li>
+                    <li>• <strong>🛡️ Shield HUD + 🧠 AI Coach + Alumni Forever</strong></li>
                     <li>• <strong>50 Cloud R2 Replays + 10 Pinned (15 FPS)</strong></li>
-                    <li>• 25 Local DVR Battles (5 Sets)</li>
+                    <li>• 50 Local DVR + 10 ⭐ Local Pins (10 Sets)</li>
                     <li>• <strong>All Limited Cups + Top 5/Arch</strong></li>
                     <li>• <strong>⚡ Alt Movesets + Nemesis Sim</strong></li>
                   </ul>
@@ -20678,8 +20683,8 @@ export default function App() {
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
                     <li>• <strong>🎥 30 FPS Smooth DVR (900 kbps CBR)</strong></li>
                     <li>• <strong>150 Cloud Replays (365d) + 25 Pin</strong></li>
-                    <li>• Up to 100 Local DVR Battles (Slider)</li>
-                    <li>• <strong>🛡️ Shield HUD + All Pro &amp; Alumni Perks</strong></li>
+                    <li>• 25–200 Local DVR (Slider) + 25 ⭐ Local</li>
+                    <li>• <strong>🛡️ Shield HUD + 🧠 AI Coach + Alumni</strong></li>
                   </ul>
                   <div className="space-y-1 pt-1">
                     <a

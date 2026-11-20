@@ -578,8 +578,9 @@ function safeJsonForScript(val) {
 const TIER_PRESETS = {
   free: {
     tier: 'free',
-    label: 'Free / Community (1 Local Video (15 FPS) • GL & ML 1-Team Anti-Meta)',
-    maxLocalBattles: 1,
+    label: 'Free / Community (5 Local Videos + 2 ⭐ Local Pins (15 FPS) • GL & ML 1-Team Anti-Meta)',
+    maxLocalBattles: 5,
+    maxLocalPinnedBattles: 2,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
     retentionDays: 0,
@@ -589,13 +590,34 @@ const TIER_PRESETS = {
     teamsPerArchetype: 1,
     allowAltMovesets: false,
     shieldDecisionOverlay: false,
+    compactAiCoach: false,
+    lifetimeHistory: false,
+    seasonGraceDays: 14,
+  },
+  comp: {
+    tier: 'comp',
+    isComp: true,
+    label: 'Comp DVR Pass (Temporary • 25 Local + 5 ⭐ Local Pins • 15 Rolling Cloud (30d) • Free Tier Features)',
+    maxLocalBattles: 25,
+    maxLocalPinnedBattles: 5,
+    maxRollingBattles: 15,
+    maxPinnedBattles: 0,
+    retentionDays: 30,
+    pinnedRetentionDays: 0,
+    maxStorageMb: 525,
+    allowedLeagues: ['GREAT LEAGUE', 'MASTER LEAGUE'],
+    teamsPerArchetype: 1,
+    allowAltMovesets: false,
+    shieldDecisionOverlay: false,
+    compactAiCoach: false,
     lifetimeHistory: false,
     seasonGraceDays: 14,
   },
   supporter: {
     tier: 'supporter',
-    label: 'Lifetime Supporter (Alumni • 🛡️ Shield Decision HUD • 5 Local Videos (15 FPS) • Core 3 Leagues • Lifetime Logs)',
-    maxLocalBattles: 5,
+    label: 'Lifetime Supporter (Alumni • 🛡️ Shield HUD + 🧠 Compact AI Coach • 25 Local Videos + 5 ⭐ Local Pins (15 FPS) • Core 3 Leagues • Lifetime Logs)',
+    maxLocalBattles: 25,
+    maxLocalPinnedBattles: 5,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
     retentionDays: 0,
@@ -605,13 +627,15 @@ const TIER_PRESETS = {
     teamsPerArchetype: 2,
     allowAltMovesets: false,
     shieldDecisionOverlay: true,
+    compactAiCoach: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
   base: {
     tier: 'supporter',
-    label: 'Lifetime Supporter (Alumni • 🛡️ Shield Decision HUD • 5 Local Videos (15 FPS) • Core 3 Leagues • Lifetime Logs)',
-    maxLocalBattles: 5,
+    label: 'Lifetime Supporter (Alumni • 🛡️ Shield HUD + 🧠 Compact AI Coach • 25 Local Videos + 5 ⭐ Local Pins (15 FPS) • Core 3 Leagues • Lifetime Logs)',
+    maxLocalBattles: 25,
+    maxLocalPinnedBattles: 5,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
     retentionDays: 0,
@@ -621,13 +645,15 @@ const TIER_PRESETS = {
     teamsPerArchetype: 2,
     allowAltMovesets: false,
     shieldDecisionOverlay: true,
+    compactAiCoach: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
   pro: {
     tier: 'pro',
-    label: 'Legend Pro Pass ($3/mo or $6/season • 🛡️ Shield Decision HUD • 15 FPS DVR • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
-    maxLocalBattles: 25,
+    label: 'Legend Pro Pass ($3/mo or $6/season • 🛡️ Shield HUD + 🧠 AI Coach • 15 FPS DVR • 50 Local (+10 ⭐) • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
+    maxLocalBattles: 50,
+    maxLocalPinnedBattles: 10,
     maxRollingBattles: 50,
     maxPinnedBattles: 10,
     retentionDays: 30,
@@ -637,13 +663,15 @@ const TIER_PRESETS = {
     teamsPerArchetype: 5,
     allowAltMovesets: true,
     shieldDecisionOverlay: true,
+    compactAiCoach: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
   vip: {
     tier: 'vip',
-    label: 'VIP / Coach Pass ($5/mo or $10/season • 🎥 30 FPS Smooth DVR (+ 15 FPS Storage Saver) • 🛡️ Shield Decision HUD • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
-    maxLocalBattles: 100,
+    label: 'VIP / Coach Pass ($5/mo or $10/season • 🎥 30 FPS Smooth DVR • 🛡️ Shield HUD + 🧠 AI Coach • 25–200 Local Slider (+25 ⭐) • 150 Cloud / 25 Pinned • 365d Vault)',
+    maxLocalBattles: 200,
+    maxLocalPinnedBattles: 25,
     maxRollingBattles: 150,
     maxPinnedBattles: 25,
     retentionDays: 365,
@@ -653,10 +681,18 @@ const TIER_PRESETS = {
     teamsPerArchetype: 5,
     allowAltMovesets: true,
     shieldDecisionOverlay: true,
+    compactAiCoach: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
 };
+
+function isPaidOrAlumniLicense(licInfo) {
+  if (!licInfo) return false;
+  if (licInfo.everPaid) return true;
+  const t = String(licInfo.tier || '').toLowerCase();
+  return Boolean(licInfo.active && (t === 'supporter' || t === 'base' || t === 'pro' || t === 'vip'));
+}
 
 const STRIPE_PAYMENT_LINKS = {
   supporter: 'https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07',
@@ -1428,6 +1464,7 @@ async function resolveUserLicense(
   let updatedBinding = false;
   const wasNeverActivated = !lic.activatedAt;
   const callerProvedKeyOrGh = Boolean(cleanProvided || isSameGhOwner || wasNeverActivated);
+  const isCompLic = String(lic.tier || '').toLowerCase() === 'comp' || Boolean(lic.isComp);
 
   if (screenName && !lic.boundScreenName && callerProvedKeyOrGh) {
     const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
@@ -1448,6 +1485,10 @@ async function resolveUserLicense(
     lic.activatedAt = new Date().toISOString();
     updatedBinding = true;
   }
+  if (isCompLic && !lic.expiresAt && Number(lic.durationDays) > 0 && callerProvedKeyOrGh) {
+    lic.expiresAt = new Date(Date.now() + Number(lic.durationDays) * 86400000).toISOString();
+    updatedBinding = true;
+  }
   if (isServerVerifiedGh && cleanGhUser && !lic.boundGitHubUsername && callerProvedKeyOrGh) {
     lic.boundGitHubUsername = cleanGhUser;
     updatedBinding = true;
@@ -1460,7 +1501,12 @@ async function resolveUserLicense(
     lic.boundDeviceHash = cleanDev;
     updatedBinding = true;
   }
-  if (!lic.everPaid) {
+  if (isCompLic) {
+    if (lic.everPaid) {
+      lic.everPaid = false;
+      updatedBinding = true;
+    }
+  } else if (!lic.everPaid) {
     lic.everPaid = true;
     updatedBinding = true;
   }
@@ -1483,22 +1529,29 @@ async function resolveUserLicense(
 
     // Send Telegram notification upon membership activation or new device/GitHub binding
     try {
-      const actTier = lic.tier === 'base' ? 'supporter' : lic.tier || 'supporter';
+      const actTier = isCompLic ? 'comp' : lic.tier === 'base' ? 'supporter' : lic.tier || 'supporter';
       const actPreset = TIER_PRESETS[actTier] || TIER_PRESETS.supporter;
       const actUser = lic.boundScreenName || screenName || 'Unknown';
       const actHeader = wasNeverActivated
-        ? '✅ <b>Membership Activated!</b>'
-        : '🔗 <b>Membership Linked to New Device / Account!</b>';
+        ? isCompLic
+          ? '🎁 <b>Comp DVR Key Activated!</b>'
+          : '✅ <b>Membership Activated!</b>'
+        : isCompLic
+          ? '🔗 <b>Comp DVR Key Linked to Device / Account!</b>'
+          : '🔗 <b>Membership Linked to New Device / Account!</b>';
+      const actTierLine = isCompLic
+        ? `🎁 <b>Comp Tier (Non-Paid):</b> <code>${escapeHtml(lic.label || actPreset.label)} (COMP)</code>`
+        : `🏅 <b>Paid Tier:</b> <code>${escapeHtml(actPreset.label)} (${actTier.toUpperCase()})</code>`;
       await sendTelegramMessage(
         env,
         `${actHeader}\n` +
           `👤 <b>Trainer ID:</b> <code>@${escapeHtml(actUser)}</code>\n` +
-          `🏅 <b>Paid Tier:</b> <code>${escapeHtml(actPreset.label)} (${actTier.toUpperCase()})</code>\n` +
+          `${actTierLine}\n` +
           `🔑 <b>Unlock Key:</b> <code>${escapeHtml(maskSecretKey(lic.key))}</code>\n` +
           (lic.boundGitHubUsername
             ? `🐙 <b>GitHub:</b> <code>@${escapeHtml(lic.boundGitHubUsername)}</code>\n`
             : '') +
-          `⏳ <b>Expires:</b> <code>${escapeHtml(lic.expiresAt ? lic.expiresAt.slice(0, 10) : 'LIFETIME')}</code>\n` +
+          `⏳ <b>Expires:</b> <code>${escapeHtml(lic.expiresAt ? lic.expiresAt.slice(0, 10) : isCompLic ? `${Number(lic.durationDays) || 30}d from activation` : 'LIFETIME')}</code>\n` +
           `☁️ <b>Vault:</b> https://dvr.silphscopepvp.com/vault?user=${encodeURIComponent(actUser)}`
       );
     } catch (_) {}
@@ -1507,8 +1560,27 @@ async function resolveUserLicense(
   const exposedKey =
     cleanProvided || revealFullKey || isSameGhOwner || isSameDeviceOwner ? lic.key : '';
 
-  // Check if Pro/VIP subscription expired -> Graduate to Lifetime Supporter (Alumni) instead of Free!
+  // Check expiration:
+  // - Comp DVR keys drop cleanly back to Free (NEVER graduate to Alumni/Supporter, everPaid=false).
+  // - Pro/VIP subscriptions graduate to Lifetime Supporter (Alumni) instead of Free.
   const isExpired = Boolean(lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now());
+  if (isExpired && isCompLic) {
+    const sig = await signLicensePayloadHmac(env, lic.boundScreenName || screenName, 'free', null, false);
+    return {
+      ...TIER_PRESETS.free,
+      tier: 'free',
+      label: TIER_PRESETS.free.label,
+      key: '',
+      active: false,
+      everPaid: false,
+      isComp: false,
+      expired: true,
+      expiredFromTier: 'comp',
+      expiresAt: lic.expiresAt,
+      boundScreenName: lic.boundScreenName || screenName || '',
+      signature: sig,
+    };
+  }
   if (isExpired && lic.tier !== 'supporter' && lic.tier !== 'base') {
     const alumniPreset = TIER_PRESETS.supporter;
     const sig = await signLicensePayloadHmac(env, lic.boundScreenName || screenName, 'supporter', null, true);
@@ -1527,14 +1599,15 @@ async function resolveUserLicense(
     };
   }
 
-  const normalizedTier = lic.tier === 'base' ? 'supporter' : lic.tier || 'supporter';
+  const normalizedTier = isCompLic ? 'comp' : lic.tier === 'base' ? 'supporter' : lic.tier || 'supporter';
   const preset = TIER_PRESETS[normalizedTier] || TIER_PRESETS.supporter;
+  const effectiveEverPaid = isCompLic ? false : true;
   const sig = await signLicensePayloadHmac(
     env,
     lic.boundScreenName || screenName,
     preset.tier,
     lic.expiresAt || null,
-    true
+    effectiveEverPaid
   );
 
   return {
@@ -1543,13 +1616,15 @@ async function resolveUserLicense(
     label: lic.label || preset.label,
     key: exposedKey,
     active: true,
-    everPaid: true,
+    everPaid: effectiveEverPaid,
+    isComp: isCompLic,
     boundScreenName: lic.boundScreenName || screenName || '',
     maxLocalBattles: Number(lic.maxLocalBattles ?? preset.maxLocalBattles),
+    maxLocalPinnedBattles: Number(lic.maxLocalPinnedBattles ?? preset.maxLocalPinnedBattles ?? 2),
     maxRollingBattles: Number(lic.maxRollingBattles ?? preset.maxRollingBattles),
-    maxPinnedBattles: Number(lic.maxPinnedBattles ?? preset.maxPinnedBattles),
+    maxPinnedBattles: isCompLic ? 0 : Number(lic.maxPinnedBattles ?? preset.maxPinnedBattles),
     retentionDays: Number(lic.retentionDays ?? preset.retentionDays),
-    pinnedRetentionDays: Number(lic.pinnedRetentionDays ?? preset.pinnedRetentionDays ?? 365),
+    pinnedRetentionDays: isCompLic ? 0 : Number(lic.pinnedRetentionDays ?? preset.pinnedRetentionDays ?? 365),
     maxStorageMb: Number(lic.maxStorageMb ?? preset.maxStorageMb),
     expiresAt: lic.expiresAt || null,
     signature: sig,
@@ -2103,9 +2178,7 @@ async function authenticateD1SyncCaller(request, env, kv, targetScreenName, body
       hasPassword,
       promptSetPassword: !hasPassword && !/^id_[a-z0-9]{4,}$/i.test(resolvedName),
       licenseInfo: licInfo,
-      isPaidOrAlumni: Boolean(
-        licInfo && (licInfo.active || licInfo.everPaid || (licInfo.tier && licInfo.tier !== 'free'))
-      ),
+      isPaidOrAlumni: isPaidOrAlumniLicense(licInfo),
     };
   }
 
@@ -2138,9 +2211,7 @@ async function authenticateD1SyncCaller(request, env, kv, targetScreenName, body
           hasPassword: false,
           promptSetPassword: !/^id_[a-z0-9]{4,}$/i.test(screenName),
           licenseInfo: licInfo,
-          isPaidOrAlumni: Boolean(
-            licInfo && (licInfo.active || licInfo.everPaid || (licInfo.tier && licInfo.tier !== 'free'))
-          ),
+          isPaidOrAlumni: isPaidOrAlumniLicense(licInfo),
         };
       }
       return {
@@ -4027,13 +4098,13 @@ function extractUserIssueDescription(metadata, deepTraceText) {
 async function resolveUserPaidTierSummary(kv, screenName) {
   const clean = String(screenName || '').trim();
   if (!clean) {
-    return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
+    return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null, maxRollingBattles: 0 };
   }
   if (clean.toLowerCase() === 'sportsfan986') {
-    return { tier: 'vip', badge: '👑 VIP / Coach Pass (Founder)', key: '', expiresAt: null };
+    return { tier: 'vip', badge: '👑 VIP / Coach Pass (Founder)', key: '', expiresAt: null, maxRollingBattles: 150 };
   }
   if (!kv) {
-    return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
+    return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null, maxRollingBattles: 0 };
   }
   try {
     let mappedKey =
@@ -4048,27 +4119,42 @@ async function resolveUserPaidTierSummary(kv, screenName) {
       const lic = await loadLicenseByKey(kv, mappedKey);
       if (lic && !lic.revoked) {
         const isExpired = Boolean(lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now());
-        const effTier = isExpired && lic.tier !== 'supporter' && lic.tier !== 'base'
+        const rawTier = String(lic.tier || 'supporter').toLowerCase();
+        if (rawTier === 'comp' || lic.isComp) {
+          if (isExpired) {
+            return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: lic.expiresAt || null, maxRollingBattles: 0 };
+          }
+          return {
+            tier: 'comp',
+            badge: '🎁 Comp DVR Pass (Free Tier)',
+            key: lic.key || mappedKey,
+            expiresAt: lic.expiresAt || null,
+            maxRollingBattles: Number(lic.maxRollingBattles ?? TIER_PRESETS.comp.maxRollingBattles),
+          };
+        }
+        const effTier = isExpired && rawTier !== 'supporter' && rawTier !== 'base'
           ? 'supporter'
-          : lic.tier === 'base'
+          : rawTier === 'base'
           ? 'supporter'
-          : String(lic.tier || 'supporter').toLowerCase();
+          : rawTier;
         const badgeMap = {
           vip: '👑 VIP / Coach Pass',
           pro: '🏆 Legend Pro Pass',
           supporter: isExpired ? '🏅 Lifetime Supporter (Alumni)' : '🏅 Lifetime Supporter',
           free: '🆓 Free Tier',
         };
+        const effPreset = TIER_PRESETS[effTier] || TIER_PRESETS.free;
         return {
           tier: effTier,
           badge: badgeMap[effTier] || `🏅 ${effTier.toUpperCase()}`,
           key: lic.key || mappedKey,
           expiresAt: lic.expiresAt || null,
+          maxRollingBattles: Number(lic.maxRollingBattles ?? effPreset.maxRollingBattles ?? 0),
         };
       }
     }
   } catch (_) {}
-  return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
+  return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null, maxRollingBattles: 0 };
 }
 
 
@@ -5036,7 +5122,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
           <button type="button" id="cmp-chip-matrix" onclick="toggleReplayCompactChip('showMatrix')" title="Toggle 3x3 Asymmetric Matchup Matrix">📊 Matrix</button>
           <button type="button" id="cmp-chip-pacing" onclick="toggleReplayCompactChip('showPacing')" title="Toggle Swap Clocks & CMP Pacing Badges">⏱️ Pacing</button>
           <button type="button" id="cmp-chip-toolbar" onclick="cycleReplayCompactToolbar()" title="Cycle Action Toolbar Mode (Auto / Always / Hidden)">🎥 Bar: Auto</button>
-          <button type="button" id="cmp-chip-shield" onclick="toggleShieldHud()" class="${(shareInfo.userTier || 'pro') !== 'free' ? 'active' : ''}" title="Toggle Attack Incoming! Shield Decision Card">${(shareInfo.userTier || 'pro') !== 'free' ? '🛡️ Shield' : '🔒 Shield'}</button>
+          <button type="button" id="cmp-chip-shield" onclick="toggleShieldHud()" class="${(shareInfo.userTier || 'pro') !== 'free' && (shareInfo.userTier || 'pro') !== 'comp' ? 'active' : ''}" title="Toggle Attack Incoming! Shield Decision Card">${(shareInfo.userTier || 'pro') !== 'free' && (shareInfo.userTier || 'pro') !== 'comp' ? '🛡️ Shield' : '🔒 Shield'}</button>
           <button type="button" id="cmp-btn-share" onclick="shareCurrentReplayMoment(this)" style="border-color:rgba(56,189,248,0.55);color:#bae6fd" title="Copy Shareable Link with This Real-Time Compact HUD Config">🔗 Share HUD</button>
         </div>
         <div class="tools-drawer" id="tools-drawer">
@@ -5047,7 +5133,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
             <button onclick="setHudMode('off')" id="mode-off">HUD OFF</button>
             <button onclick="toggleHudPos()" id="btn-pos" title="Move HUD Top/Bottom">⬆️ Top</button>
             <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
-            <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${(shareInfo.userTier || 'pro') !== 'free' ? 'active' : ''}">${(shareInfo.userTier || 'pro') !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield'}</button>
+            <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${(shareInfo.userTier || 'pro') !== 'free' && (shareInfo.userTier || 'pro') !== 'comp' ? 'active' : ''}">${(shareInfo.userTier || 'pro') !== 'free' && (shareInfo.userTier || 'pro') !== 'comp' ? '🛡️ Shield: ON' : '🔒 Shield'}</button>
             <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
             <div style="display:inline-flex;align-items:center;gap:4px;background:var(--card-alt);border:1px solid var(--border);border-radius:7px;padding:2px 6px">
               <span style="font-size:9.5px;color:var(--muted);font-weight:700">HUD</span>
@@ -5124,7 +5210,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     const SHARE_MATCHUP = ${safeJsonForScript(shareInfo.matchup || '')};
     const SHARE_DURATION_SEC = Number(${safeJsonForScript(Number(shareInfo.durationSec) || 0)}) || 0;
     const SHARE_USER_TIER = ${safeJsonForScript(shareInfo.userTier || 'pro')};
-    const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free';
+    const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free' && SHARE_USER_TIER !== 'comp';
     let currentIssueNote = ${safeJsonForScript(shareInfo.userIssueNote || '')};
     let isIssueFlagged = ${safeJsonForScript(Boolean(shareInfo.userIssueNote || shareInfo.manuallyFlagged))};
     const DEFAULT_HIDE_NAMES = ${safeJsonForScript(hideNamesDefault)};
@@ -9220,7 +9306,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.82');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.90');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
   const dlWatermarkMap = buildWorkerWatermarkSvgMap();
@@ -9910,7 +9996,7 @@ self.addEventListener('fetch', (e) => {
       try {
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.82',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.90',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -10078,8 +10164,8 @@ self.addEventListener('fetch', (e) => {
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.82',
-        releaseTitle: 'SilphScope PvP v7.82',
+        versionName: 'v7.90',
+        releaseTitle: 'SilphScope PvP v7.90',
         publishedAt: '',
         assetSizeMb: '',
       };
@@ -10667,11 +10753,13 @@ self.addEventListener('fetch', (e) => {
         let diagWatchOverlayUrl = '';
 
         // Automatically mirror DVR uploads into the Cloud R2 Replay Vault (`replays/<screenName>/...` + `replay_index/<screenName>`)
-        // for active Legend Pro / VIP users (especially when queued DVR bundles are retried via `/v1/dvr`).
-        const isProOrVipUploader =
-          (resolvedUserTier === 'pro' || resolvedUserTier === 'vip') &&
+        // for active Legend Pro / VIP / Comp Cloud-DVR users (especially when queued DVR bundles are retried via `/v1/dvr`).
+        const hasVaultMirrorAccess =
+          (resolvedUserTier === 'pro' ||
+            resolvedUserTier === 'vip' ||
+            (resolvedUserTier === 'comp' && Number(tierSummary.maxRollingBattles || 0) > 0)) &&
           Boolean(ownerAuth.isOwner || screenName);
-        if (hasVideo && env.TELEMETRY_KV && (isFlaggedWithIssueDescription || (isProOrVipUploader && env.REPLAY_BUCKET))) {
+        if (hasVideo && env.TELEMETRY_KV && (isFlaggedWithIssueDescription || (hasVaultMirrorAccess && env.REPLAY_BUCKET))) {
           try {
             diagShareId =
               canUpdateExisting && existingItem && existingItem.shareId
@@ -10685,7 +10773,7 @@ self.addEventListener('fetch', (e) => {
             let r2TraceKey = hasTrace ? traceKey : null;
             if (env.REPLAY_BUCKET) {
               const r2Prefix =
-                ownerAuth.isOwner || isProOrVipUploader
+                ownerAuth.isOwner || hasVaultMirrorAccess
                   ? `replays/${screenName}`
                   : `recordings/${screenName}`;
               r2VideoKey = `${r2Prefix}/${battleId}_video.mp4`;
@@ -10735,7 +10823,7 @@ self.addEventListener('fetch', (e) => {
             };
             await env.TELEMETRY_KV.put(`share_lookup/${diagShareId}`, JSON.stringify(diagShareRecord));
 
-            if (isProOrVipUploader && env.REPLAY_BUCKET && !existingItem) {
+            if (hasVaultMirrorAccess && env.REPLAY_BUCKET && !existingItem) {
               indexObj.items = [
                 diagShareRecord,
                 ...(indexObj.items || []).filter((i) => i.battleId !== battleId),
@@ -11679,7 +11767,7 @@ self.addEventListener('fetch', (e) => {
           recommendedLinks: {
             supporter: {
               priceUsd: 2,
-              label: 'Lifetime Supporter ($2 One-Time • 🛡️ Shield Decision HUD + 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
+              label: 'Lifetime Supporter ($2 One-Time • 🛡️ Shield HUD + 🧠 Compact AI Coach + 25 Local Videos (+5 ⭐) + Core 3 Leagues + Lifetime Logs)',
               stripeUrl: `${STRIPE_PAYMENT_LINKS.supporter}?client_reference_id=${encodeURIComponent(screenName)}`,
               bmcUrl: BMC_LINKS.supporter,
             },
@@ -11932,13 +12020,25 @@ self.addEventListener('fetch', (e) => {
         }
       }
 
-      const isRenewal = Boolean(isWebhookRenewalEvent || existingMatchedLicense);
+      const isExistingComp = Boolean(
+        existingMatchedLicense &&
+        (String(existingMatchedLicense.tier || '').toLowerCase() === 'comp' || existingMatchedLicense.isComp)
+      );
+      const isRenewal = Boolean(isWebhookRenewalEvent || (existingMatchedLicense && !isExistingComp));
       const effectiveScreenName = screenNameConflict
         ? ''
         : boundScreenName || (existingMatchedLicense && existingMatchedLicense.boundScreenName) || '';
 
-      if (existingMatchedLicense) {
-        const tierRank = { free: 0, supporter: 1, pro: 2, vip: 3 };
+      if (existingMatchedLicense && isExistingComp) {
+        existingMatchedLicense.revoked = true;
+        existingMatchedLicense.revokedAt = now.toISOString();
+        existingMatchedLicense.rotatedTo = newKey;
+        await env.TELEMETRY_KV.put(
+          `licenses/${String(existingMatchedLicense.key).trim().toUpperCase()}`,
+          JSON.stringify(existingMatchedLicense, null, 2)
+        );
+      } else if (existingMatchedLicense) {
+        const tierRank = { free: 0, comp: 0, supporter: 1, pro: 2, vip: 3 };
         if ((tierRank[tier] || 0) >= (tierRank[existingMatchedLicense.tier] || 0)) {
           existingMatchedLicense.tier = tier;
           existingMatchedLicense.label = preset.label;
@@ -11969,7 +12069,8 @@ self.addEventListener('fetch', (e) => {
         everPaid: true,
         isIntroPromo,
         isRenewal,
-        renewedFromKey: existingMatchedLicense ? existingMatchedLicense.key : null,
+        renewedFromKey: existingMatchedLicense && !isExistingComp ? existingMatchedLicense.key : null,
+        upgradedFromCompKey: existingMatchedLicense && isExistingComp ? existingMatchedLicense.key : null,
         supporterName,
         supporterEmail,
         supportNote,
@@ -12145,19 +12246,20 @@ self.addEventListener('fetch', (e) => {
             isOwnerCaller: Boolean(inputKey || isServerVerifiedGh),
           }
         );
-        if (
-          !licenseInfo.active ||
-          licenseInfo.screenNameConflict ||
-          licenseInfo.tier === 'free' ||
-          licenseInfo.tier === 'supporter'
-        ) {
+        const hasCloudUploadAccess =
+          licenseInfo.active &&
+          !licenseInfo.screenNameConflict &&
+          (licenseInfo.tier === 'pro' ||
+            licenseInfo.tier === 'vip' ||
+            (licenseInfo.tier === 'comp' && Number(licenseInfo.maxRollingBattles || 0) > 0));
+        if (!hasCloudUploadAccess) {
           return jsonResponse(
             {
               ok: false,
               error:
                 licenseInfo.tier === 'supporter'
-                  ? 'Lifetime Supporter retains past pinned cloud replays for 365 days, plus 5 local on-device videos. Upgrade to Legend Pro ($3/mo or $6/season) for new Cloud R2 Replay Vault uploads.'
-                  : 'Active Legend Pro or VIP Unlock Key required for Cloud R2 Replay Vault uploads.',
+                  ? 'Lifetime Supporter retains past pinned cloud replays for 365 days, plus 25 local on-device videos (+5 pinned). Upgrade to Legend Pro ($3/mo or $6/season) for new Cloud R2 Replay Vault uploads.'
+                  : 'Active Legend Pro, VIP, or Cloud Comp Unlock Key required for Cloud R2 Replay Vault uploads.',
               tier: licenseInfo.tier,
             },
             403
@@ -12231,9 +12333,10 @@ self.addEventListener('fetch', (e) => {
         const frameCount = Math.max(0, Math.min(20000, Number(metadata.frameCount) || 0));
         const durationSec = Math.max(1, Math.min(600, Number(metadata.durationSec) || Math.round(frameCount / 10)));
         const appVersion = String(metadata.appVersion || '7.13').slice(0, 32);
-        const isPinned = Boolean(
-          metadata.isPinned !== undefined ? metadata.isPinned : existingItem && existingItem.isPinned
-        );
+        const allowCloudPinning = Number(licenseInfo.maxPinnedBattles || 0) > 0;
+        const isPinned =
+          allowCloudPinning &&
+          Boolean(metadata.isPinned !== undefined ? metadata.isPinned : existingItem && existingItem.isPinned);
         const isPublic = Boolean(
           metadata.isPublic !== undefined ? metadata.isPublic : existingItem && existingItem.isPublic
         );
@@ -13307,7 +13410,11 @@ self.addEventListener('fetch', (e) => {
         const licenseInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
         const authRec = ownerAuth.authRecord || (await loadUserAuthRecord(env.TELEMETRY_KV, resolvedName));
         const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
-        const baseUsage = licenseInfo.active
+        const shouldEnforceCloudQuota =
+          licenseInfo.active ||
+          licenseInfo.expiredFromTier === 'comp' ||
+          (!licenseInfo.everPaid && (indexObj.items || []).length > 0);
+        const baseUsage = shouldEnforceCloudQuota
           ? await enforceUserReplayQuota(
               env,
               env.TELEMETRY_KV,
@@ -13583,9 +13690,20 @@ self.addEventListener('fetch', (e) => {
       }
 
       if (typeof body.isPinned === 'boolean') {
+        const maxPins = Math.max(0, Number(licenseInfo.maxPinnedBattles ?? 0));
+        if (body.isPinned && maxPins <= 0) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: 'Cloud starring/pinning requires Legend Pro or VIP. Temporary Comp DVR keys support rolling cloud replays only.',
+            },
+            403,
+            request,
+            true
+          );
+        }
         if (body.isPinned && !item.isPinned) {
           const currentPinned = (indexObj.items || []).filter((i) => i.isPinned).length;
-          const maxPins = Math.max(10, Number(licenseInfo.maxPinnedBattles) || 10);
           if (currentPinned >= maxPins) {
             return jsonResponse(
               {
@@ -14084,7 +14202,7 @@ self.addEventListener('fetch', (e) => {
 
         if (action === 'create') {
           const rawTier = String(body.tier || '').toLowerCase();
-          const tier = ['supporter', 'base', 'pro', 'vip'].includes(rawTier)
+          const tier = ['comp', 'supporter', 'base', 'pro', 'vip'].includes(rawTier)
             ? rawTier === 'base'
               ? 'supporter'
               : rawTier
@@ -14092,38 +14210,104 @@ self.addEventListener('fetch', (e) => {
           const preset = TIER_PRESETS[tier];
           const key = body.customKey ? String(body.customKey).trim().toUpperCase() : generateUnlockKey(tier);
           const boundScreenName = body.screenName ? sanitizeScreenName(body.screenName) : '';
-          const days = Number(body.days) || (tier === 'supporter' ? 36500 : tier === 'vip' ? 95 : 95);
           const now = new Date();
-          const expiresAt =
-            tier === 'supporter' && !body.days
-              ? null
-              : new Date(now.getTime() + days * 24 * 3600 * 1000).toISOString();
 
-          const record = {
-            key,
-            tier,
-            label: preset.label,
-            boundScreenName,
-            everPaid: true,
-            note: String(body.note || ''),
-            createdAt: now.toISOString(),
-            expiresAt,
-            revoked: false,
-            source: 'admin_cli',
-          };
+          let record;
+          let limitsResp;
+          if (tier === 'comp') {
+            const durationDays = Math.max(1, Math.min(365, Number(body.days) || 30));
+            const maxLocalBattles = Math.max(5, Math.min(100, Number(body.maxLocalBattles ?? body.localBattles ?? 25)));
+            const maxLocalPinnedBattles = Math.max(
+              2,
+              Math.min(10, Number(body.maxLocalPinnedBattles ?? body.localPins ?? Math.round(maxLocalBattles * 0.2)))
+            );
+            const maxRollingBattles = Math.max(0, Math.min(50, Number(body.maxRollingBattles ?? body.cloudBattles ?? 15)));
+            const maxStorageMb =
+              maxRollingBattles > 0
+                ? Math.max(300, Math.min(2000, Number(body.maxStorageMb ?? maxRollingBattles * 35)))
+                : 0;
+            const startNow = Boolean(body.startNow);
+            const expiresAt = startNow
+              ? new Date(now.getTime() + durationDays * 24 * 3600 * 1000).toISOString()
+              : null;
+            const compLabel = `Comp DVR Pass (${maxLocalBattles} Local + ${maxLocalPinnedBattles} ⭐ Local${
+              maxRollingBattles > 0 ? ` • ${maxRollingBattles} Rolling Cloud` : ''
+            } • ${durationDays}d • Free Features)`;
+            record = {
+              key,
+              tier: 'comp',
+              isComp: true,
+              label: compLabel,
+              boundScreenName,
+              everPaid: false,
+              durationDays,
+              maxLocalBattles,
+              maxLocalPinnedBattles,
+              maxRollingBattles,
+              maxPinnedBattles: 0,
+              retentionDays: maxRollingBattles > 0 ? durationDays : 0,
+              pinnedRetentionDays: 0,
+              maxStorageMb,
+              note: String(body.note || ''),
+              createdAt: now.toISOString(),
+              expiresAt,
+              revoked: false,
+              source: 'admin_cli',
+            };
+            limitsResp = {
+              ...preset,
+              label: compLabel,
+              maxLocalBattles,
+              maxLocalPinnedBattles,
+              maxRollingBattles,
+              maxPinnedBattles: 0,
+              retentionDays: record.retentionDays,
+              pinnedRetentionDays: 0,
+              maxStorageMb,
+            };
+          } else {
+            const days = Number(body.days) || (tier === 'supporter' ? 36500 : tier === 'vip' ? 95 : 95);
+            const expiresAt =
+              tier === 'supporter' && !body.days
+                ? null
+                : new Date(now.getTime() + days * 24 * 3600 * 1000).toISOString();
+            record = {
+              key,
+              tier,
+              label: preset.label,
+              boundScreenName,
+              everPaid: true,
+              note: String(body.note || ''),
+              createdAt: now.toISOString(),
+              expiresAt,
+              revoked: false,
+              source: 'admin_cli',
+            };
+            limitsResp = preset;
+          }
+
           await saveLicenseRecord(env.TELEMETRY_KV, record);
           ctx.waitUntil(
             sendTelegramMessage(
               env,
-              `🛠️ <b>Admin Membership Key Created!</b>\n` +
-                `🏅 <b>Paid Tier:</b> <code>${escapeHtml(preset.label)} (${tier.toUpperCase()})</code>\n` +
+              (tier === 'comp'
+                ? `🎁 <b>Admin Comp DVR Key Created!</b>\n` +
+                  `🎁 <b>Comp Tier (Non-Paid):</b> <code>${escapeHtml(record.label)} (COMP)</code>\n`
+                : `🛠️ <b>Admin Membership Key Created!</b>\n` +
+                  `🏅 <b>Paid Tier:</b> <code>${escapeHtml(preset.label)} (${tier.toUpperCase()})</code>\n`) +
                 `🔑 <b>Unlock Key:</b> <code>${escapeHtml(key)}</code>\n` +
                 (boundScreenName ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(boundScreenName)}</code>\n` : '') +
-                `⏳ <b>Expires:</b> <code>${escapeHtml(expiresAt ? expiresAt.slice(0, 10) : 'LIFETIME')}</code>` +
+                `⏳ <b>Expires:</b> <code>${escapeHtml(
+                  record.expiresAt
+                    ? record.expiresAt.slice(0, 10)
+                    : tier === 'comp'
+                      ? `${record.durationDays || 30}d from activation`
+                      : 'LIFETIME'
+                )}</code>` +
                 (record.note ? `\n💬 <b>Note:</b> ${escapeHtml(record.note)}` : '')
             )
           );
-          return jsonResponse({ ok: true, action: 'create', license: record, limits: preset });
+          return jsonResponse({ ok: true, action: 'create', license: record, limits: limitsResp });
         }
 
         if (action === 'revoke' || action === 'extend') {
@@ -14137,13 +14321,32 @@ self.addEventListener('fetch', (e) => {
             existing.revokedAt = new Date().toISOString();
           } else if (action === 'extend') {
             const extraDays = Number(body.days) || 30;
-            const baseTime = existing.expiresAt ? Math.max(Date.now(), Date.parse(existing.expiresAt)) : Date.now();
-            existing.expiresAt = new Date(baseTime + extraDays * 24 * 3600 * 1000).toISOString();
+            if ((existing.tier === 'comp' || existing.isComp) && !existing.expiresAt && Number(existing.durationDays) > 0) {
+              existing.durationDays = Number(existing.durationDays) + extraDays;
+            } else {
+              const baseTime = existing.expiresAt ? Math.max(Date.now(), Date.parse(existing.expiresAt)) : Date.now();
+              existing.expiresAt = new Date(baseTime + extraDays * 24 * 3600 * 1000).toISOString();
+            }
+            if (existing.tier === 'comp' || existing.isComp) {
+              if (body.maxLocalBattles !== undefined || body.localBattles !== undefined) {
+                existing.maxLocalBattles = Math.max(5, Math.min(100, Number(body.maxLocalBattles ?? body.localBattles)));
+              }
+              if (body.maxLocalPinnedBattles !== undefined || body.localPins !== undefined) {
+                existing.maxLocalPinnedBattles = Math.max(2, Math.min(10, Number(body.maxLocalPinnedBattles ?? body.localPins)));
+              }
+              if (body.maxRollingBattles !== undefined || body.cloudBattles !== undefined) {
+                existing.maxRollingBattles = Math.max(0, Math.min(50, Number(body.maxRollingBattles ?? body.cloudBattles)));
+                existing.maxStorageMb = existing.maxRollingBattles > 0 ? Math.max(300, existing.maxRollingBattles * 35) : 0;
+              }
+              existing.everPaid = false;
+            }
             existing.revoked = false;
           }
           if (body.tier && TIER_PRESETS[body.tier]) {
             existing.tier = body.tier;
             existing.label = TIER_PRESETS[body.tier].label;
+            existing.everPaid = body.tier !== 'comp';
+            existing.isComp = body.tier === 'comp';
           }
           if (body.screenName) {
             existing.boundScreenName = sanitizeScreenName(body.screenName);
@@ -14154,12 +14357,18 @@ self.addEventListener('fetch', (e) => {
               sendTelegramMessage(
                 env,
                 `🔄 <b>Membership Renewed / Extended (Admin)!</b>\n` +
-                  `🏅 <b>Paid Tier:</b> <code>${escapeHtml(existing.label || existing.tier)}</code>\n` +
+                  `🏅 <b>Tier:</b> <code>${escapeHtml(existing.label || existing.tier)}</code>\n` +
                   `🔑 <b>Unlock Key:</b> <code>${escapeHtml(existing.key)}</code>\n` +
                   (existing.boundScreenName
                     ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(existing.boundScreenName)}</code>\n`
                     : '') +
-                  `⏳ <b>New Expiration:</b> <code>${escapeHtml(existing.expiresAt ? existing.expiresAt.slice(0, 10) : 'LIFETIME')}</code>`
+                  `⏳ <b>New Expiration:</b> <code>${escapeHtml(
+                    existing.expiresAt
+                      ? existing.expiresAt.slice(0, 10)
+                      : existing.durationDays
+                        ? `${existing.durationDays}d from activation`
+                        : 'LIFETIME'
+                  )}</code>`
               )
             );
           }

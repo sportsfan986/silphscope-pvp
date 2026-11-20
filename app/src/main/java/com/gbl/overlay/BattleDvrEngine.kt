@@ -768,12 +768,12 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
             vaultOk = vOk
             if (vOk && toastMsg == null) {
                 toastMsg = vaultMsg
-            } else if (!vOk && toastMsg == null && (OverlayService.getEffectiveReplayTierStatic(prefs) == "pro" || OverlayService.getEffectiveReplayTierStatic(prefs) == "vip")) {
+            } else if (!vOk && toastMsg == null && OverlayService.hasCloudDvrUploadAccessStatic(prefs)) {
                 toastMsg = vaultMsg
             }
         } catch (_: Exception) {}
 
-        if (!vaultOk && (OverlayService.getEffectiveReplayTierStatic(prefs) == "pro" || OverlayService.getEffectiveReplayTierStatic(prefs) == "vip")) {
+        if (!vaultOk && OverlayService.hasCloudDvrUploadAccessStatic(prefs)) {
             try {
                 if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
                 if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
