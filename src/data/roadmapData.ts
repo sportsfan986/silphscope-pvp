@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.93',
+    codename: 'CMP Tie Finalization, HP Row-Y Re-Anchoring & Minigame Guards',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Fixes Opp->User CMP opponent energy refunds and provisional shield drift, adds post-switch HP bar row-Y re-anchoring and pre-throw HP-confirmed fast move preservation, expands CMP HP/KO settle windows, and hardens player minigame banner matching and back-to-back splits.',
+    icon: '🎯',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Finalizes genuine Opp->User CMP opponent throws before player minigame takeover instead of rolling back opponent energy, and clears provisional shield auto-decrement flags on shield restore',
+      'Re-anchors floating HP baseline row-Y across stable combat frames (>= 900ms post-switch, >= 8-frame drift tolerance) and preserves HP-confirmed pre-throw opponent fast moves (e.g. Incinerate) across user throws',
+      'Expands CMP-intervened HP settle windows (11.5s/15s), CMP shield chip tolerance (<= 5% on >= 18% expected dmg), KO sync windows (35s), OCR banner normalization, and back-to-back player charged move splits'
+    ]
+  },
+  {
     version: 'v7.92',
     codename: 'Android 17 VerifyError Hotfix, Release Pin Switch & Node 24 Pages CI',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Resolves the v7.90–v7.91 Android 17 ART VerifyError cold-launch crash by structurally splitting OverlayService.updateLiveHpAndChargedAttackState into modular helpers, adds a Worker release-pin switch for dl.silphscopepvp.com, and upgrades GitHub Pages CI to Node 24 actions.',
     icon: '🔧',

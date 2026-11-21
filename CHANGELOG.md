@@ -2,6 +2,17 @@
 
 ---
 
+## v7.93 (2026-11-21) — CMP Tie Energy & Shield Sync, Post-Switch HP Baseline Adaptation & Minigame Lifecycle Hardening
+*Telemetry & live-vision accuracy release (`v7.93`, `versionCode = 1793`) fixing Opp→User CMP opponent energy refunds and provisional shield drift, stabilizing post-switch flying/tall HP bar row-Y baselines, preserving HP-confirmed pre-throw fast moves, guarding player minigame exits and OCR banner typos, and adding retroactive `v7.93` audit rules.*
+
+- **CMP Tie Opponent Throw Finalization & Shield Restore Clearing (`OverlayService.kt`)**: Separated brief tentative opponent prompts (`< 3.8s`, `0` deducted energy, no banner/shield) from genuine Opp→User CMP ties (`finalizeGenuineOppBeforeUserCmp`), calling `resolvePostChargedOpponentAttack(...)` instead of refunding deducted opponent energy when `"Get Ready!"` arrives; cleared `lastOppChargedWasProvisionalShield` / `lastUserChargedWasProvisionalShield` auto-decrement flags whenever a restored shield heals.
+- **Post-Switch HP Row-Y Re-Anchoring & HP-Confirmed Fast Move Preservation (`OverlayService.kt`)**: Replaced one-shot `playerSlotBaselineHpRowY`/`oppSlotBaselineHpRowY` locking with `updateSlotBaselineHpRowYAndCheckCameraZoom` (requiring `combatHudStableFrames >= 3`, `>= 900ms` post-switch settle, and `>= 8`-frame drift re-anchoring so tall/flying Pokémon cannot lock onto Pokéball entry artifacts); preserved HP-confirmed pre-throw opponent fast moves (`oppSlotEnergyHp > oppSlotEnergy`, `oppSlotConfHp >= 65`) prior to user charged-move turn resets.
+- **Widened CMP Settlement, Shield Chip & KO Sync Windows (`OverlayService.kt`, `PixelScannerEngine.kt`)**: Expanded CMP-intervened retroactive HP settle windows (`userChargeIntervenedAfterOppThrow` / `oppChargeIntervenedAfterUserThrow`) from `6.5s / 12.0s` to `11.5s / 15.0s`, widened User→Opp CMP shield chip tolerance from `3%` to `5%` for moves expecting `>= 18%` dmg with shields up, and extended post-charge faint sync windows (`finalizePendingChargedAttackOnMatchEnd`, `syncRecentUnshieldedChargedAttackOnFaint`, `syncRecentUnshieldedChargedAttackOnFaintInList`) from `25.0s` to `35.0s`.
+- **Player Minigame Exit Guard, OCR Typo Normalization & Back-to-Back Split (`OverlayService.kt`)**: Added NFD diacritic stripping plus typo/edit-distance normalization (`normalizeBannerAsciiLower`, `matchesUserChargeStartBanner`, `matchesUserChargeMinigameBanner`) for `"Get Ready!"`/`"EXCELLENT!"`/`"GREAT!"`/`"NICE!"`; gated `isPostUserMinigameOppDrainWindow`, `postUserChargedMissingOppHpFrames`, and `isDefenderHpReadyAfterCharge` against mid-minigame exits (`>= 5.2s`); and split back-to-back player charged throws (`canSplitBackToBackUserThrow` on fresh `"Get Ready!"` at `>= 5.5s`).
+- **Nightly Telemetry Audit Hygiene & `v7.93` Rules (`scripts/nightly-telemetry-audit.mjs`)**: Removed the global `_postV770HpDeltaCount === 0` block on pre-`v7.56` non-manual `UNEXPECTED_HP_DELTA` archival and added `v7.93` retroactive resolution rules for Issues 1–4.
+
+---
+
 ## v7.92 (2026-11-20) — Android 17 ART VerifyError Hotfix, Download-Pin Safety Switch & GitHub Pages CI Upgrade
 *Critical stability hotfix & CI infrastructure update (`v7.92`, `versionCode = 1792`) resolving the `v7.90`–`v7.91` Android 17 (`SDK 37`) `java.lang.VerifyError` cold-launch crash caught by the built-in Crash Diagnostics screen, adding an instant Cloudflare Worker release-pin switch for `dl.silphscopepvp.com`, and upgrading GitHub Pages deployment actions to Node 24.*
 

@@ -2201,7 +2201,7 @@ internal fun OverlayService.syncRecentUnshieldedChargedAttackOnFaint(faintedActo
     if (lastChargeIdx >= 0) {
         val ev = battleTimelineEvents[lastChargeIdx]
         val dt = (eventElapsedSec - ev.t).coerceAtLeast(0.0)
-        if (dt <= 25.0 && ev.shielded == true) {
+        if (dt <= 35.0 && ev.shielded == true) {
             if (faintedActor == "user" && lastOppChargedWasProvisionalShield) {
                 if (lastOppChargedAutoDecrementedShield) {
                     playerShieldsRemaining = (playerShieldsRemaining + 1).coerceIn(0, 2)
@@ -2264,8 +2264,8 @@ internal fun OverlayService.syncRecentUnshieldedChargedAttackOnFaintInList(
     if (lastChargeIdx < 0) return
     val ev = events[lastChargeIdx]
     val dt = (eventElapsedSec - ev.t).coerceAtLeast(0.0)
-    // v6.02: Extended from 16.0s to 25.0s so slow post-faint switch prompts still sync 0% HP after an unshielded KO charged move
-    if (dt > 25.0) return
+    // v6.02 / v7.93: Extended from 16.0s -> 25.0s -> 35.0s so slow post-faint switch / victory-screen fades still sync 0% HP after an unshielded KO charged move
+    if (dt > 35.0) return
     val wasExplicitlyShielded = if (faintedActor == "opp") {
         events.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "opp" }
     } else {
