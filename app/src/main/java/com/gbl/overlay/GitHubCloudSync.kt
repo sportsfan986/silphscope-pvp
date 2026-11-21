@@ -135,6 +135,9 @@ import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_LAST_DVR_UPLOAD_PATH
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_PENDING_AI_TELEMETRY_V510
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_PENDING_SETTINGS_CHANGES_V513
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_PERSISTENT_TEAMS
+import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_SHOW6_PRESETS_OF_3
+import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_SHOW6_DELETED_TEAM_IDS
+import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_SHOW6_SELECTED_PRESET_ID
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513
 import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT
@@ -626,9 +629,22 @@ internal fun OverlayService.Companion.buildLocalSyncVaultPayload(
         gson.fromJson(prefs.getString(PREFS_KEY_BATTLE_LOGS, "[]"), logsType) ?: emptyList()
     } catch (_: Exception) { emptyList() }
 
-    val teams: List<SyncTeamPresetRecord> = try {
+    val gblTeamsRaw: List<SyncTeamPresetRecord> = try {
         gson.fromJson(prefs.getString(PREFS_KEY_PERSISTENT_TEAMS, "[]"), teamsType) ?: emptyList()
     } catch (_: Exception) { emptyList() }
+    val show6TeamsRaw: List<SyncTeamPresetRecord> = try {
+        gson.fromJson(prefs.getString(PREFS_KEY_SHOW6_PRESETS_OF_3, "[]"), teamsType) ?: emptyList()
+    } catch (_: Exception) { emptyList() }
+    val combinedTeamMap: LinkedHashMap<String, SyncTeamPresetRecord> = LinkedHashMap()
+    for (t in gblTeamsRaw) {
+        val norm = TeamSyncReconciler.normalizeRecordMode(t.copy(combatMode = "gbl"))
+        if (norm.id.isNotBlank()) combinedTeamMap[norm.id] = norm
+    }
+    for (t in show6TeamsRaw) {
+        val norm = TeamSyncReconciler.normalizeRecordMode(t.copy(combatMode = "show6"))
+        if (norm.id.isNotBlank()) combinedTeamMap[norm.id] = norm
+    }
+    val teams: List<SyncTeamPresetRecord> = combinedTeamMap.values.toList()
 
     val builtType = object : TypeToken<List<BuiltPokemonEntry>>() {}.type
     val builtPokemon: List<BuiltPokemonEntry> = try {
@@ -639,9 +655,13 @@ internal fun OverlayService.Companion.buildLocalSyncVaultPayload(
         gson.fromJson(prefs.getString(PREFS_KEY_DELETED_LOG_IDS, "[]"), strListType) ?: emptyList()
     } catch (_: Exception) { emptyList() }
 
-    val delTeams: List<String> = try {
+    val gblDelTeams: List<String> = try {
         gson.fromJson(prefs.getString(PREFS_KEY_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
     } catch (_: Exception) { emptyList() }
+    val show6DelTeams: List<String> = try {
+        gson.fromJson(prefs.getString(PREFS_KEY_SHOW6_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
+    } catch (_: Exception) { emptyList() }
+    val delTeams: List<String> = (gblDelTeams + show6DelTeams).filter { it.isNotBlank() }.distinct()
 
     val delBuiltPokemon: List<String> = try {
         gson.fromJson(prefs.getString(PREFS_KEY_DELETED_BUILT_POKEMON_IDS, "[]"), strListType) ?: emptyList()
@@ -1022,11 +1042,19 @@ private data class AppliedVaultDeltaStats(
     val deletedLogIdsList: List<String>,
     val deletedTeamIdsList: List<String>,
     val deletedBuiltPokemonIdsList: List<String>,
-    val mutatedLocally: Boolean
+    val mutatedLocally: Boolean,
+    val autoPushLocalTeams: List<SyncTeamPresetRecord> = emptyList(),
+    val conflicts: List<TeamSyncReconciler.TeamSyncDeltaConflict> = emptyList()
 )
 
 @Volatile
 internal var lastCloudVaultSyncMutatedLocally: Boolean = false
+
+@Volatile
+internal var pendingTeamSyncConflicts: List<TeamSyncReconciler.TeamSyncDeltaConflict> = emptyList()
+
+@Volatile
+internal var lastTeamConflictSnoozedAtMs: Long = 0L
 
 private fun applyCloudflareVaultDeltasLocally(
     prefs: SharedPreferences,
@@ -1036,6 +1064,9 @@ private fun applyCloudflareVaultDeltasLocally(
     remoteDeletedLogIds: List<String>,
     remoteUpsertedTeams: List<SyncTeamPresetRecord>,
     remoteDeletedTeamIds: List<String>,
+    remoteDeletedTeamMeta: List<TeamSyncReconciler.DeletedTeamMetaRecord> = emptyList(),
+    teamsSnapshotFull: Boolean = false,
+    hasTeamBaseline: Boolean = false,
     remoteUpsertedBuiltPokemon: List<BuiltPokemonEntry> = emptyList(),
     remoteDeletedBuiltPokemonIds: List<String> = emptyList(),
     remoteSettings: Map<String, String>?,
@@ -1097,45 +1128,77 @@ private fun applyCloudflareVaultDeltasLocally(
     var teamsMutated = false
     var delTeamsMutated = false
     val finalTeamsCount: Int
+    val finalDeletedTeamsCombined: List<String>
+    val autoPushLocalTeamsList: List<SyncTeamPresetRecord>
+    val detectedTeamConflicts: List<TeamSyncReconciler.TeamSyncDeltaConflict>
 
-    if (remoteUpsertedTeams.isEmpty() && remoteDeletedTeamIds.isEmpty()) {
+    val shouldReconcileTeams = teamsSnapshotFull || !hasTeamBaseline ||
+        remoteUpsertedTeams.isNotEmpty() || remoteDeletedTeamIds.isNotEmpty()
+
+    if (!shouldReconcileTeams) {
         finalTeamsCount = localPayload.teamPresets.count { it.id.isNotBlank() && it.id !in localDelTeams }
+        finalDeletedTeamsCombined = localPayload.deletedTeamIds
+        autoPushLocalTeamsList = emptyList()
+        detectedTeamConflicts = pendingTeamSyncConflicts
     } else {
-        val teamMap = LinkedHashMap<String, SyncTeamPresetRecord>(localPayload.teamPresets.size + remoteUpsertedTeams.size)
-        for (t in localPayload.teamPresets) {
-            if (t.id.isNotBlank() && t.id !in localDelTeams) {
-                teamMap[t.id] = t
+        val strListType = object : TypeToken<List<String>>() {}.type
+        val localGblDelIds: List<String> = try {
+            gson.fromJson(prefs.getString(PREFS_KEY_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
+        } catch (_: Exception) { emptyList() }
+        val localShow6DelIds: List<String> = try {
+            gson.fromJson(prefs.getString(PREFS_KEY_SHOW6_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
+        } catch (_: Exception) { emptyList() }
+        val localGblTeams = localPayload.teamPresets.filter { TeamSyncReconciler.normTeamCombatMode(it.combatMode, it.id, it.league) != "show6" }
+        val localShow6Teams = localPayload.teamPresets.filter { TeamSyncReconciler.normTeamCombatMode(it.combatMode, it.id, it.league) == "show6" }
+        val baselines = TeamSyncReconciler.loadTeamBaselines(prefs, gson)
+        val localDelMeta = TeamSyncReconciler.loadDeletedTeamMeta(prefs, gson)
+        val remoteDelMetaMap = remoteDeletedTeamMeta.filter { it.id.isNotBlank() }.associateBy { it.id }
+
+        val recRes = TeamSyncReconciler.reconcileAllTeamsThreeWay(
+            localGblTeams = localGblTeams,
+            localShow6Teams = localShow6Teams,
+            localGblDelIds = localGblDelIds,
+            localShow6DelIds = localShow6DelIds,
+            localDeletedMeta = localDelMeta,
+            baselines = baselines,
+            hasExistingBaseline = hasTeamBaseline,
+            remoteUpsertedTeams = remoteUpsertedTeams,
+            remoteDeletedTeamIds = remoteDeletedTeamIds,
+            remoteDeletedMeta = remoteDelMetaMap,
+            isFullRemoteSnapshot = teamsSnapshotFull
+        )
+
+        newOrUpdatedTeams = recRes.newOrUpdatedCount
+        teamsMutated = recRes.mutatedLocally
+        delTeamsMutated = recRes.gblDeletedIds != localGblDelIds || recRes.show6DeletedIds != localShow6DelIds
+        finalTeamsCount = recRes.gblTeams.size + recRes.show6Teams.size
+        finalDeletedTeamsCombined = (recRes.gblDeletedIds + recRes.show6DeletedIds).distinct()
+        autoPushLocalTeamsList = recRes.autoPushLocalTeams
+        detectedTeamConflicts = recRes.conflicts
+        pendingTeamSyncConflicts = detectedTeamConflicts
+
+        val tEd = prefs.edit()
+        if (recRes.mutatedLocally || !hasTeamBaseline) {
+            if (recRes.gblTeams.isNotEmpty() || recRes.gblDeletedIds.isNotEmpty()) {
+                tEd.putString(PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(recRes.gblTeams))
+            }
+            if (recRes.show6Teams.isNotEmpty() || recRes.show6DeletedIds.isNotEmpty()) {
+                tEd.putString(PREFS_KEY_SHOW6_PRESETS_OF_3, gson.toJson(recRes.show6Teams))
+            }
+            val curGblSel = prefs.getString("gbl_selected_preset_id", null).orEmpty()
+            if (curGblSel.isNotEmpty() && recRes.gblTeams.none { it.id == curGblSel } && recRes.gblTeams.isNotEmpty()) {
+                tEd.putString("gbl_selected_preset_id", recRes.gblTeams.first().id)
+            }
+            val curS6Sel = prefs.getString(PREFS_KEY_SHOW6_SELECTED_PRESET_ID, null).orEmpty()
+            if (curS6Sel.isNotEmpty() && recRes.show6Teams.none { it.id == curS6Sel } && recRes.show6Teams.isNotEmpty()) {
+                tEd.putString(PREFS_KEY_SHOW6_SELECTED_PRESET_ID, recRes.show6Teams.first().id)
             }
         }
-        for (delTid in remoteDeletedTeamIds) {
-            if (delTid.isNotBlank()) {
-                if (localDelTeams.add(delTid)) delTeamsMutated = true
-                if (teamMap.remove(delTid) != null) teamsMutated = true
-            }
-        }
-        for (r in remoteUpsertedTeams) {
-            if (r.id.isBlank()) continue
-            if (localDelTeams.remove(r.id)) delTeamsMutated = true
-            val existing = teamMap[r.id]
-            if (existing == null) {
-                teamMap[r.id] = r
-                newOrUpdatedTeams++
-                teamsMutated = true
-            } else {
-                val lUpd = if (existing.updatedAt > 0L) existing.updatedAt else 1L
-                val rUpd = if (r.updatedAt > 0L) r.updatedAt else 1L
-                if (rUpd > lUpd) {
-                    teamMap[r.id] = r
-                    newOrUpdatedTeams++
-                    teamsMutated = true
-                }
-            }
-        }
-        val mergedTeams = teamMap.values.toList()
-        finalTeamsCount = mergedTeams.size
-        if (teamsMutated && mergedTeams.isNotEmpty()) {
-            prefs.edit().putString(PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(mergedTeams)).apply()
-        }
+        tEd.putString(PREFS_KEY_DELETED_TEAM_IDS, gson.toJson(recRes.gblDeletedIds))
+        tEd.putString(PREFS_KEY_SHOW6_DELETED_TEAM_IDS, gson.toJson(recRes.show6DeletedIds))
+        TeamSyncReconciler.saveTeamBaselines(tEd, gson, recRes.updatedBaselines)
+        TeamSyncReconciler.saveDeletedTeamMeta(tEd, gson, recRes.updatedDeletedMeta)
+        tEd.apply()
     }
 
     var newOrUpdatedBuilt = 0
@@ -1184,13 +1247,12 @@ private fun applyCloudflareVaultDeltasLocally(
     }
 
     val delLogsList = if (delLogsMutated) localDelLogs.toList() else localPayload.deletedLogIds
-    val delTeamsList = if (delTeamsMutated) localDelTeams.toList() else localPayload.deletedTeamIds
+    val delTeamsList = finalDeletedTeamsCombined
     val delBuiltList = if (delBuiltMutated) localDelBuilt.toList() else localPayload.deletedBuiltPokemonIds.orEmpty()
 
-    if (delLogsMutated || delTeamsMutated || delBuiltMutated) {
+    if (delLogsMutated || delBuiltMutated) {
         val tombEditor = prefs.edit()
         if (delLogsMutated) tombEditor.putString(PREFS_KEY_DELETED_LOG_IDS, gson.toJson(delLogsList))
-        if (delTeamsMutated) tombEditor.putString(PREFS_KEY_DELETED_TEAM_IDS, gson.toJson(delTeamsList))
         if (delBuiltMutated) tombEditor.putString(PREFS_KEY_DELETED_BUILT_POKEMON_IDS, gson.toJson(delBuiltList))
         tombEditor.apply()
     }
@@ -1212,7 +1274,9 @@ private fun applyCloudflareVaultDeltasLocally(
         deletedLogIdsList = delLogsList,
         deletedTeamIdsList = delTeamsList,
         deletedBuiltPokemonIdsList = delBuiltList,
-        mutatedLocally = logsMutated || teamsMutated || builtMutated || settingsMutated
+        mutatedLocally = logsMutated || teamsMutated || builtMutated || settingsMutated,
+        autoPushLocalTeams = autoPushLocalTeamsList,
+        conflicts = detectedTeamConflicts
     )
 }
 
@@ -1220,7 +1284,10 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
     prefs: SharedPreferences,
     gson: Gson,
     forceFullPull: Boolean = false,
-    forceFullPush: Boolean = false
+    forceFullPush: Boolean = false,
+    explicitResolvedTeams: List<SyncTeamPresetRecord>? = null,
+    explicitDeletedTeamIds: List<String>? = null,
+    explicitDeletedTeamTimestamps: Map<String, Long>? = null
 ): Pair<Boolean, String> {
     lastCloudVaultSyncMutatedLocally = false
     val rawName = getRequiredScreenNameStatic(prefs)
@@ -1240,7 +1307,13 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
     }
 
     val isInitialMigration = !alreadyMigrated
+    val hasExplicitResolution = explicitResolvedTeams != null || explicitDeletedTeamIds != null
+    val hasTeamBaseline = prefs.contains(OverlayService.PREFS_KEY_CLOUD_TEAM_BASELINES_V794)
+    val teamBaselines = TeamSyncReconciler.loadTeamBaselines(prefs, gson)
+    val localDelMetaMap = TeamSyncReconciler.loadDeletedTeamMeta(prefs, gson)
     val localPayload = buildLocalSyncVaultPayload(prefs, gson, isGitHubAuthenticatedSync = false)
+    val clientTeamsDigest = TeamSyncReconciler.computeVaultTeamsDigest(localPayload.teamPresets)
+
     val savedCursorMs = prefs.getLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, 0L)
     // Auto-recover full history from Cloud if local battle logs were cleared while a cursor was cached
     val cursorMs = if (isInitialMigration || forceFullPull || (localPayload.battleLogs.isEmpty() && savedCursorMs > 0L)) {
@@ -1271,10 +1344,13 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
     } else {
         localPayload.battleLogs.filter { max(it.updatedAt, it.timestampMs) > lastPushedMs }
     }
-    val teamsToPush = if (isInitialMigration || forceFullPush) {
-        localPayload.teamPresets
-    } else {
-        localPayload.teamPresets.filter { it.updatedAt > lastPushedMs }
+    val teamsToPush: List<SyncTeamPresetRecord> = when {
+        hasExplicitResolution -> explicitResolvedTeams.orEmpty()
+        !hasTeamBaseline -> emptyList() // Pull-before-push when upgrading / first baseline sync
+        else -> localPayload.teamPresets.filter { t ->
+            !TeamSyncReconciler.isUntouchedFactoryPreset(t) &&
+                (TeamSyncReconciler.computeCanonicalTeamContentSig(t) != teamBaselines[t.id]?.sig || forceFullPush)
+        }
     }
     val builtListLocal = localPayload.builtPokemon.orEmpty()
     val builtToPush = if (isInitialMigration || forceFullPush) {
@@ -1283,7 +1359,26 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
         builtListLocal.filter { it.updatedAt > lastPushedMs }
     }
     val delLogsToPush = if (tombstonesChanged) localPayload.deletedLogIds else emptyList()
-    val delTeamsToPush = if (tombstonesChanged) localPayload.deletedTeamIds else emptyList()
+    val delTeamsToPush: List<String> = when {
+        hasExplicitResolution -> explicitDeletedTeamIds.orEmpty()
+        !hasTeamBaseline -> emptyList()
+        else -> {
+            val delCandidates = LinkedHashSet<String>()
+            for ((tid, meta) in localDelMetaMap) {
+                if (tid in localPayload.deletedTeamIds && (meta.updatedAt > lastPushedMs || tombstonesChanged || forceFullPush)) {
+                    delCandidates.add(tid)
+                }
+            }
+            if (forceFullPush && delCandidates.isEmpty()) {
+                delCandidates.addAll(localPayload.deletedTeamIds)
+            }
+            delCandidates.toList()
+        }
+    }
+    val delTeamTimestampsToPush: Map<String, Long> = when {
+        hasExplicitResolution -> explicitDeletedTeamTimestamps.orEmpty()
+        else -> delTeamsToPush.associateWith { tid -> localDelMetaMap[tid]?.updatedAt ?: System.currentTimeMillis() }
+    }
     val delBuiltToPush = if (tombstonesChanged) localPayload.deletedBuiltPokemonIds.orEmpty() else emptyList()
     val shouldPushSettings = isInitialMigration || forceFullPush ||
         (localPayload.settingsUpdatedAt > lastPushedSettingsMs && localPayload.userSettings.isNotEmpty())
@@ -1303,11 +1398,16 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
         reqMap["sinceServerMs"] = cursorMs
         reqMap["isInitialMigration"] = isInitialMigration
         reqMap["migratedFromGithub"] = isInitialMigration && legacyGhToken.isNotEmpty()
+        reqMap["teamsDigest"] = clientTeamsDigest
+        reqMap["requestFullTeamSnapshot"] = (!hasTeamBaseline || forceFullPull || hasExplicitResolution)
         reqMap["battleLogs"] = logsToPush
         reqMap["teamPresets"] = teamsToPush
         reqMap["builtPokemon"] = builtToPush
         reqMap["deletedLogIds"] = delLogsToPush
         reqMap["deletedTeamIds"] = delTeamsToPush
+        if (delTeamTimestampsToPush.isNotEmpty()) {
+            reqMap["deletedTeamTimestamps"] = delTeamTimestampsToPush
+        }
         reqMap["deletedBuiltPokemonIds"] = delBuiltToPush
         if (shouldPushSettings) {
             reqMap["userSettings"] = localPayload.userSettings
@@ -1391,6 +1491,11 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
             val deletedTeams: List<String> = try {
                 rObj.get("deletedTeamIds")?.takeIf { it.isJsonArray }?.let { gson.fromJson(it, strListType) } ?: emptyList()
             } catch (_: Exception) { emptyList() }
+            val delMetaListType = object : TypeToken<List<TeamSyncReconciler.DeletedTeamMetaRecord>>() {}.type
+            val deletedTeamMetaList: List<TeamSyncReconciler.DeletedTeamMetaRecord> = try {
+                rObj.get("deletedTeamMeta")?.takeIf { it.isJsonArray }?.let { gson.fromJson(it, delMetaListType) } ?: emptyList()
+            } catch (_: Exception) { emptyList() }
+            val teamsSnapshotFull = rObj.get("teamsSnapshotFull")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
             val upsertedBuilt: List<BuiltPokemonEntry> = try {
                 rObj.get("builtPokemon")?.takeIf { it.isJsonArray }?.let { gson.fromJson(it, builtType) } ?: emptyList()
             } catch (_: Exception) { emptyList() }
@@ -1410,12 +1515,93 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
                 remoteDeletedLogIds = deletedLogs,
                 remoteUpsertedTeams = upsertedTeams,
                 remoteDeletedTeamIds = deletedTeams,
+                remoteDeletedTeamMeta = deletedTeamMetaList,
+                teamsSnapshotFull = teamsSnapshotFull,
+                hasTeamBaseline = hasTeamBaseline,
                 remoteUpsertedBuiltPokemon = upsertedBuilt,
                 remoteDeletedBuiltPokemonIds = deletedBuilt,
                 remoteSettings = pulledSettings,
                 remoteSettingsUpdatedAt = pulledSettingsUpdAt
             )
             lastCloudVaultSyncMutatedLocally = applied.mutatedLocally
+
+            // Record baselines for teams we just explicitly pushed
+            if (teamsToPush.isNotEmpty() || delTeamsToPush.isNotEmpty()) {
+                val baseAfterPush = TeamSyncReconciler.loadTeamBaselines(prefs, gson)
+                val delMetaAfterPush = TeamSyncReconciler.loadDeletedTeamMeta(prefs, gson)
+                for (pt in teamsToPush) {
+                    val normPt = TeamSyncReconciler.normalizeRecordMode(pt)
+                    baseAfterPush[normPt.id] = TeamSyncReconciler.TeamSyncBaselineRecord(
+                        id = normPt.id,
+                        sig = TeamSyncReconciler.computeCanonicalTeamContentSig(normPt),
+                        name = TeamSyncReconciler.safeStr(normPt.name),
+                        combatMode = normPt.combatMode,
+                        updatedAt = normPt.updatedAt
+                    )
+                    delMetaAfterPush.remove(normPt.id)
+                }
+                for (dtId in delTeamsToPush) {
+                    baseAfterPush.remove(dtId)
+                }
+                val bEd = prefs.edit()
+                TeamSyncReconciler.saveTeamBaselines(bEd, gson, baseAfterPush)
+                TeamSyncReconciler.saveDeletedTeamMeta(bEd, gson, delMetaAfterPush)
+                bEd.apply()
+            }
+
+            var finalCursorMs = serverSyncMs
+            if (applied.autoPushLocalTeams.isNotEmpty() && !hasExplicitResolution) {
+                try {
+                    val refreshedPayload = buildLocalSyncVaultPayload(prefs, gson, isGitHubAuthenticatedSync = false)
+                    val followMap = LinkedHashMap<String, Any?>()
+                    followMap["screenName"] = safeUser
+                    followMap["deviceHash"] = devHash
+                    if (unlockKey.isNotBlank()) followMap["unlockKey"] = unlockKey
+                    if (vaultSession.isNotBlank()) followMap["sessionToken"] = vaultSession
+                    followMap["sinceServerMs"] = serverSyncMs
+                    followMap["teamsDigest"] = TeamSyncReconciler.computeVaultTeamsDigest(refreshedPayload.teamPresets)
+                    followMap["teamPresets"] = applied.autoPushLocalTeams
+                    val followReq = applyWorkerClientAuthHeaders(
+                        Request.Builder()
+                            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/sync/vault")
+                            .post(gson.toJson(followMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())),
+                        prefs,
+                        safeUser,
+                        devHash
+                    )
+                    if (unlockKey.isNotBlank()) followReq.header("X-SilphScope-Unlock-Key", unlockKey)
+                    httpClient.newCall(followReq.build()).execute().use { fResp ->
+                        val fBody = fResp.body?.string().orEmpty()
+                        val fObj = try { JsonParser.parseString(fBody).asJsonObject } catch (_: Exception) { null }
+                        if (fResp.isSuccessful && fObj?.get("ok")?.asBoolean == true) {
+                            val fSyncMs = fObj.get("serverSyncMs")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+                            if (fSyncMs > finalCursorMs) finalCursorMs = fSyncMs
+                            val fBase = TeamSyncReconciler.loadTeamBaselines(prefs, gson)
+                            for (pt in applied.autoPushLocalTeams) {
+                                val normPt = TeamSyncReconciler.normalizeRecordMode(pt)
+                                fBase[normPt.id] = TeamSyncReconciler.TeamSyncBaselineRecord(
+                                    id = normPt.id,
+                                    sig = TeamSyncReconciler.computeCanonicalTeamContentSig(normPt),
+                                    name = TeamSyncReconciler.safeStr(normPt.name),
+                                    combatMode = normPt.combatMode,
+                                    updatedAt = normPt.updatedAt
+                                )
+                            }
+                            val fEd = prefs.edit()
+                            TeamSyncReconciler.saveTeamBaselines(fEd, gson, fBase)
+                            fEd.apply()
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (applied.conflicts.isEmpty()) {
+                val postV761 = runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
+                val postV773 = runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
+                if (postV761 || postV773) {
+                    lastCloudVaultSyncMutatedLocally = true
+                }
+            }
 
             val updatedTombstonesSig = (
                 applied.deletedLogIdsList.sorted().joinToString(",") + "|" +
@@ -1431,8 +1617,8 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
                 .putString(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG, updatedTombstonesSig)
                 .putLong(PREFS_KEY_SYNC_LAST_AT, System.currentTimeMillis())
 
-            if (serverSyncMs > 0L) {
-                stateEditor.putLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, serverSyncMs)
+            if (finalCursorMs > 0L) {
+                stateEditor.putLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, finalCursorMs)
             }
             if (shouldPushSettings) {
                 stateEditor.putLong(
@@ -1453,7 +1639,8 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
             stateEditor.apply()
 
             val pwBadge = if (hasPassword) "🔒 Password-Secured" else "⚠️ Set Vault Password in Settings"
-            true to "Delta Synced (@$safeUser)! (${applied.totalLogs} battles, +${applied.newOrUpdatedLogs} from other devices, ${logsToPush.size} pushed · ${applied.totalTeams} teams, +${applied.newOrUpdatedTeams} updated · ${applied.totalBuiltPokemon} built, +${applied.newOrUpdatedBuiltPokemon} updated · $pwBadge)"
+            val conflictNote = if (applied.conflicts.isNotEmpty()) " · ⚠️ ${applied.conflicts.size} team delta(s) need review" else ""
+            true to "Delta Synced (@$safeUser)! (${applied.totalLogs} battles, +${applied.newOrUpdatedLogs} from other devices, ${logsToPush.size} pushed · ${applied.totalTeams} teams, +${applied.newOrUpdatedTeams} updated · ${applied.totalBuiltPokemon} built, +${applied.newOrUpdatedBuiltPokemon} updated · $pwBadge$conflictNote)"
         }
     } catch (e: Exception) {
         false to "Cloud sync failed: ${e.localizedMessage ?: "Network error"}"
@@ -3557,6 +3744,7 @@ internal fun OverlayService.Companion.setOrLoginVaultPasswordBlocking(
                     .putLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, 0L)
                     .putLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_MS, 0L)
                     .putLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS, 0L)
+                    .remove(OverlayService.PREFS_KEY_CLOUD_TEAM_BASELINES_V794)
             }
 
             if (!isSettingNewPassword && root != null) {

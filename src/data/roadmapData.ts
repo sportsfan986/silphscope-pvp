@@ -23,9 +23,22 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.94',
+    codename: 'Cross-Device Team Sync Parity & Interactive Conflict Dialog',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Fixes cross-device team rename and stale overwrite bugs across Android, Web Simulator, and Cloudflare D1, adds Show 6 Trio vault sync parity with canonical teamsDigest checks, and introduces 3-way auto-merge plus per-delta interactive conflict resolution dialogs.',
+    icon: '🔄',
+    accentColor: '#22D3EE',
+    highlights: [
+      'Preserved historical updatedAt timestamps in v7.61/v7.73 migrations and deferred cold-launch migrations until after cloud sync so older secondary devices never overwrite newer primary renames',
+      'Fixed Cloudflare Worker teamUpsertSql (sort_order diffs no longer let stale full-list uploads clobber newer names; missing/0 updatedAt normalizes to 1) and added timestamp-guarded deletion tombstones',
+      'Synced Show 6 Trios (show6_3) alongside Standard GBL Teams with canonical teamsDigest parity checks and 3-way auto-merge + per-delta interactive conflict dialogs on Android and Web'
+    ]
+  },
+  {
     version: 'v7.93',
     codename: 'CMP Tie Finalization, HP Row-Y Re-Anchoring & Minigame Guards',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Fixes Opp->User CMP opponent energy refunds and provisional shield drift, adds post-switch HP bar row-Y re-anchoring and pre-throw HP-confirmed fast move preservation, expands CMP HP/KO settle windows, and hardens player minigame banner matching and back-to-back splits.',
     icon: '🎯',

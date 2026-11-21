@@ -2592,6 +2592,8 @@ async function upsertVaultBatchIntoD1(
     teamPresets = [],
     deletedLogIds = [],
     deletedTeamIds = [],
+    deletedTeamTimestamps = {},
+    isFullTeamOrder = false,
     builtPokemon = [],
     deletedBuiltPokemonIds = [],
     source = 'app_sync',
@@ -2658,6 +2660,8 @@ async function upsertVaultBatchIntoD1(
   }
 
   if (hasSettingsIncoming) {
+    const prevV761Merged = mergedSettingsObj._v761_multi_meta_merged;
+    const prevTeamsDigest = mergedSettingsObj._teams_digest_v1;
     const incUpd = Number(settingsUpdatedAt) || 0;
     if (incUpd >= mergedSettingsUpdAt || Object.keys(mergedSettingsObj).length === 0) {
       mergedSettingsObj = { ...mergedSettingsObj, ...cleanIncomingSettings };
@@ -2665,6 +2669,8 @@ async function upsertVaultBatchIntoD1(
     } else {
       mergedSettingsObj = { ...cleanIncomingSettings, ...mergedSettingsObj };
     }
+    if (prevV761Merged === '1') mergedSettingsObj._v761_multi_meta_merged = '1';
+    if (prevTeamsDigest) mergedSettingsObj._teams_digest_v1 = prevTeamsDigest;
   }
 
   const migFlag = migratedFromGithub || Number(existingState?.migrated_from_github) === 1 ? 1 : 0;
@@ -2829,21 +2835,20 @@ async function upsertVaultBatchIntoD1(
     INSERT INTO team_presets (
       screen_name, team_id, name, league, combat_mode, archetype,
       sort_order, updated_at, server_updated_ms, deleted, payload_json
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?7 >= 0 THEN ?7 ELSE 0 END, ?8, ?9, ?10, ?11)
     ON CONFLICT(screen_name, team_id) DO UPDATE SET
       name = excluded.name,
       league = excluded.league,
       combat_mode = excluded.combat_mode,
       archetype = excluded.archetype,
-      sort_order = excluded.sort_order,
+      sort_order = CASE WHEN ?7 >= 0 THEN ?7 ELSE team_presets.sort_order END,
       updated_at = excluded.updated_at,
       server_updated_ms = excluded.server_updated_ms,
       deleted = excluded.deleted,
       payload_json = CASE WHEN excluded.deleted = 1 AND team_presets.payload_json != '' THEN team_presets.payload_json ELSE excluded.payload_json END
     WHERE excluded.updated_at > team_presets.updated_at
-       OR excluded.deleted != team_presets.deleted
-       OR excluded.sort_order != team_presets.sort_order
-       OR (excluded.updated_at = team_presets.updated_at AND excluded.deleted = 0 AND excluded.payload_json != team_presets.payload_json)
+       OR (excluded.updated_at = team_presets.updated_at AND excluded.deleted = 0 AND team_presets.deleted = 0 AND excluded.payload_json != team_presets.payload_json)
+       OR (excluded.deleted != team_presets.deleted AND excluded.updated_at >= team_presets.updated_at)
   `;
 
   for (let idx = 0; idx < incomingTeams.length; idx++) {
@@ -2854,12 +2859,19 @@ async function upsertVaultBatchIntoD1(
     seenTeamIds.add(teamId);
 
     const isDel = delTeamSet.has(teamId) || Boolean(rawTeam.deleted) ? 1 : 0;
-    const updMs = Math.max(1, Number(rawTeam.updatedAt) || nowMs);
+    const rawUpd = Number(rawTeam.updatedAt);
+    const updMs = Number.isFinite(rawUpd) && rawUpd > 0 ? Math.trunc(rawUpd) : 1;
     const name = String(rawTeam.name || '').trim().slice(0, 80);
     const league = String(rawTeam.league || 'GREAT LEAGUE').trim().toUpperCase().slice(0, 64);
-    const combatMode = rawTeam.combatMode === 'show6' ? 'show6' : 'gbl';
+    const combatMode = normCombatModeD1(rawTeam.combatMode, teamId, league);
     const archetype = String(rawTeam.archetype || 'ABC').trim().slice(0, 24);
-    const payloadStr = JSON.stringify(rawTeam);
+    const sortOrderParam =
+      Number.isInteger(rawTeam.sortOrder) && rawTeam.sortOrder >= 0
+        ? rawTeam.sortOrder
+        : isFullTeamOrder
+        ? idx
+        : -1;
+    const payloadStr = JSON.stringify({ ...rawTeam, combatMode });
     if (payloadStr.length > 65536) continue;
 
     statements.push(
@@ -2870,7 +2882,7 @@ async function upsertVaultBatchIntoD1(
         league,
         combatMode,
         archetype,
-        idx,
+        sortOrderParam,
         updMs,
         nowMs,
         isDel,
@@ -2883,20 +2895,23 @@ async function upsertVaultBatchIntoD1(
   for (const delTid of delTeamSet) {
     if (seenTeamIds.has(delTid)) continue;
     seenTeamIds.add(delTid);
+    const rawDelTs = Number(deletedTeamTimestamps?.[delTid]);
+    const delTs = Number.isFinite(rawDelTs) && rawDelTs > 0 ? Math.trunc(rawDelTs) : nowMs;
+    const inferredMode = delTid.startsWith('show6-preset3-') ? 'show6' : 'gbl';
     statements.push(
       db
         .prepare(
           `INSERT INTO team_presets (
             screen_name, team_id, name, league, combat_mode, archetype,
             sort_order, updated_at, server_updated_ms, deleted, payload_json
-          ) VALUES (?1, ?2, '', 'GREAT LEAGUE', 'gbl', 'ABC', 999, ?3, ?3, 1, ?4)
+          ) VALUES (?1, ?2, '', 'GREAT LEAGUE', ?3, 'ABC', 999, ?4, ?5, 1, ?6)
           ON CONFLICT(screen_name, team_id) DO UPDATE SET
             deleted = 1,
-            updated_at = MAX(team_presets.updated_at, excluded.updated_at),
+            updated_at = excluded.updated_at,
             server_updated_ms = excluded.server_updated_ms
-          WHERE team_presets.deleted = 0`
+          WHERE team_presets.deleted = 0 AND excluded.updated_at >= team_presets.updated_at`
         )
-        .bind(cleanUser, delTid, nowMs, JSON.stringify({ id: delTid, deleted: true }))
+        .bind(cleanUser, delTid, inferredMode, delTs, nowMs, JSON.stringify({ id: delTid, deleted: true }))
     );
   }
 
@@ -2972,6 +2987,11 @@ async function upsertVaultBatchIntoD1(
     await db.batch(statements.slice(i, i + CHUNK_SIZE));
   }
 
+  if (incomingTeams.length > 0 || delTeamSet.size > 0 || !mergedSettingsObj._teams_digest_v1) {
+    const digestRes = await computeVaultTeamsDigestFromD1(db, cleanUser);
+    mergedSettingsObj._teams_digest_v1 = digestRes.digest;
+  }
+
   // Update user_vault_state summary + server_updated_ms
   const countsRow = await db
     .prepare(
@@ -3020,6 +3040,7 @@ async function upsertVaultBatchIntoD1(
     wroteAnything: true,
     prevServerUpdatedMs,
     serverUpdatedMs: nowMs,
+    serverTeamsDigest: String(mergedSettingsObj._teams_digest_v1 || ''),
     logsUpserted,
     teamsUpserted,
     builtPokemonUpserted,
@@ -3030,6 +3051,116 @@ async function upsertVaultBatchIntoD1(
     pushedTeamIds: Array.from(seenTeamIds),
     pushedBuiltPokemonIds: Array.from(seenBuiltIds),
     pushedSettings: hasSettingsIncoming,
+  };
+}
+
+function normLeagueForD1TeamSig(rawLeague) {
+  const s = String(rawLeague ?? '')
+    .trim()
+    .replace(/\s*\(\d+\)\s*$/, '')
+    .trim()
+    .toUpperCase();
+  return s || 'GREAT LEAGUE';
+}
+
+function normCombatModeD1(rawMode, rawId = '', rawLeague = '') {
+  const m = String(rawMode ?? '').trim().toLowerCase();
+  const id = String(rawId ?? '').trim();
+  const lg = String(rawLeague ?? '').trim().toUpperCase();
+  if (m === 'show6' || id.startsWith('show6-preset3-') || lg.includes('SHOW 6')) {
+    return 'show6';
+  }
+  return 'gbl';
+}
+
+function computeCanonicalTeamContentSigD1(rawTeam, fallbackLeague = 'GREAT LEAGUE', fallbackMode = 'gbl') {
+  const mode = normCombatModeD1(rawTeam?.combatMode || fallbackMode, rawTeam?.id || '', rawTeam?.league || fallbackLeague);
+  const name = String(rawTeam?.name ?? '').trim();
+  const league = normLeagueForD1TeamSig(rawTeam?.league || fallbackLeague);
+  const assignedSet = new Set([league]);
+  if (Array.isArray(rawTeam?.assignedLeagues)) {
+    for (const al of rawTeam.assignedLeagues) {
+      const n = normLeagueForD1TeamSig(al);
+      if (n) assignedSet.add(n);
+    }
+  }
+  const assigned = Array.from(assignedSet)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .join(',');
+  const archetype = String(rawTeam?.archetype ?? 'ABC').trim().toUpperCase() || 'ABC';
+  const rawPoke = Array.isArray(rawTeam?.pokemon) ? rawTeam.pokemon : [];
+  const slots = rawPoke
+    .slice(0, 3)
+    .map((s) => {
+      const sName = String(s?.name ?? '').trim();
+      const cpVal = Math.trunc(Number(s?.cp) || 0);
+      const fast = String(s?.fastMove ?? '').trim();
+      const c1 = String(s?.chargedMove1 ?? '').trim();
+      const c2 = String(s?.chargedMove2 ?? '').trim();
+      const ivs = String(s?.ivs ?? '').trim();
+      const hasPlus = s?.plusMoveLevel !== null && s?.plusMoveLevel !== undefined && Number.isFinite(Number(s.plusMoveLevel));
+      const plusLvl = hasPlus ? Math.trunc(Number(s.plusMoveLevel)) : 4;
+      const bb = s?.isBestBuddy ? 1 : 0;
+      const mega = String(s?.megaFormName ?? '').trim();
+      return `${sName}~${cpVal}~${fast}~${c1}~${c2}~${ivs}~${plusLvl}~${bb}~${mega}`;
+    })
+    .join('||');
+  return `${mode}|${name}|${league}|${assigned}|${archetype}|${slots}`;
+}
+
+function computeVaultTeamsDigestFromListD1(activeTeams) {
+  const entries = [];
+  for (const t of activeTeams || []) {
+    const id = String(t?.id ?? t?.team_id ?? '').trim();
+    if (!id) continue;
+    const sig = computeCanonicalTeamContentSigD1(t, t?.league, t?.combatMode ?? t?.combat_mode);
+    entries.push({ id, entry: `${id}:${sig}` });
+  }
+  entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const payload = entries.map((e) => e.entry).join('\n');
+  let h1 = 0x811c9dc5 | 0;
+  let h2 = 0x9e3779b9 | 0;
+  for (let i = 0; i < payload.length; i++) {
+    const ch = payload.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 0x01000193);
+    h2 = Math.imul(h2 ^ (ch + 1), 0x85ebca6b | 0);
+  }
+  const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return `${entries.length}:${hex1}${hex2}`;
+}
+
+async function computeVaultTeamsDigestFromD1(db, cleanUser) {
+  const rowsRes = await db
+    .prepare(
+      `SELECT team_id, league, combat_mode, payload_json
+       FROM team_presets
+       WHERE screen_name = ?1 AND deleted = 0
+       LIMIT 500`
+    )
+    .bind(cleanUser)
+    .all();
+  const rows = rowsRes?.results || [];
+  const teams = [];
+  for (const r of rows) {
+    let payload = null;
+    if (r.payload_json) {
+      try {
+        payload = JSON.parse(r.payload_json);
+      } catch (_) {}
+    }
+    if (payload && typeof payload === 'object') {
+      teams.push({
+        ...payload,
+        id: String(payload.id || r.team_id || '').trim(),
+        league: payload.league || r.league || 'GREAT LEAGUE',
+        combatMode: payload.combatMode || r.combat_mode || 'gbl',
+      });
+    }
+  }
+  return {
+    digest: computeVaultTeamsDigestFromListD1(teams),
+    activeCount: teams.length,
   };
 }
 
@@ -3284,6 +3415,8 @@ async function maybeRunV761MultiMetaMergeInD1(db, screenName) {
   }
 
   settingsObj._v761_multi_meta_merged = '1';
+  const digestAfterMerge = await computeVaultTeamsDigestFromD1(db, cleanUser);
+  settingsObj._teams_digest_v1 = digestAfterMerge.digest;
   const remainingTeams = Math.max(0, activeTeams.length - redirectMap.size);
   await db
     .prepare(
@@ -3311,6 +3444,8 @@ async function pullVaultDeltasFromD1(
     pushedTeamIds = [],
     pushedBuiltPokemonIds = [],
     pushedSettings = false,
+    clientTeamsDigest = '',
+    requestFullTeamSnapshot = false,
   } = {}
 ) {
   if (!db) throw new Error('SYNC_DB (Cloudflare D1) is not bound.');
@@ -3332,6 +3467,8 @@ async function pullVaultDeltasFromD1(
     return {
       shortCircuited: true,
       serverSyncMs: 0,
+      serverTeamsDigest: '',
+      teamsSnapshotFull: Boolean(requestFullTeamSnapshot || sinceMs === 0),
       settings: {},
       settingsUpdatedAt: 0,
       migratedFromGithub: false,
@@ -3342,17 +3479,44 @@ async function pullVaultDeltasFromD1(
       deletedLogIds: [],
       upsertedTeams: [],
       deletedTeamIds: [],
+      deletedTeamMeta: [],
       upsertedBuiltPokemon: [],
       deletedBuiltPokemonIds: [],
     };
   }
 
+  let stateSettingsObj = {};
+  if (stateRow.settings_json) {
+    try {
+      stateSettingsObj = sanitizeVaultSettingsForD1(JSON.parse(stateRow.settings_json));
+    } catch (_) {
+      stateSettingsObj = {};
+    }
+  }
+  let storedTeamsDigest = String(stateSettingsObj._teams_digest_v1 || '').trim();
+  const activeTeamsCountHint = Number(stateRow.total_active_teams) || 0;
+  if (!storedTeamsDigest) {
+    const backfill = await computeVaultTeamsDigestFromD1(db, cleanUser);
+    storedTeamsDigest = backfill.digest;
+    stateSettingsObj._teams_digest_v1 = storedTeamsDigest;
+    try {
+      await db
+        .prepare('UPDATE user_vault_state SET settings_json = ?1, total_active_teams = ?2 WHERE screen_name = ?3')
+        .bind(JSON.stringify(stateSettingsObj), backfill.activeCount, cleanUser)
+        .run();
+    } catch (_) {}
+  }
+
+  const cleanClientDigest = String(clientTeamsDigest || '').trim();
+  const teamsNeedFullSnapshot =
+    Boolean(requestFullTeamSnapshot) ||
+    sinceMs === 0 ||
+    (cleanClientDigest.length > 0 && cleanClientDigest !== storedTeamsDigest);
+
   const serverUpdatedMs = Number(stateRow.server_updated_ms) || 0;
-  // Short-circuit when either:
-  // 1) Vault hasn't changed since client's cursor (`serverUpdatedMs <= sinceMs`), OR
-  // 2) Client pushed deltas in this request (`writeServerUpdatedMs > 0`) AND no other device had modified the vault
-  //    before this push (`prevServerUpdatedMs <= sinceMs`) — avoids echoing the client's own upload back down!
+  // Short-circuit only when both cursor is caught up AND the active team digest already matches!
   if (
+    !teamsNeedFullSnapshot &&
     sinceMs > 0 &&
     (serverUpdatedMs <= sinceMs ||
       (writeServerUpdatedMs > 0 && prevServerUpdatedMs <= sinceMs))
@@ -3360,16 +3524,19 @@ async function pullVaultDeltasFromD1(
     return {
       shortCircuited: true,
       serverSyncMs: serverUpdatedMs,
+      serverTeamsDigest: storedTeamsDigest,
+      teamsSnapshotFull: false,
       settings: null,
       settingsUpdatedAt: Number(stateRow.settings_updated_at) || 0,
       migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
       totalActiveLogs: Number(stateRow.total_active_logs) || 0,
-      totalActiveTeams: Number(stateRow.total_active_teams) || 0,
+      totalActiveTeams: activeTeamsCountHint,
       totalActiveBuiltPokemon: null,
       upsertedLogs: [],
       deletedLogIds: [],
       upsertedTeams: [],
       deletedTeamIds: [],
+      deletedTeamMeta: [],
       upsertedBuiltPokemon: [],
       deletedBuiltPokemonIds: [],
     };
@@ -3378,11 +3545,7 @@ async function pullVaultDeltasFromD1(
   let parsedSettings = null;
   const stateSettingsUpdAt = Number(stateRow.settings_updated_at) || 0;
   if (stateRow.settings_json && (!pushedSettings || sinceMs === 0 || stateSettingsUpdAt > sinceMs)) {
-    try {
-      parsedSettings = sanitizeVaultSettingsForD1(JSON.parse(stateRow.settings_json));
-    } catch (_) {
-      parsedSettings = {};
-    }
+    parsedSettings = { ...stateSettingsObj };
   }
 
   // Free Tier vs Paid/Alumni retention window (Free = Current Season + 14d grace; Paid/Alumni = Unlimited Lifetime)
@@ -3411,15 +3574,25 @@ async function pullVaultDeltasFromD1(
         )
         .bind(cleanUser, sinceMs, minTimestampMs);
 
-  const teamsQuery = db
-    .prepare(
-      `SELECT team_id, deleted, server_updated_ms, payload_json
-       FROM team_presets
-       WHERE screen_name = ?1 AND server_updated_ms > ?2
-       ORDER BY sort_order ASC, updated_at DESC
-       LIMIT 500`
-    )
-    .bind(cleanUser, sinceMs);
+  const teamsQuery = teamsNeedFullSnapshot
+    ? db
+        .prepare(
+          `SELECT team_id, name, league, combat_mode, updated_at, deleted, server_updated_ms, payload_json
+           FROM team_presets
+           WHERE screen_name = ?1
+           ORDER BY deleted ASC, sort_order ASC, updated_at DESC
+           LIMIT 500`
+        )
+        .bind(cleanUser)
+    : db
+        .prepare(
+          `SELECT team_id, name, league, combat_mode, updated_at, deleted, server_updated_ms, payload_json
+           FROM team_presets
+           WHERE screen_name = ?1 AND server_updated_ms > ?2
+           ORDER BY sort_order ASC, updated_at DESC
+           LIMIT 500`
+        )
+        .bind(cleanUser, sinceMs);
 
   const builtQuery = db
     .prepare(
@@ -3472,8 +3645,10 @@ async function pullVaultDeltasFromD1(
 
   const upsertedTeams = [];
   const deletedTeamIds = [];
+  const deletedTeamMeta = [];
   for (const r of teamsRes?.results || []) {
     if (
+      !teamsNeedFullSnapshot &&
       sinceMs > 0 &&
       writeServerUpdatedMs > 0 &&
       Number(r.server_updated_ms) === writeServerUpdatedMs &&
@@ -3481,12 +3656,24 @@ async function pullVaultDeltasFromD1(
     ) {
       continue;
     }
+    let parsedTeam = null;
+    if (r.payload_json) {
+      try {
+        parsedTeam = JSON.parse(r.payload_json);
+      } catch (_) {}
+    }
     if (Number(r.deleted) === 1) {
       deletedTeamIds.push(r.team_id);
-    } else if (r.payload_json) {
-      try {
-        upsertedTeams.push(JSON.parse(r.payload_json));
-      } catch (_) {}
+      deletedTeamMeta.push({
+        id: r.team_id,
+        name: String(parsedTeam?.name || r.name || '').trim(),
+        league: String(parsedTeam?.league || r.league || 'GREAT LEAGUE').trim(),
+        combatMode: normCombatModeD1(parsedTeam?.combatMode || r.combat_mode, r.team_id, parsedTeam?.league || r.league),
+        updatedAt: Number(r.updated_at) || Number(r.server_updated_ms) || 0,
+      });
+    } else if (parsedTeam && typeof parsedTeam === 'object') {
+      const normalizedMode = normCombatModeD1(parsedTeam.combatMode || r.combat_mode, r.team_id, parsedTeam.league || r.league);
+      upsertedTeams.push({ ...parsedTeam, combatMode: normalizedMode });
     }
   }
 
@@ -3513,6 +3700,8 @@ async function pullVaultDeltasFromD1(
   return {
     shortCircuited: false,
     serverSyncMs: serverUpdatedMs,
+    serverTeamsDigest: storedTeamsDigest,
+    teamsSnapshotFull: teamsNeedFullSnapshot,
     settings: parsedSettings,
     settingsUpdatedAt: stateSettingsUpdAt,
     migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
@@ -3523,6 +3712,7 @@ async function pullVaultDeltasFromD1(
     deletedLogIds,
     upsertedTeams,
     deletedTeamIds,
+    deletedTeamMeta,
     upsertedBuiltPokemon,
     deletedBuiltPokemonIds,
   };
@@ -9306,7 +9496,7 @@ async function computeHmacSha256Hex(secret, payload) {
 }
 
 function renderDownloadLandingPage(origin, releaseInfo, apkDownloadUrl) {
-  const ver = escapeHtml(releaseInfo.versionName || 'v7.93');
+  const ver = escapeHtml(releaseInfo.versionName || 'v7.94');
   const size = escapeHtml(releaseInfo.assetSizeMb || '');
   const directHref = escapeHtml(apkDownloadUrl || '?direct=1');
   const dlWatermarkMap = buildWorkerWatermarkSvgMap();
@@ -10000,7 +10190,7 @@ self.addEventListener('fetch', (e) => {
           : 'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest';
         const ghHeaders = {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'SilphScope-PvP-Version-Check/7.93',
+          'User-Agent': 'SilphScope-PvP-Version-Check/7.94',
         };
         if (env.GITHUB_PUBLIC_READ_TOKEN) {
           ghHeaders.Authorization = `Bearer ${env.GITHUB_PUBLIC_READ_TOKEN}`;
@@ -10174,8 +10364,8 @@ self.addEventListener('fetch', (e) => {
         ? `https://github.com/sportsfan986/silphscope-pvp/releases/download/${encodeURIComponent(pinnedTag)}/silphscope-pvp-${encodeURIComponent(pinnedTag)}.apk`
         : 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
       const releaseInfo = {
-        versionName: 'v7.93',
-        releaseTitle: 'SilphScope PvP v7.93',
+        versionName: 'v7.94',
+        releaseTitle: 'SilphScope PvP v7.94',
         publishedAt: '',
         assetSizeMb: '',
       };
@@ -12810,6 +13000,8 @@ self.addEventListener('fetch', (e) => {
             builtPokemon: body.builtPokemon || [],
             deletedLogIds: body.deletedLogIds || [],
             deletedTeamIds: body.deletedTeamIds || [],
+            deletedTeamTimestamps: body.deletedTeamTimestamps || {},
+            isFullTeamOrder: Boolean(body.isFullTeamOrder),
             deletedBuiltPokemonIds: body.deletedBuiltPokemonIds || [],
             source: body.isInitialMigration ? 'device_migration' : String(body.source || 'app_sync'),
             migratedFromGithub: Boolean(body.migratedFromGithub || body.isInitialMigration),
@@ -12835,6 +13027,8 @@ self.addEventListener('fetch', (e) => {
           pushedTeamIds: writeStats.pushedTeamIds || [],
           pushedBuiltPokemonIds: writeStats.pushedBuiltPokemonIds || [],
           pushedSettings: Boolean(writeStats.pushedSettings),
+          clientTeamsDigest: String(body.teamsDigest || url.searchParams.get('teamsDigest') || ''),
+          requestFullTeamSnapshot: Boolean(body.requestFullTeamSnapshot),
         });
 
         const devHashHdr = String(
@@ -12865,6 +13059,8 @@ self.addEventListener('fetch', (e) => {
               writeStats.serverUpdatedMs || 0,
               mergeRes.mergeServerMs || 0
             ),
+            serverTeamsDigest: pulled.serverTeamsDigest || writeStats.serverTeamsDigest || '',
+            teamsSnapshotFull: Boolean(pulled.teamsSnapshotFull),
             shortCircuited: Boolean(pulled.shortCircuited && !writeStats.wroteAnything),
             totalActiveLogs: pulled.totalActiveLogs,
             totalActiveTeams: pulled.totalActiveTeams,
@@ -12879,6 +13075,7 @@ self.addEventListener('fetch', (e) => {
             deletedLogIds: pulled.deletedLogIds,
             teamPresets: pulled.upsertedTeams,
             deletedTeamIds: pulled.deletedTeamIds,
+            deletedTeamMeta: pulled.deletedTeamMeta || [],
             builtPokemon: pulled.upsertedBuiltPokemon,
             deletedBuiltPokemonIds: pulled.deletedBuiltPokemonIds,
           },

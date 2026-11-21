@@ -2,6 +2,12 @@
 
 ---
 
+## v7.94 (2026-11-21) — Cross-Device Team Sync Parity (GBL + Show 6), 3-Way Auto-Merge & Interactive Delta Conflict Dialog
+
+- **Root-Cause Team Rename & Stale Overwrite Fixes**: Preserved historical `updatedAt` timestamps in `v7.61`/`v7.73` migrations (stopping secondary phones from stamping `nowMs` over newer cloud renames), deferred cold-launch migrations until after cloud sync, fixed Cloudflare Worker `teamUpsertSql` (`sort_order` diff no longer lets stale full-list pushes clobber newer renames; missing/`0` `updatedAt` normalizes to `1`), and added timestamp-guarded deletion tombstones.
+- **GBL + Show 6 Cloud Vault Parity**: Synced Show 6 Trio presets (`combat_mode = 'show6_3'`) alongside Standard GBL Teams (`combat_mode = 'standard'`) across Android, Web Simulator, and Cloudflare D1, with canonical `teamsDigest` parity checks that bypass cursor short-circuits on mismatch.
+- **3-Way Auto-Merge & Interactive Delta Conflict Dialog**: Clean one-sided renames/edits, cumulative battle metrics, and untouched factory defaults auto-merge deterministically, while deletion mismatches, concurrent edits, ambiguous diffs, and duplicate lineups present per-delta resolution cards (keep Cloud, keep Device, merge/keep both) on both Android and Web.
+
 ## v7.93 (2026-11-21) — CMP Tie Energy & Shield Sync, Post-Switch HP Baseline Adaptation & Minigame Lifecycle Hardening
 *Telemetry & live-vision accuracy release (`v7.93`, `versionCode = 1793`) fixing Opp→User CMP opponent energy refunds and provisional shield drift, stabilizing post-switch flying/tall HP bar row-Y baselines, preserving HP-confirmed pre-throw fast moves, guarding player minigame exits and OCR banner typos, and adding retroactive `v7.93` audit rules.*
 

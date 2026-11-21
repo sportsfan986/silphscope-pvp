@@ -1428,7 +1428,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: `rgba(${mkAccent2Rgb}, 0.12)`
                     }}
                   >
-                    v7.93 • Latest Release
+                    v7.94 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -1684,7 +1684,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         Download Android APK
                       </div>
                       <div className="text-[11px] font-medium text-slate-300">
-                        Instant 1-Click Direct Release (v7.93)
+                        Instant 1-Click Direct Release (v7.94)
                       </div>
                     </div>
                   </div>
@@ -2159,7 +2159,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   style={{ backgroundColor: 'var(--mk-accent)', color: 'var(--mk-cta-text)' }}
                 >
                   <span>📱</span>
-                  <span>Download APK (v7.93)</span>
+                  <span>Download APK (v7.94)</span>
                 </a>
                 <button
                   type="button"

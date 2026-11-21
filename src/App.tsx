@@ -222,6 +222,24 @@ import { HelpTab } from './components/HelpTab';
 import { MathValidatorTab } from './components/MathValidatorTab';
 import { TrashBinModals } from './components/TrashBinModals';
 import { DocumentationModals } from './components/DocumentationModals';
+import { TeamSyncConflictModal } from './components/TeamSyncConflictModal';
+import {
+  applyTeamSyncConflictResolutions,
+  computeCanonicalTeamContentSig,
+  computeVaultTeamsDigest,
+  isUntouchedFactoryPreset,
+  loadDeletedTeamMetaWeb,
+  loadTeamBaselinesWeb,
+  reconcileAllTeamsThreeWay,
+  recordLocalTeamDeletionMetaWeb,
+  removeLocalTeamDeletionMetaWeb,
+  saveDeletedTeamMetaWeb,
+  saveTeamBaselinesWeb,
+  clearTeamBaselinesWeb,
+  type DeletedTeamMetaRecord,
+  type TeamDeltaResolutionChoice,
+  type TeamSyncDeltaConflict
+} from './data/teamSyncReconciler';
 import { MarketingWebsite, type MarketingSubpage } from './components/MarketingWebsite';
 export type { WebBattleLogEntry, WebAiTrainingLogRecord, GblSeasonInfo, WebAppThemePalette };
 export { WEB_APP_THEMES, DEFAULT_APP_THEME_ID, normalizeAppThemeId };
@@ -1723,7 +1741,7 @@ export default function App() {
     [appThemeId]
   );
 
-  // Silent startup pull of synced theme & ELO settings from Cloudflare D1 when signed in
+  // Silent startup pull of synced theme, ELO & multi-device team deltas from Cloudflare D1 when signed in
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1736,7 +1754,30 @@ export default function App() {
         const key = (localStorage.getItem('gbl_web_unlock_key_v700') || '').trim().toUpperCase();
         if (cleanName.length < 3 || (!sess && !key)) return;
         const devId = localStorage.getItem('gbl_sync_device_id') || `web-${cleanName}`;
-        const cachedCursor = Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1')) || 0;
+        const savedUserForCursor = (localStorage.getItem('gbl_d1_sync_cursor_user_v1') || '').trim();
+        const isSameUser = !savedUserForCursor || savedUserForCursor.toLowerCase() === cleanName.toLowerCase();
+        if (!isSameUser) {
+          clearTeamBaselinesWeb();
+        }
+        const cachedCursor = isSameUser ? Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1')) || 0 : 0;
+        const baselineState = loadTeamBaselinesWeb();
+
+        const readStoredTeamBucket = (storageKey: string, fallback: TeamPreset[], mode: 'gbl' | 'show6'): TeamPreset[] => {
+          try {
+            const raw = localStorage.getItem(storageKey);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed.map((p: any) => ({ ...p, combatMode: mode }));
+              }
+            }
+          } catch {}
+          return fallback.map((p) => ({ ...p, combatMode: mode }));
+        };
+        const initGbl = readStoredTeamBucket('gbl_user_teams_persistent', INITIAL_PRESETS, 'gbl');
+        const initShow6 = readStoredTeamBucket('gbl_show6_presets_of_3_v1', INITIAL_SHOW6_PRESETS_OF_3, 'show6');
+        const clientTeamsDigest = computeVaultTeamsDigest([...initGbl, ...initShow6]);
+
         const hdrs: Record<string, string> = {
           'Content-Type': 'application/json',
           'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
@@ -1753,7 +1794,9 @@ export default function App() {
             deviceHash: devId,
             sessionToken: sess,
             unlockKey: key,
-            sinceServerMs: cachedCursor
+            sinceServerMs: cachedCursor,
+            teamsDigest: clientTeamsDigest,
+            requestFullTeamSnapshot: !baselineState.hasBaseline
           })
         });
         const j = await res.json().catch(() => null);
@@ -1768,6 +1811,93 @@ export default function App() {
             setCurrentUserElo(syncedElo);
             setEloHeaderDraft(syncedElo !== null ? String(syncedElo) : '');
           }
+        }
+
+        const remoteUpsertedTeams: TeamPreset[] = Array.isArray(j.teamPresets) ? j.teamPresets : [];
+        const remoteDeletedTeams: string[] = Array.isArray(j.deletedTeamIds) ? j.deletedTeamIds : [];
+        const teamsSnapshotFull = Boolean(j.teamsSnapshotFull);
+        if (teamsSnapshotFull || !baselineState.hasBaseline || remoteUpsertedTeams.length > 0 || remoteDeletedTeams.length > 0) {
+          const curGblNow = readStoredTeamBucket('gbl_user_teams_persistent', INITIAL_PRESETS, 'gbl');
+          const curShow6Now = readStoredTeamBucket('gbl_show6_presets_of_3_v1', INITIAL_SHOW6_PRESETS_OF_3, 'show6');
+          let curDelNow: string[] = [];
+          try {
+            const parsedDel = JSON.parse(localStorage.getItem('gbl_deleted_team_ids_v1') || '[]');
+            if (Array.isArray(parsedDel)) curDelNow = parsedDel;
+          } catch {}
+          const remoteDelMetaMap: Record<string, DeletedTeamMetaRecord> = {};
+          if (Array.isArray(j.deletedTeamMeta)) {
+            for (const m of j.deletedTeamMeta) {
+              if (m?.id) remoteDelMetaMap[String(m.id)] = m;
+            }
+          }
+          const rec = reconcileAllTeamsThreeWay({
+            localGblTeams: curGblNow,
+            localShow6Teams: curShow6Now,
+            localDeletedTeamIds: curDelNow,
+            localDeletedMeta: loadDeletedTeamMetaWeb(),
+            baselines: baselineState.baselines,
+            hasExistingBaseline: baselineState.hasBaseline,
+            remoteUpsertedTeams,
+            remoteDeletedTeamIds: remoteDeletedTeams,
+            remoteDeletedMeta: remoteDelMetaMap,
+            isFullRemoteSnapshot: teamsSnapshotFull
+          });
+          saveTeamBaselinesWeb(rec.updatedBaselines);
+          saveDeletedTeamMetaWeb(rec.updatedDeletedMeta);
+          if (rec.mutatedLocally) {
+            setGblPresets(rec.gblTeams);
+            setShow6Presets3(rec.show6Teams);
+            setDeletedTeamIds(rec.deletedTeamIds);
+            try {
+              localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(rec.gblTeams));
+              localStorage.setItem('gbl_show6_presets_of_3_v1', JSON.stringify(rec.show6Teams));
+              localStorage.setItem('gbl_deleted_team_ids_v1', JSON.stringify(rec.deletedTeamIds));
+            } catch {}
+          }
+          if (rec.conflicts.length > 0) {
+            setPendingTeamSyncConflicts(rec.conflicts);
+          }
+          if (rec.autoPushLocalTeams.length > 0) {
+            try {
+              const fRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+                method: 'POST',
+                headers: hdrs,
+                body: JSON.stringify({
+                  screenName: cleanName,
+                  deviceHash: devId,
+                  sessionToken: sess,
+                  unlockKey: key,
+                  sinceServerMs: Number(j.serverSyncMs) || cachedCursor,
+                  teamsDigest: computeVaultTeamsDigest([...rec.gblTeams, ...rec.show6Teams]),
+                  teamPresets: rec.autoPushLocalTeams
+                })
+              });
+              const fJson = await fRes.json().catch(() => null);
+              if (fRes.ok && fJson?.ok) {
+                const fBase = { ...rec.updatedBaselines };
+                for (const pt of rec.autoPushLocalTeams) {
+                  fBase[pt.id] = {
+                    id: pt.id,
+                    sig: computeCanonicalTeamContentSig(pt),
+                    name: pt.name,
+                    combatMode: pt.combatMode === 'show6' ? 'show6' : 'gbl',
+                    updatedAt: Number(pt.updatedAt) || 0
+                  };
+                }
+                saveTeamBaselinesWeb(fBase);
+                if (fJson.serverSyncMs) {
+                  localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(fJson.serverSyncMs));
+                  localStorage.setItem('gbl_d1_sync_cursor_user_v1', cleanName);
+                }
+              }
+            } catch {}
+          }
+        }
+        if (j.serverSyncMs) {
+          try {
+            localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(j.serverSyncMs));
+            localStorage.setItem('gbl_d1_sync_cursor_user_v1', cleanName);
+          } catch {}
         }
       } catch {}
     })();
@@ -1916,6 +2046,9 @@ export default function App() {
     } catch {}
     return [];
   });
+
+  const [pendingTeamSyncConflicts, setPendingTeamSyncConflicts] = useState<TeamSyncDeltaConflict[]>([]);
+  const [isApplyingTeamSyncConflicts, setIsApplyingTeamSyncConflicts] = useState<boolean>(false);
 
   const [gblDeletedBattlesTrash, setGblDeletedBattlesTrash] = useState<WebBattleLogEntry[]>(() => {
     try {
@@ -2260,7 +2393,9 @@ export default function App() {
 
   const restoreTeamPresetsFromTrash = (teamsToRestore: TeamPreset[]) => {
     if (teamsToRestore.length === 0) return;
+    const now = Date.now();
     const restoreIds = new Set(teamsToRestore.map((t) => t.id));
+    teamsToRestore.forEach((t) => removeLocalTeamDeletionMetaWeb(t.id));
     setDeletedTeamIds((prev) => {
       const next = prev.filter((id) => !restoreIds.has(id));
       try {
@@ -2271,7 +2406,7 @@ export default function App() {
     saveDeletedTeamsTrashToStorage(deletedTeamsTrash.filter((t) => !restoreIds.has(t.id)));
     setPresets((prev) => {
       const filteredPrev = prev.filter((p) => !restoreIds.has(p.id));
-      return [...filteredPrev, ...teamsToRestore];
+      return [...filteredPrev, ...teamsToRestore.map((t) => ({ ...t, updatedAt: now }))];
     });
   };
 
@@ -2983,7 +3118,7 @@ export default function App() {
           ...survivor,
           name: cleanName,
           assignedLeagues: combinedAssigned,
-          updatedAt: nowMs
+          updatedAt: Math.max(1, ...group.map((g) => g.updatedAt || 0))
         });
         for (let i = 1; i < scored.length; i++) {
           const dupId = scored[i].id;
@@ -3225,7 +3360,7 @@ export default function App() {
           pokemon: mergedSlots,
           metaPoolMetrics: undefined,
           isSelected: group.some((g) => g.isSelected || g.id === bucketSelectedId),
-          updatedAt: Math.max(nowMs, ...group.map((g) => g.updatedAt || 0))
+          updatedAt: Math.max(1, ...group.map((g) => g.updatedAt || 0))
         });
         for (let i = 1; i < scored.length; i++) {
           const dupId = scored[i].id;
@@ -3918,7 +4053,8 @@ export default function App() {
       name: `[From Show 6] ${rescaled.map((m) => m.name.split(' ')[0]).join(' / ')}`,
       league: targetGblLeague,
       pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
-      combatMode: 'gbl'
+      combatMode: 'gbl',
+      updatedAt: Date.now()
     };
     const evaluated = evaluateTeamPresetMetrics(
       basePreset,
@@ -4074,7 +4210,8 @@ export default function App() {
       pokemon: members.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
       archetype,
       isArchetypeManual: true,
-      combatMode: 'show6'
+      combatMode: 'show6',
+      updatedAt: Date.now()
     };
     const evaluated = evaluateTeamPresetMetrics(
       basePreset,
@@ -6592,7 +6729,8 @@ export default function App() {
             keyThreats: res.keyThreats,
             coreBreakers: res.coreBreakers,
             altMovesetSlots: res.altMovesetSlots,
-            synergySummary: res.synergySummary
+            synergySummary: res.synergySummary,
+            updatedAt: Date.now()
           };
         })
       );
@@ -6738,7 +6876,7 @@ export default function App() {
       prev.map((p) => {
         if (p.id !== presetId) return p;
         return evaluateTeamPresetMetrics(
-          p,
+          { ...p, updatedAt: Date.now() },
           battleLogs,
           activeSeasonBounds.startMs,
           activeSeasonBounds.endMs,
@@ -6757,7 +6895,7 @@ export default function App() {
         nextMons[idxA] = { ...nextMons[idxB], id: `p${idxA + 1}` };
         nextMons[idxB] = { ...tmp, id: `p${idxB + 1}` };
         return evaluateTeamPresetMetrics(
-          { ...p, pokemon: nextMons },
+          { ...p, pokemon: nextMons, updatedAt: Date.now() },
           battleLogs,
           activeSeasonBounds.startMs,
           activeSeasonBounds.endMs,
@@ -6843,7 +6981,8 @@ export default function App() {
       name: destLeague !== preset.league ? `${baseName} (${destLeague.split(' ')[0]})` : `${baseName} (Copy)`,
       league: destLeague,
       pokemon: rescaled.map((p, idx) => ({ ...p, id: `p${idx + 1}` })),
-      combatMode: appCombatMode
+      combatMode: appCombatMode,
+      updatedAt: Date.now()
     };
     const evaluated = evaluateTeamPresetMetrics(
       clonedBase,
@@ -6895,7 +7034,8 @@ export default function App() {
         pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
         archetype: preset.archetype,
         isArchetypeManual: preset.isArchetypeManual,
-        combatMode: 'show6'
+        combatMode: 'show6',
+        updatedAt: Date.now()
       };
       const evaluated = evaluateTeamPresetMetrics(
         basePreset,
@@ -6993,7 +7133,8 @@ export default function App() {
       pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
       archetype: preset.archetype,
       isArchetypeManual: preset.isArchetypeManual,
-      combatMode: 'gbl'
+      combatMode: 'gbl',
+      updatedAt: Date.now()
     };
     const evaluated = evaluateTeamPresetMetrics(
       basePreset,
@@ -7214,7 +7355,9 @@ export default function App() {
         })),
         archetype: option.archetype,
         isArchetypeManual: true,
-        sharedWeaknesses: option.sharedWeaknesses
+        sharedWeaknesses: option.sharedWeaknesses,
+        combatMode: appCombatMode,
+        updatedAt: Date.now()
       },
       battleLogs,
       activeSeasonBounds.startMs,
@@ -7236,6 +7379,7 @@ export default function App() {
     }
     const target = presets.find((p) => p.id === id);
     if (target) {
+      recordLocalTeamDeletionMetaWeb(target, Date.now());
       saveDeletedTeamsTrashToStorage([target, ...deletedTeamsTrash.filter((t) => t.id !== id)]);
       setDeletedTeamIds((prev) => {
         const next = Array.from(new Set([...prev, id]));
@@ -7254,6 +7398,129 @@ export default function App() {
       triggerUndoBanner(`🗑️ Team '${target.name}' moved to Trash`, () => {
         restoreTeamPresetsFromTrash([target]);
       });
+    }
+  };
+
+  const handleApplyTeamSyncConflictsWeb = async (
+    chosenMap: Record<string, TeamDeltaResolutionChoice>
+  ) => {
+    const conflictsSnapshot = pendingTeamSyncConflicts;
+    if (conflictsSnapshot.length === 0) return;
+    setIsApplyingTeamSyncConflicts(true);
+    try {
+      const baselineState = loadTeamBaselinesWeb();
+      const delMetaState = loadDeletedTeamMetaWeb();
+      const res = applyTeamSyncConflictResolutions({
+        localGblTeams: gblPresets,
+        localShow6Teams: show6Presets3,
+        localDeletedTeamIds: deletedTeamIds,
+        localBaselines: baselineState.baselines,
+        localDeletedMeta: delMetaState,
+        gblLogs: gblBattleLogs,
+        show6Logs: show6BattleLogs,
+        conflicts: conflictsSnapshot,
+        chosenMap
+      });
+
+      setGblPresets(res.nextGblTeams);
+      setShow6Presets3(res.nextShow6Teams);
+      setDeletedTeamIds(res.nextDeletedIds);
+      saveTeamBaselinesWeb(res.nextBaselines);
+      saveDeletedTeamMetaWeb(res.nextDeletedMeta);
+      if (res.nextGblTeams.length > 0 && !res.nextGblTeams.some((p) => p.id === gblSelectedPresetId)) {
+        setGblSelectedPresetId(res.nextGblTeams[0].id);
+      }
+      if (res.nextShow6Teams.length > 0 && !res.nextShow6Teams.some((p) => p.id === show6SelectedPreset3Id)) {
+        setShow6SelectedPreset3Id(res.nextShow6Teams[0].id);
+      }
+      try {
+        localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(res.nextGblTeams));
+        localStorage.setItem('gbl_show6_presets_of_3_v1', JSON.stringify(res.nextShow6Teams));
+        localStorage.setItem('gbl_deleted_team_ids_v1', JSON.stringify(res.nextDeletedIds));
+      } catch {}
+
+      if (res.logsChanged) {
+        setGblBattleLogs(res.nextGblLogs);
+        setShow6BattleLogs(res.nextShow6Logs);
+        try {
+          localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(res.nextGblLogs));
+          localStorage.setItem('gbl_show6_battle_logs_v1', JSON.stringify(res.nextShow6Logs));
+        } catch {}
+      }
+
+      if (res.trashedLocalTeams.length > 0) {
+        const gblTrashed = res.trashedLocalTeams.filter((t) => t.combatMode !== 'show6');
+        const s6Trashed = res.trashedLocalTeams.filter((t) => t.combatMode === 'show6');
+        if (gblTrashed.length > 0) {
+          const nextGblTrash = [
+            ...gblTrashed,
+            ...gblDeletedTeamsTrash.filter((t) => !gblTrashed.some((x) => x.id === t.id))
+          ].slice(0, 100);
+          setGblDeletedTeamsTrash(nextGblTrash);
+          try {
+            localStorage.setItem('gbl_deleted_teams_trash_v1', JSON.stringify(nextGblTrash));
+          } catch {}
+        }
+        if (s6Trashed.length > 0) {
+          const nextS6Trash = [
+            ...s6Trashed,
+            ...show6DeletedTeamsTrash.filter((t) => !s6Trashed.some((x) => x.id === t.id))
+          ].slice(0, 100);
+          setShow6DeletedTeamsTrash(nextS6Trash);
+          try {
+            localStorage.setItem('gbl_show6_deleted_teams_trash_v1', JSON.stringify(nextS6Trash));
+          } catch {}
+        }
+      }
+
+      const cleanName = webScreenName.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+      const sess = (webSessionToken || readSharedThemeCookie('sspvp_vault_session') || '').trim();
+      const key = webUnlockKey.trim().toUpperCase();
+      if (cleanName.length >= 3 && (sess || key)) {
+        const hdrs: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName,
+          'X-Device-Hash': deviceId || `web-${cleanName}`
+        };
+        if (sess) hdrs['X-Vault-Session'] = sess;
+        if (key) hdrs['X-SilphScope-Unlock-Key'] = key;
+
+        const pushRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({
+            screenName: cleanName,
+            deviceHash: deviceId || `web-${cleanName}`,
+            sessionToken: sess,
+            unlockKey: key,
+            sinceServerMs: Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1') || '0') || 0,
+            teamsDigest: computeVaultTeamsDigest([...res.nextGblTeams, ...res.nextShow6Teams]),
+            requestFullTeamSnapshot: true,
+            teamPresets: res.teamsToPush,
+            deletedTeamIds: res.deletedTeamIds,
+            deletedTeamTimestamps: res.deletedTeamTimestamps
+          })
+        });
+        const pushJson = await pushRes.json().catch(() => null);
+        if (pushRes.ok && pushJson?.ok && pushJson.serverSyncMs) {
+          try {
+            localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(pushJson.serverSyncMs));
+            localStorage.setItem('gbl_d1_sync_cursor_user_v1', cleanName);
+          } catch {}
+        }
+      }
+
+      setPendingTeamSyncConflicts([]);
+      setLastCloudSyncStatus(`✅ Resolved ${conflictsSnapshot.length} team delta(s) & synced all devices`);
+      setStartBattleToast(`✅ Resolved ${conflictsSnapshot.length} team delta(s) & synced all devices!`);
+      setTimeout(() => setStartBattleToast(null), 3000);
+    } catch (err: any) {
+      setStartBattleToast(`⚠️ Resolved locally, Cloud push failed: ${err?.message || 'offline'}`);
+      setTimeout(() => setStartBattleToast(null), 3500);
+      setPendingTeamSyncConflicts([]);
+    } finally {
+      setIsApplyingTeamSyncConflicts(false);
     }
   };
 
@@ -7563,7 +7830,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.93 • Android Native Overlay
+                  v7.94 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -16977,7 +17244,8 @@ export default function App() {
                       }
 
                       let mergedLogs = [...battleLogs];
-                      let mergedPresets = [...presets];
+                      let mergedGblPresets: TeamPreset[] = gblPresets.map((p) => ({ ...p, combatMode: 'gbl' as const }));
+                      let mergedShow6Presets: TeamPreset[] = show6Presets3.map((p) => ({ ...p, combatMode: 'show6' as const }));
                       const mergedTombstones = new Set<string>(deletedLogIds);
 
                       // One-time read-only legacy GitHub Gist import if present in localStorage
@@ -17015,12 +17283,20 @@ export default function App() {
                                 mergedLogs = Array.from(logMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
                               }
                               if (Array.isArray(remote.teamPresets)) {
-                                const pMap = new Map<string, TeamPreset>();
-                                mergedPresets.forEach((p) => pMap.set(p.id, p));
+                                const gMap = new Map<string, TeamPreset>();
+                                const s6Map = new Map<string, TeamPreset>();
+                                mergedGblPresets.forEach((p) => gMap.set(p.id, p));
+                                mergedShow6Presets.forEach((p) => s6Map.set(p.id, p));
                                 remote.teamPresets.forEach((rp: TeamPreset) => {
-                                  if (rp?.id) pMap.set(rp.id, rp);
+                                  if (!rp?.id) return;
+                                  if (rp.combatMode === 'show6' || String(rp.id).startsWith('show6-preset3-')) {
+                                    s6Map.set(rp.id, { ...rp, combatMode: 'show6' });
+                                  } else {
+                                    gMap.set(rp.id, { ...rp, combatMode: 'gbl' });
+                                  }
                                 });
-                                mergedPresets = Array.from(pMap.values());
+                                mergedGblPresets = Array.from(gMap.values());
+                                mergedShow6Presets = Array.from(s6Map.values());
                               }
                             }
                           }
@@ -17029,6 +17305,9 @@ export default function App() {
 
                       const savedUserForCursor = localStorage.getItem('gbl_d1_sync_cursor_user_v1') || '';
                       const isSameCursorUser = savedUserForCursor.toLowerCase() === cleanName.toLowerCase();
+                      if (!isSameCursorUser) {
+                        clearTeamBaselinesWeb();
+                      }
                       const rawCursorMs = isSameCursorUser
                         ? Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1') || '0') || 0
                         : 0;
@@ -17054,33 +17333,12 @@ export default function App() {
                             deletedTeamIds.length > 0));
 
                       const pushStartedAtMs = Date.now();
-                      const teamSigKey = `gbl_d1_last_pushed_teams_sig_v1_${appCombatMode}`;
-                      let prevTeamSigs: Record<string, string> = {};
-                      if (isSameCursorUser && alreadyMigrated) {
-                        try {
-                          prevTeamSigs = JSON.parse(localStorage.getItem(teamSigKey) || '{}') || {};
-                        } catch {
-                          prevTeamSigs = {};
-                        }
-                      }
-                      const computeTeamSig = (p: TeamPreset) =>
-                        JSON.stringify({
-                          id: p.id,
-                          name: p.name,
-                          league: p.league,
-                          assignedLeagues: getEffectiveAssignedLeagues(p),
-                          archetype: p.archetype || '',
-                          pokemon: (p.pokemon || []).map((m) => ({
-                            name: m.name,
-                            cp: m.cp || 0,
-                            fastMove: m.fastMove || '',
-                            chargedMove1: m.chargedMove1 || '',
-                            chargedMove2: m.chargedMove2 || '',
-                            ivs: m.ivs || '',
-                            isBestBuddy: Boolean(m.isBestBuddy),
-                            builtPokemonId: m.builtPokemonId || ''
-                          }))
-                        });
+                      const baselineState = isSameCursorUser
+                        ? loadTeamBaselinesWeb()
+                        : { hasBaseline: false, baselines: {} };
+                      const localDelMetaMap = loadDeletedTeamMetaWeb();
+                      const allLocalTeams = [...mergedGblPresets, ...mergedShow6Presets];
+                      const clientTeamsDigest = computeVaultTeamsDigest(allLocalTeams);
 
                       const mergedBuiltDelSet = new Set<string>(deletedBuiltPokemonIds);
                       try {
@@ -17124,17 +17382,30 @@ export default function App() {
                         : mergedLogs.filter(
                             (l) => Math.max(Number(l.updatedAt) || 0, Number(l.timestampMs) || 0) > lastPushedMs
                           );
-                      const teamsToPush = (!alreadyMigrated || lastPushedMs === 0
-                        ? mergedPresets
-                        : mergedPresets.filter(
-                            (p) => (Number(p.updatedAt) || 0) > lastPushedMs || prevTeamSigs[p.id] !== computeTeamSig(p)
-                          )
-                      ).map((p) => ({
-                        ...p,
-                        updatedAt: Number(p.updatedAt) || pushStartedAtMs
-                      }));
+                      // Pull-before-push guard: when no baseline exists yet, pull Cloud snapshot first without pushing stale local teams
+                      const teamsToPush = !baselineState.hasBaseline
+                        ? []
+                        : allLocalTeams
+                            .filter(
+                              (p) =>
+                                !isUntouchedFactoryPreset(p) &&
+                                computeCanonicalTeamContentSig(p) !== baselineState.baselines[p.id]?.sig
+                            )
+                            .map((p) => ({
+                              ...p,
+                              updatedAt: Number(p.updatedAt) || pushStartedAtMs
+                            }));
                       const delLogsToPush = tombstonesChanged ? Array.from(mergedTombstones) : [];
-                      const delTeamsToPush = tombstonesChanged ? Array.from(new Set(deletedTeamIds)) : [];
+                      const delTeamsToPush = !baselineState.hasBaseline
+                        ? []
+                        : Array.from(new Set(deletedTeamIds)).filter((tid) =>
+                            Object.prototype.hasOwnProperty.call(localDelMetaMap, tid) &&
+                            (tombstonesChanged || (localDelMetaMap[tid]?.updatedAt || 0) > lastPushedMs)
+                          );
+                      const delTeamTimestampsToPush: Record<string, number> = {};
+                      delTeamsToPush.forEach((tid) => {
+                        delTeamTimestampsToPush[tid] = localDelMetaMap[tid]?.updatedAt || pushStartedAtMs;
+                      });
 
                       const headers: Record<string, string> = {
                         'Content-Type': 'application/json',
@@ -17171,6 +17442,8 @@ export default function App() {
                           unlockKey: webUnlockKey.trim().toUpperCase(),
                           sinceServerMs,
                           isInitialMigration: !alreadyMigrated,
+                          teamsDigest: clientTeamsDigest,
+                          requestFullTeamSnapshot: !baselineState.hasBaseline,
                           ...(shouldPushUserSettings
                             ? {
                                 userSettings: outgoingUserSettings,
@@ -17182,6 +17455,9 @@ export default function App() {
                           builtPokemon: builtToPush,
                           deletedLogIds: delLogsToPush,
                           deletedTeamIds: delTeamsToPush,
+                          ...(Object.keys(delTeamTimestampsToPush).length > 0
+                            ? { deletedTeamTimestamps: delTeamTimestampsToPush }
+                            : {}),
                           deletedBuiltPokemonIds: delBuiltToPush
                         })
                       });
@@ -17214,6 +17490,13 @@ export default function App() {
                       const remoteDeletedTeams: string[] = Array.isArray(syncJson.deletedTeamIds)
                         ? syncJson.deletedTeamIds
                         : [];
+                      const remoteDeletedTeamMetaMap: Record<string, DeletedTeamMetaRecord> = {};
+                      if (Array.isArray(syncJson.deletedTeamMeta)) {
+                        syncJson.deletedTeamMeta.forEach((m: DeletedTeamMetaRecord) => {
+                          if (m?.id) remoteDeletedTeamMetaMap[m.id] = m;
+                        });
+                      }
+                      const teamsSnapshotFull = Boolean(syncJson.teamsSnapshotFull);
                       const remoteUpsertedBuilt: BuiltPokemonEntry[] = Array.isArray(syncJson.builtPokemon)
                         ? syncJson.builtPokemon
                         : [];
@@ -17226,13 +17509,15 @@ export default function App() {
                       let pulledBuiltDeltaCount = 0;
                       const logsMutated =
                         !alreadyMigrated || remoteUpsertedLogs.length > 0 || remoteDeletedLogs.length > 0;
-                      const teamsMutated =
-                        !alreadyMigrated || remoteUpsertedTeams.length > 0 || remoteDeletedTeams.length > 0;
+                      const shouldReconcileTeams =
+                        teamsSnapshotFull ||
+                        !baselineState.hasBaseline ||
+                        remoteUpsertedTeams.length > 0 ||
+                        remoteDeletedTeams.length > 0;
                       const builtMutated =
                         !alreadyMigrated || remoteUpsertedBuilt.length > 0 || remoteDeletedBuilt.length > 0;
 
                       remoteDeletedLogs.forEach((id: string) => mergedTombstones.add(id));
-                      const deletedTeamSet = new Set<string>([...deletedTeamIds, ...remoteDeletedTeams]);
                       remoteDeletedBuilt.forEach((id: string) => {
                         if (id) mergedBuiltDelSet.add(id);
                       });
@@ -17258,24 +17543,98 @@ export default function App() {
                         saveBattleLogsToStorage(finalLogs);
                       }
 
-                      let finalPresets = mergedPresets;
-                      if (teamsMutated) {
-                        const finalPresetMap = new Map<string, TeamPreset>();
-                        mergedPresets.forEach((p) => {
-                          if (p?.id && !deletedTeamSet.has(p.id)) finalPresetMap.set(p.id, p);
+                      let finalGblPresets: TeamPreset[] = mergedGblPresets;
+                      let finalShow6Presets: TeamPreset[] = mergedShow6Presets;
+                      let teamTombArr = Array.from(new Set(deletedTeamIds));
+                      let teamBaselinesNext = { ...baselineState.baselines };
+                      let delMetaNext = { ...localDelMetaMap };
+                      let autoPushLocalTeams: TeamPreset[] = [];
+                      let detectedConflicts: TeamSyncDeltaConflict[] = [];
+                      let teamsStateMutated = false;
+
+                      if (shouldReconcileTeams) {
+                        const rec = reconcileAllTeamsThreeWay({
+                          localGblTeams: mergedGblPresets,
+                          localShow6Teams: mergedShow6Presets,
+                          localDeletedTeamIds: teamTombArr,
+                          localDeletedMeta: localDelMetaMap,
+                          baselines: baselineState.baselines,
+                          hasExistingBaseline: baselineState.hasBaseline,
+                          remoteUpsertedTeams,
+                          remoteDeletedTeamIds: remoteDeletedTeams,
+                          remoteDeletedMeta: remoteDeletedTeamMetaMap,
+                          isFullRemoteSnapshot: teamsSnapshotFull
                         });
-                        remoteUpsertedTeams.forEach((rp: TeamPreset) => {
-                          if (rp?.id && !deletedTeamSet.has(rp.id)) {
-                            const prev = finalPresetMap.get(rp.id);
-                            if (!prev || (rp.updatedAt || 0) > (prev.updatedAt || 0)) {
-                              finalPresetMap.set(rp.id, rp);
-                              pulledTeamsDeltaCount++;
+                        finalGblPresets = rec.gblTeams;
+                        finalShow6Presets = rec.show6Teams;
+                        teamTombArr = rec.deletedTeamIds;
+                        teamBaselinesNext = rec.updatedBaselines;
+                        delMetaNext = rec.updatedDeletedMeta;
+                        pulledTeamsDeltaCount = rec.newOrUpdatedCount;
+                        autoPushLocalTeams = rec.autoPushLocalTeams;
+                        detectedConflicts = rec.conflicts;
+                        teamsStateMutated = rec.mutatedLocally;
+
+                        if (rec.mutatedLocally || !baselineState.hasBaseline) {
+                          setGblPresets(finalGblPresets);
+                          setShow6Presets3(finalShow6Presets);
+                        }
+                        if (detectedConflicts.length > 0) {
+                          setPendingTeamSyncConflicts(detectedConflicts);
+                        }
+                      }
+
+                      // Record baselines for teams we just pushed
+                      for (const pt of teamsToPush) {
+                        teamBaselinesNext[pt.id] = {
+                          id: pt.id,
+                          sig: computeCanonicalTeamContentSig(pt),
+                          name: pt.name,
+                          combatMode: pt.combatMode === 'show6' ? 'show6' : 'gbl',
+                          updatedAt: Number(pt.updatedAt) || 0
+                        };
+                        delete delMetaNext[pt.id];
+                      }
+                      for (const dtId of delTeamsToPush) {
+                        delete teamBaselinesNext[dtId];
+                      }
+
+                      let finalSyncCursorMs = Number(syncJson.serverSyncMs) || 0;
+                      if (autoPushLocalTeams.length > 0) {
+                        try {
+                          const followRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify({
+                              screenName: cleanName,
+                              deviceHash: deviceId || `web-${cleanName}`,
+                              sessionToken: activeSession,
+                              unlockKey: webUnlockKey.trim().toUpperCase(),
+                              sinceServerMs: finalSyncCursorMs || sinceServerMs,
+                              teamsDigest: computeVaultTeamsDigest([...finalGblPresets, ...finalShow6Presets]),
+                              teamPresets: autoPushLocalTeams
+                            })
+                          });
+                          const followJson = await followRes.json().catch(() => null);
+                          if (followRes.ok && followJson?.ok) {
+                            if (Number(followJson.serverSyncMs) > finalSyncCursorMs) {
+                              finalSyncCursorMs = Number(followJson.serverSyncMs);
+                            }
+                            for (const pt of autoPushLocalTeams) {
+                              teamBaselinesNext[pt.id] = {
+                                id: pt.id,
+                                sig: computeCanonicalTeamContentSig(pt),
+                                name: pt.name,
+                                combatMode: pt.combatMode === 'show6' ? 'show6' : 'gbl',
+                                updatedAt: Number(pt.updatedAt) || 0
+                              };
                             }
                           }
-                        });
-                        finalPresets = Array.from(finalPresetMap.values());
-                        setPresets(finalPresets);
+                        } catch {}
                       }
+
+                      saveTeamBaselinesWeb(teamBaselinesNext);
+                      saveDeletedTeamMetaWeb(delMetaNext);
 
                       let finalBuiltRoster = mergedBuiltList;
                       if (builtMutated || builtToPush.length > 0) {
@@ -17303,12 +17662,11 @@ export default function App() {
                       }
 
                       const tombArr = Array.from(mergedTombstones);
-                      const teamTombArr = Array.from(deletedTeamSet);
                       const builtTombArr = Array.from(mergedBuiltDelSet);
                       if (logsMutated || tombstonesChanged) {
                         setDeletedLogIds(tombArr);
                       }
-                      if (teamsMutated || tombstonesChanged) {
+                      if (shouldReconcileTeams || tombstonesChanged) {
                         setDeletedTeamIds(teamTombArr);
                       }
                       if (builtMutated || tombstonesChanged) {
@@ -17321,17 +17679,16 @@ export default function App() {
                         if (logsMutated || tombstonesChanged) {
                           localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
                         }
-                        if (teamsMutated || tombstonesChanged) {
+                        if (shouldReconcileTeams || tombstonesChanged) {
                           localStorage.setItem('gbl_deleted_team_ids_v1', JSON.stringify(teamTombArr));
+                        }
+                        if (teamsStateMutated) {
+                          localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(finalGblPresets));
+                          localStorage.setItem('gbl_show6_presets_of_3_v1', JSON.stringify(finalShow6Presets));
                         }
                         if (builtMutated || tombstonesChanged) {
                           localStorage.setItem('gbl_deleted_built_pokemon_ids_v1', JSON.stringify(builtTombArr));
                         }
-                        const nextTeamSigs: Record<string, string> = {};
-                        finalPresets.forEach((p) => {
-                          if (p?.id) nextTeamSigs[p.id] = computeTeamSig(p);
-                        });
-                        localStorage.setItem(teamSigKey, JSON.stringify(nextTeamSigs));
                         localStorage.setItem('gbl_d1_vault_migrated_v1', '1');
                         localStorage.setItem('gbl_d1_vault_has_pw_v1', hasPwNow ? '1' : '0');
                         localStorage.setItem('gbl_d1_last_pushed_ms_v1', String(pushStartedAtMs));
@@ -17345,8 +17702,8 @@ export default function App() {
                         );
                         localStorage.removeItem('gbl_sync_github_token');
                         localStorage.removeItem('gbl_sync_github_gist_id');
-                        if (syncJson.serverSyncMs) {
-                          localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(syncJson.serverSyncMs));
+                        if (finalSyncCursorMs) {
+                          localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(finalSyncCursorMs));
                           localStorage.setItem('gbl_d1_sync_cursor_user_v1', cleanName);
                         }
                         const pulledUserSettings =
@@ -17386,7 +17743,12 @@ export default function App() {
                         }
                       } catch {}
 
-                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles (+${pulledLogsDeltaCount} pulled, ${logsToPush.length} pushed), ${finalPresets.length} teams (+${pulledTeamsDeltaCount} pulled), ${finalBuiltRoster.length} built (+${pulledBuiltDeltaCount} pulled)${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}`;
+                      const totalTeamsCount = finalGblPresets.length + finalShow6Presets.length;
+                      const conflictSuffix =
+                        detectedConflicts.length > 0
+                          ? ` • ⚠️ ${detectedConflicts.length} team delta(s) need review`
+                          : '';
+                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles (+${pulledLogsDeltaCount} pulled, ${logsToPush.length} pushed), ${totalTeamsCount} teams (+${pulledTeamsDeltaCount} pulled), ${finalBuiltRoster.length} built (+${pulledBuiltDeltaCount} pulled)${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}${conflictSuffix}`;
                       setLastCloudSyncStatus(`Delta Synced ${ts}`);
                       try {
                         localStorage.setItem('gbl_last_cloud_sync_ts', `Delta Synced ${ts}`);
@@ -20540,6 +20902,14 @@ export default function App() {
           </div>
         )}
 
+        {/* Team Sync Conflict Resolution Modal */}
+        <TeamSyncConflictModal
+          conflicts={pendingTeamSyncConflicts}
+          isApplying={isApplyingTeamSyncConflicts}
+          onApply={handleApplyTeamSyncConflictsWeb}
+          onDecideLater={() => setPendingTeamSyncConflicts([])}
+        />
+
         {/* Deleted Teams Trash Bin Modal (Separate for Show 6 Mode vs Standard GBL Mode) */}
         <TrashBinModals
           showTeamsTrashModal={showTeamsTrashModal}
@@ -20579,7 +20949,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.93 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.94 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

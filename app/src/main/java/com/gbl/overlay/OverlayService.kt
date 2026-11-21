@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.93"
-        const val APP_VERSION_CODE = 1793
+        const val APP_VERSION = "7.94"
+        const val APP_VERSION_CODE = 1794
         const val GBL_SWITCH_COOLDOWN_MS = 45_000L
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -643,7 +643,7 @@ class OverlayService : LifecycleService() {
                         name = cleanName,
                         assignedLeagues = mergedAssigned,
                         isSelected = group.any { it.isSelected || it.id == selectedId },
-                        updatedAt = maxOf(nowMs, group.maxOf { it.updatedAt })
+                        updatedAt = group.maxOf { it.updatedAt }.coerceAtLeast(1L)
                     )
                     mergedPresetList.add(updatedSurvivor)
                     for (dup in group) {
@@ -1059,7 +1059,7 @@ class OverlayService : LifecycleService() {
                         pokemon = mergedSlots,
                         metaPoolMetrics = null,
                         isSelected = group.any { it.isSelected || it.id == selectedId },
-                        updatedAt = maxOf(nowMs, group.maxOf { it.updatedAt })
+                        updatedAt = group.maxOf { it.updatedAt }.coerceAtLeast(1L)
                     )
                     mergedPresetList.add(updatedSurvivor)
                     for (dup in group) {
@@ -1546,6 +1546,8 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_CLOUD_LAST_PUSHED_MS = "gbl_cloud_last_pushed_ms_v731"
         const val PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS = "gbl_cloud_last_pushed_settings_ms_v731"
         const val PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG = "gbl_cloud_last_pushed_tombstones_sig_v731"
+        const val PREFS_KEY_CLOUD_TEAM_BASELINES_V794 = "gbl_cloud_team_baselines_v794"
+        const val PREFS_KEY_DELETED_TEAM_META_V794 = "gbl_deleted_team_meta_v794"
         const val PREFS_KEY_REPLAY_LIST_SYNC_CURSOR_MS = "gbl_replay_list_sync_cursor_ms_v733"
         const val PREFS_KEY_REPLAY_LIST_SYNC_USER = "gbl_replay_list_sync_user_v733"
         const val PREFS_KEY_LAST_LICENSE_BG_VERIFY_MS = "gbl_last_license_bg_verify_ms_v733"
@@ -6746,8 +6748,10 @@ class OverlayService : LifecycleService() {
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
         runV602ScannerDefaultsMigrationStatic(prefs)
         runV702OverlayTransparencyMigrationStatic(prefs)
-        runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
-        runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
+        if (!hasValidScreenNameStatic(prefs)) {
+            runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
+            runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
+        }
         oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
         hideDamagePercents = prefs.getBoolean(PREFS_KEY_HIDE_DAMAGE_PERCENTS, DEFAULT_HIDE_DAMAGE_PERCENTS)
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)

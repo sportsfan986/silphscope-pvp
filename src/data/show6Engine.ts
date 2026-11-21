@@ -2406,6 +2406,7 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = ([
     league: "BATTLE FRONTIER (SPECTRAL)",
     combatMode: "show6",
     isSelected: true,
+    updatedAt: 1,
     pokemon: getLeagueTop3Template("BATTLE FRONTIER (SPECTRAL)")
   },
   {
@@ -2414,6 +2415,7 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = ([
     league: "BATTLE FRONTIER (CAULDRON)",
     combatMode: "show6",
     isSelected: false,
+    updatedAt: 1,
     pokemon: getLeagueTop3Template("BATTLE FRONTIER (CAULDRON)")
   },
   {
@@ -2422,6 +2424,7 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = ([
     league: "BATTLE FRONTIER (MASTER)",
     combatMode: "show6",
     isSelected: false,
+    updatedAt: 1,
     pokemon: getLeagueTop3Template("BATTLE FRONTIER (MASTER)")
   }
 ]);

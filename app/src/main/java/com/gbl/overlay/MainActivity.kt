@@ -243,6 +243,7 @@ class MainActivity : AppCompatActivity() {
     private var activeScreenNamePromptDialog: AlertDialog? = null
     private var activeVaultPasswordPromptDialog: AlertDialog? = null
     private var activePartyRenameDialog: AlertDialog? = null
+    private var activeTeamSyncConflictDialog: AlertDialog? = null
     private var debouncedCloudSyncJob: kotlinx.coroutines.Job? = null
     private var lastResumeCloudSyncMs: Long = 0L
     private var currentActivePage: String = "teams"
@@ -616,8 +617,11 @@ class MainActivity : AppCompatActivity() {
             prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
             // v6.02: Run one-time optimal scanner defaults migration (HP=ON, Energy=ON, 2 samples, ±2% tol, 200ms lead, +1t offset, strict alt fast, 8% chip tol, 4.0s swap rollback)
             OverlayService.runV602ScannerDefaultsMigrationStatic(prefs)
-            val didV761Merge = OverlayService.runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
-            val didV773Merge = OverlayService.runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
+            var didV761Merge = false
+            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                didV761Merge = OverlayService.runV761MultiMetaTeamMergeMigrationStatic(prefs, gson)
+                OverlayService.runV773MegaStandardTeamMergeMigrationStatic(prefs, gson)
+            }
             val prevInstalledVerCode = prefs.getInt(PREFS_KEY_INSTALLED_VERSION_CODE, 0)
             if (prevInstalledVerCode < 1602) {
                 prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1602).apply()
@@ -3505,6 +3509,7 @@ class MainActivity : AppCompatActivity() {
             .putLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_MS, 0L)
             .putLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS, 0L)
             .putString(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG, "")
+            .remove(OverlayService.PREFS_KEY_CLOUD_TEAM_BASELINES_V794)
             .apply()
     }
 
@@ -5600,18 +5605,29 @@ class MainActivity : AppCompatActivity() {
                             showSignInToExistingVaultDialog(OverlayService.getRequiredScreenNameStatic(prefs))
                         }
                     }
-                } else if (!silent) {
-                    Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_LONG).show()
-                    if (ok) {
-                        maybePromptVaultPasswordSecurity()
+                } else {
+                    if (!silent) {
+                        Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_LONG).show()
+                        if (ok) {
+                            maybePromptVaultPasswordSecurity()
+                        }
+                    } else if (ok) {
+                        val isZeroDeltaMsg = msg.contains("+0 from other devices") && msg.contains("+0 updated")
+                        if (!isZeroDeltaMsg || recoveredDvrCount > 0) {
+                            Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_SHORT).show()
+                        }
+                        if (isResumeCheck) {
+                            maybePromptVaultPasswordSecurity()
+                        }
                     }
-                } else if (ok) {
-                    val isZeroDeltaMsg = msg.contains("+0 from other devices") && msg.contains("+0 updated")
-                    if (!isZeroDeltaMsg || recoveredDvrCount > 0) {
-                        Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_SHORT).show()
-                    }
-                    if (isResumeCheck) {
-                        maybePromptVaultPasswordSecurity()
+                    val curConflicts = pendingTeamSyncConflicts
+                    val shouldOpenConflictDialog = ok &&
+                        curConflicts.isNotEmpty() &&
+                        activeTeamSyncConflictDialog?.isShowing != true &&
+                        activeVaultPasswordPromptDialog?.isShowing != true &&
+                        (!silent || !isResumeCheck || (System.currentTimeMillis() - lastTeamConflictSnoozedAtMs) > 10 * 60_000L)
+                    if (shouldOpenConflictDialog) {
+                        presentTeamSyncConflictDialog(curConflicts)
                     }
                 }
             }
@@ -5627,6 +5643,74 @@ class MainActivity : AppCompatActivity() {
                 executeSyncBlock()
             }
         }
+    }
+
+    private fun presentTeamSyncConflictDialog(conflicts: List<TeamSyncReconciler.TeamSyncDeltaConflict>) {
+        if (isFinishing || isDestroyed || conflicts.isEmpty()) return
+        if (activeTeamSyncConflictDialog?.isShowing == true) return
+        val dlg = showTeamSyncConflictResolutionDialog(
+            conflicts = conflicts,
+            onApplyResolutions = { chosenMap ->
+                activeTeamSyncConflictDialog = null
+                pendingTeamSyncConflicts = emptyList()
+                lastTeamConflictSnoozedAtMs = 0L
+                if (::textSyncStatus.isInitialized) {
+                    textSyncStatus.text = "☁️ Applying ${conflicts.size} resolved team delta(s) & syncing..."
+                }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val pushBatch = TeamSyncReconciler.applyTeamSyncConflictResolutions(
+                        prefs = prefs,
+                        gson = gson,
+                        conflicts = conflicts,
+                        chosenMap = chosenMap
+                    )
+                    val (pushOk, pushMsg) = OverlayService.syncWithCloudflareVaultBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        explicitResolvedTeams = pushBatch.teamsToPush,
+                        explicitDeletedTeamIds = pushBatch.deletedTeamIds,
+                        explicitDeletedTeamTimestamps = pushBatch.deletedTeamTimestamps
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (isFinishing || isDestroyed) return@withContext
+                        if (::presetsContainer.isInitialized) {
+                            refreshPresetsUi()
+                        }
+                        refreshPresetsAndBattleLogsIfVisible()
+                        updateSyncStatusUi()
+                        if (isOverlayRunning) {
+                            getSelectedPreset()?.let { sel ->
+                                startService(
+                                    Intent(this@MainActivity, OverlayService::class.java).apply {
+                                        action = OverlayService.ACTION_UPDATE_PRESET
+                                        putExtra(OverlayService.EXTRA_PRESET_JSON, gson.toJson(sel))
+                                    }
+                                )
+                            }
+                        }
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (pushOk) "✅ Resolved ${conflicts.size} team delta(s) & synced all devices!" else pushMsg,
+                            Toast.LENGTH_LONG
+                        ).show()
+                        val remaining = pendingTeamSyncConflicts
+                        if (pushOk && remaining.isNotEmpty()) {
+                            presentTeamSyncConflictDialog(remaining)
+                        }
+                    }
+                }
+            },
+            onDecideLater = {
+                activeTeamSyncConflictDialog = null
+                lastTeamConflictSnoozedAtMs = System.currentTimeMillis()
+            }
+        )
+        dlg.setOnDismissListener {
+            if (activeTeamSyncConflictDialog === dlg) {
+                activeTeamSyncConflictDialog = null
+            }
+        }
+        activeTeamSyncConflictDialog = dlg
     }
 
     private fun showSyncBundleDialog() {
@@ -6645,6 +6729,7 @@ class MainActivity : AppCompatActivity() {
         val nowMs = System.currentTimeMillis()
         val remainingDelIds = loadDeletedTeamIds().filter { it != preset.id }
         saveDeletedTeamIds(remainingDelIds)
+        TeamSyncReconciler.removeLocalTeamDeletionMetaStatic(prefs, gson, preset.id)
 
         val remainingTrash = loadDeletedTeamsTrash().filter { it.id != preset.id }
         saveDeletedTeamsTrash(remainingTrash)
@@ -11739,6 +11824,7 @@ class MainActivity : AppCompatActivity() {
                         league = "BATTLE FRONTIER (SPECTRAL)",
                         pokemon = getLeagueTop3Defaults("BATTLE FRONTIER (SPECTRAL)"),
                         isSelected = true,
+                        updatedAt = 1L,
                         combatMode = "show6"
                     ),
                     TeamPreset(
@@ -11746,6 +11832,7 @@ class MainActivity : AppCompatActivity() {
                         name = "BF Cauldron Trio: Weezing-G / Guzzlord / Drapion",
                         league = "BATTLE FRONTIER (CAULDRON)",
                         pokemon = getLeagueTop3Defaults("BATTLE FRONTIER (CAULDRON)"),
+                        updatedAt = 1L,
                         combatMode = "show6"
                     ),
                     TeamPreset(
@@ -11753,6 +11840,7 @@ class MainActivity : AppCompatActivity() {
                         name = "BF Master Trio: Rhyperior / Florges / Zacian",
                         league = "BATTLE FRONTIER (MASTER)",
                         pokemon = getLeagueTop3Defaults("BATTLE FRONTIER (MASTER)"),
+                        updatedAt = 1L,
                         combatMode = "show6"
                     )
                 )
@@ -11764,6 +11852,7 @@ class MainActivity : AppCompatActivity() {
                         league = "MASTER LEAGUE",
                         pokemon = getLeagueTop3Defaults("MASTER LEAGUE"),
                         isSelected = true,
+                        updatedAt = 1L,
                         combatMode = "gbl"
                     ),
                     TeamPreset(
@@ -11771,6 +11860,7 @@ class MainActivity : AppCompatActivity() {
                         name = "Ultra: Zygarde / Feraligatr / Giratina-A",
                         league = "ULTRA LEAGUE",
                         pokemon = getLeagueTop3Defaults("ULTRA LEAGUE"),
+                        updatedAt = 1L,
                         combatMode = "gbl"
                     ),
                     TeamPreset(
@@ -11778,6 +11868,7 @@ class MainActivity : AppCompatActivity() {
                         name = "Great: Clodsire / Feraligatr / Mandibuzz",
                         league = "GREAT LEAGUE",
                         pokemon = getLeagueTop3Defaults("GREAT LEAGUE"),
+                        updatedAt = 1L,
                         combatMode = "gbl"
                     )
                 )
@@ -12353,12 +12444,14 @@ class MainActivity : AppCompatActivity() {
                 val cloned = preset.copy(
                     id = UUID.randomUUID().toString(),
                     name = "${preset.name} (Copy)",
-                    isSelected = true
+                    isSelected = true,
+                    updatedAt = System.currentTimeMillis()
                 )
                 val updated = presets.map { it.copy(isSelected = false) }.toMutableList()
                 updated.add(0, cloned)
                 savePresets(updated)
                 setSelectedPreset(cloned.id)
+                triggerTwoDeviceCloudSync(silent = true)
                 Toast.makeText(this, "📋 Cloned '${preset.name}' — choose League or edits below", Toast.LENGTH_SHORT).show()
                 showPresetEditorDialog(cloned)
             }
@@ -12392,7 +12485,9 @@ class MainActivity : AppCompatActivity() {
                         name = "${preset.name} (from Show 6)",
                         league = targetLg,
                         pokemon = rescaledSlots,
-                        isSelected = true
+                        isSelected = true,
+                        updatedAt = System.currentTimeMillis(),
+                        combatMode = "gbl"
                     )
                     val type = object : TypeToken<List<TeamPreset>>() {}.type
                     val rawGbl = prefs.getString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, null)
@@ -12402,6 +12497,7 @@ class MainActivity : AppCompatActivity() {
                         .putString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(gblList))
                         .putString("gbl_selected_preset_id", copied.id)
                         .apply()
+                    triggerTwoDeviceCloudSync(silent = true)
                     Toast.makeText(this, "🛡️ Copied '${preset.name}' to Standard GBL Blind 3 ($targetLg)!", Toast.LENGTH_LONG).show()
                 } else {
                     val targetShow6Lg = when {
@@ -12439,7 +12535,9 @@ class MainActivity : AppCompatActivity() {
                                     name = "${preset.name} (from GBL)",
                                     league = targetShow6Lg,
                                     pokemon = rescaledSlots,
-                                    isSelected = true
+                                    isSelected = true,
+                                    updatedAt = System.currentTimeMillis(),
+                                    combatMode = "show6"
                                 )
                                 val type = object : TypeToken<List<TeamPreset>>() {}.type
                                 val rawS6 = prefs.getString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, null)
@@ -12449,6 +12547,7 @@ class MainActivity : AppCompatActivity() {
                                     .putString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, gson.toJson(s6List))
                                     .putString(OverlayService.PREFS_KEY_SHOW6_SELECTED_PRESET_ID, copied.id)
                                     .apply()
+                                triggerTwoDeviceCloudSync(silent = true)
                                 Toast.makeText(this, "🏛️ Copied '${preset.name}' to Show 6 Trios ($targetShow6Lg)!", Toast.LENGTH_LONG).show()
                             } else {
                                 val locked3 = preset.pokemon.map { it.name }.filter { it.isNotBlank() }
@@ -12551,6 +12650,14 @@ class MainActivity : AppCompatActivity() {
                     val delTeamIds = loadDeletedTeamIds().toMutableList()
                     delTeamIds.add(preset.id)
                     saveDeletedTeamIds(delTeamIds)
+                    TeamSyncReconciler.recordLocalTeamDeletionMetaStatic(
+                        prefs = prefs,
+                        gson = gson,
+                        id = preset.id,
+                        name = preset.name,
+                        league = preset.league,
+                        combatMode = if (isShow6CombatMode()) "show6" else preset.combatMode
+                    )
 
                     val updated = presets.filter { it.id != preset.id }
                     savePresets(updated)
@@ -14862,18 +14969,21 @@ class MainActivity : AppCompatActivity() {
                     PokemonSlot(rec.closer.name, rec.closer.cp, rec.closer.fastMove, rec.closer.chargedMove1, rec.closer.chargedMove2, rec.closer.ivs, rec.closer.plusMoveLevel, rec.closer.isBestBuddy, rec.closer.builtPokemonId)
                 ),
                 isSelected = true,
+                updatedAt = System.currentTimeMillis(),
                 archetype = rec.archetype,
                 leadAggBr = rec.leadBr,
                 machineAggBr = rec.viabilityWeightedBr,
                 safeSwapBr = rec.swapBr,
                 closerSwapBr = rec.closerBr,
                 closerBr = rec.closerBr,
-                synergySummary = rec.synergyNote
+                synergySummary = rec.synergyNote,
+                combatMode = "show6"
             )
             val existing = loadPresets().toMutableList()
             existing.add(0, newPreset)
             savePresets(existing)
             setSelectedPreset(newPreset.id)
+            triggerTwoDeviceCloudSync(silent = true)
             Toast.makeText(
                 this,
                 "⚡ Equipped Show 6 Team of 3: ${rec.lead.name} / ${rec.safeSwap.name} / ${rec.closer.name}",
@@ -17605,6 +17715,7 @@ class MainActivity : AppCompatActivity() {
             list.add(0, evaluated)
             savePresets(list)
             setSelectedPreset(evaluated.id)
+            triggerTwoDeviceCloudSync(silent = true)
             Toast.makeText(this, "📋 Cloned '${evaluated.name}' ($targetLg)!", Toast.LENGTH_SHORT).show()
             dialog.dismiss()
             showPresetEditorDialog(evaluated)
@@ -17632,6 +17743,7 @@ class MainActivity : AppCompatActivity() {
                     .putString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(gblList))
                     .putString("gbl_selected_preset_id", copied.id)
                     .apply()
+                triggerTwoDeviceCloudSync(silent = true)
                 Toast.makeText(this, "🛡️ Copied '${copied.name}' as separate GBL Blind 3 entry ($targetLg)!", Toast.LENGTH_LONG).show()
             } else {
                 val copied = TeamPreset(
@@ -17650,6 +17762,7 @@ class MainActivity : AppCompatActivity() {
                     .putString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, gson.toJson(s6List))
                     .putString(OverlayService.PREFS_KEY_SHOW6_SELECTED_PRESET_ID, copied.id)
                     .apply()
+                triggerTwoDeviceCloudSync(silent = true)
                 Toast.makeText(this, "🏛️ Copied '${copied.name}' as separate Show 6 Trio entry ($targetLg)!", Toast.LENGTH_LONG).show()
             }
         }

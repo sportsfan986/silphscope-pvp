@@ -2637,6 +2637,7 @@ export const INITIAL_PRESETS: TeamPreset[] = [
     closerBr: 540,
     topMetaTargetsTotal: 50,
     topMetaWinsCount: 38,
+    updatedAt: 1,
     pokemon: getLeagueTop3Template("MASTER LEAGUE")
   },
   {
@@ -2652,6 +2653,7 @@ export const INITIAL_PRESETS: TeamPreset[] = [
     closerBr: 534,
     topMetaTargetsTotal: 50,
     topMetaWinsCount: 36,
+    updatedAt: 1,
     pokemon: getLeagueTop3Template("ULTRA LEAGUE")
   },
   {
@@ -2667,6 +2669,7 @@ export const INITIAL_PRESETS: TeamPreset[] = [
     closerBr: 535,
     topMetaTargetsTotal: 50,
     topMetaWinsCount: 37,
+    updatedAt: 1,
     pokemon: getLeagueTop3Template("GREAT LEAGUE")
   }
 ];
